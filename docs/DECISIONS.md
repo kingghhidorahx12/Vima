@@ -9,7 +9,7 @@ Este documento registra las decisiones proporcionadas en la solicitud y reflejad
 | Hermes / New Architecture | Defaults nativos de SDK 57/RN 0.86; no se añaden los campos legados jsEngine/newArchEnabled retirados del esquema. Se comprueba su configuración generada con prebuild. |
 | Expo Router como única navegación | `expo-router/entry`, `app/_layout.tsx`, rutas dentro de `app/`. |
 | Development Builds desde el inicio | `expo-dev-client`, scripts nativos y perfiles EAS development. |
-| MapLibre React Native 11.4.x | Dependencia ~11.4.0, config plugin y componentes nativos v11. |
+| Google Maps SDK objetivo Android | react-native-maps 1.27.2 elegido por Expo 57, PROVIDER_GOOGLE, key de build y Map ID opcional. MapLibre 11.4 se conserva temporalmente para rollback/paridad e iOS; no se retira antes de signoff Android físico. |
 | Reanimated 4.5.x + Worklets | Versiones seleccionadas por Expo; transformación mediante `babel-preset-expo`. |
 | Gesture Handler ~2.32 | Root view y base gestual propia del sheet. |
 | TanStack Query remoto / Zustand sólo UI | QueryClient, trip queries/comandos/reconciliación; store de interacción efímera. |
@@ -20,10 +20,11 @@ Este documento registra las decisiones proporcionadas en la solicitud y reflejad
 | Sistema visual propio, sin UI kit | Tokens importados directamente del JSON aprobado, tema claro e Inter 400/500/600/700. Sin NativeWind, Paper ni Tamagui. |
 | VimaRideSheet propio | Gesture Handler + Reanimated; offsets 24/52/88% delimitan drag y cada estado define sus `allowedOffsets` finales. Los estados P0 actuales son single-snap y siempre regresan a su `targetOffset` con `motionTimings.sheetSnap`; sólo un estado que declare varios offsets puede asentarse en varios. Radio 28, entrada 300 ms, cierre 240 ms y drag 1:1. Sin bottom-sheet externo ni spring genérico. |
 | Shells persistentes / fases internas | PassengerRideShell y DriverRideShell comparten RideShell sin key por fase. |
-| GeoJSON + layers nativas | RouteLayer, VehicleLayer y DestinationLayer, sin React views por vehículo/frame. |
+| Modelos Vima agnósticos | Coordinate/Bounds/CameraTarget/GeoJSON internos. Google usa Polyline/Marker; MapLibre conserva sus sources/layers. Vehículo sin render React por frame. |
 | Vehicle motion 10–15 Hz / snap configurable | Worklets con salida a 12 Hz y criterio de salto inyectado; sin umbral arbitrario. |
 | Reduced Motion central para UI y mapa | Provider del SO/preferencia local; navegación y ruta por fade, sin draw/scales/loops decorativos, vehículo/cámara con snap según el contrato técnico previo. |
-| Estilo por environment / Positron sólo desarrollo | `EXPO_PUBLIC_MAP_STYLE_URL` prevalece cuando existe; sin URL, DEV usa OpenFreeMap Positron y producción falla explícitamente. MapTiler Cloud Flex basado inicialmente en Streets Pastel es la opción productiva decidida, pendiente de URL real externa al repositorio. MapLibre identifica requests HTTPS a hosts MapTiler con `User-Agent: VimaMobile/com.kingghhidorahx12.vima`, sin credenciales en cliente. |
+| Configuración Google por entorno; MapLibre transitorio | GOOGLE_MAPS_ANDROID_API_KEY sólo build, Map ID público opcional. Android configurado usa Google; DEV sin key advierte y usa MapLibre; release Android sin key falla explícitamente. Style Google Cloud pendiente. MapTiler Cloud Flex/Streets Pastel deja de ser objetivo productivo; Positron y la URL legacy sólo se conservan para rollback/iOS. |
+| Places API (New) y Routes API exclusivamente backend | Credenciales separadas/restringidas sólo en servidor, DRIVE/TRAFFIC_AWARE, sesiones autocomplete y respuestas normalizadas. Sin backend en este repo: contratos/adapters móviles preparados, endpoints y conexión live pendientes; no llamadas móviles a Google Places/Routes. |
 | Visual System v1 y Motion System v1 como fuentes de verdad P0 | Los JSON de `docs/design/` suministran tokens exactos; el handoff Markdown define semántica, comportamiento y límites. No se reinterpretan mockups como reglas funcionales. |
 | Semántica de mapa aprobada | Origen verde, destino rojo, ruta activa carbón/verde profundo según contexto y completada gris; posición y heading interpolados. |
 | Límites del handoff | No definir tema oscuro exacto, assets maestros, estilo final del mapa, grosores/opacidades por zoom, iconografía/stroke ni dimensiones aún no fijadas. |
@@ -45,3 +46,5 @@ Este documento registra las decisiones proporcionadas en la solicitud y reflejad
 Fuentes aprobadas incorporadas: [handoff final v1](design/VIMA_VISUAL_MOTION_HANDOFF_FINAL_v1.md), [tokens visuales](design/vima.visual.final.json) y [tokens de motion](design/vima.motion.final.json). La solicitud posterior al bootstrap autoriza únicamente el primer bloque de pasajero descrito en [PASSENGER_P0.md](PASSENGER_P0.md). Backend real y siguientes bloques continúan pendientes. Los elementos aún no definidos se conservan como pendientes, sin elevar fixtures a decisiones de producto.
 
 Fuentes técnicas contrastadas con el código instalado: [SDK 57](https://expo.dev/changelog/sdk-57), [Router](https://docs.expo.dev/router/installation/), [Reanimated en SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/reanimated/), [MapLibre Expo](https://maplibre.org/maplibre-react-native/docs/setup/expo/) y [API v11](https://maplibre.org/maplibre-react-native/docs/setup/migrations/v11/).
+
+Migración vigente: [Google geoespacial Android P0](GOOGLE_GEOSPATIAL.md), con configuración, contratos backend, verificaciones y límites de paridad. La decisión Google sustituye la dirección MapTiler productiva previa sin eliminar todavía la implementación MapLibre.

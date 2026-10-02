@@ -1,49 +1,102 @@
 # Estado real del proyecto
 
-Fecha: 2026-10-01. Repositorio: `kingghhidorahx12/Vima`, rama local `codex/vima-p0-bootstrap`. La copia partió de un repositorio vacío; el trabajo continúa en el árbol local. No se publicó ni se generó un APK en esta ronda.
+Fecha: 2026-10-01. Repositorio: `kingghhidorahx12/Vima`.
+Rama de trabajo: `codex/google-geospatial-android-p0`.
+El P0 previo quedó preservado en el checkpoint `4bbcd7d`, publicado en
+`origin/codex/vima-p0-bootstrap`. No se modificó main ni se reescribió historia.
 
-## Ronda coordinada P0 vigente
+## DECIDIDO
 
-Implementado: **Inicio → selección/edición → Confirma tu viaje → matching normal → prolongado**, dentro del mismo PassengerRideShell, mapa y sheet. Se conserva la asignación existente. Sin rutas, categorías ni pantallas nuevas. Estas reglas sustituyen las anteriores sobre origen y continuación de búsqueda.
+- Google Maps SDK mediante react-native-maps/PROVIDER_GOOGLE es el objetivo Android.
+- Places API (New) y Routes API son exclusivamente backend; Routes usará DRIVE/TRAFFIC_AWARE.
+- Modelos Vima independientes del proveedor. MapLibre permanece transitorio hasta paridad física.
+- Google Cloud styling sustituye la dirección productiva MapTiler anterior, que queda histórica.
+  No se eligió un Map ID ni un nuevo estilo final.
+- Conservar composición y lógica del P0, Visual/Motion System, expo-location, shell y sheet.
 
-- **Header:** lockup raster final aprobado en `assets/brand/vima_header_lockup_final.png`, usado sin modificación y sin tagline. Mantiene el slot 3:1 y 28 dp de alto con hamburger/perfil en los laterales; no hay wordmark runtime. Los SVG/raster v2 anteriores quedan archivados y ya no se usan en la UI.
-- **Inicio:** origen compacto editable y destino primario de 52 px, accesos y recientes. Origen loading/automático/manual/no disponible. Ubicación tardía nunca sustituye la selección manual. Destino y origen editables mientras carga; negar permiso no impide continuar manualmente.
-- **Ubicación real — IMPLEMENTADO:** expo-location ~57.0.20, consulta en primer plano con permisos del SO y geocoder cuando hay dirección. El host DEV inyecta este adaptador en el gateway existente. Lugares, cotización y matching siguen siendo fixtures aislados; no hay servicios reales de viajes. Sin background location ni servicio de seguimiento. Pendiente de validación en el nuevo Development Build Android.
-- **Identidad final Vima:** ícono aprobado integrado en Expo/iOS/Android y lockup institucional aprobado configurado para splash. El PNG original del ícono se conserva intacto; su export 1024×1024 sólo se escala uniformemente para Expo. El adaptive usa el mismo artwork final; se retiraron las capas antiguas de fondo y monochrome para evitar mezclar identidades. El lockup final del header y el logo con slogan del splash se conservan sin procesar en `assets/brand`.
-- **Composición:** sheet radio 28/margen 20, altura inicial guiada por contenido y límite para mantener mapa visible. Se retiraron el mínimo artificial de 76%, marginTop:auto y crecimiento vertical que alejaban CTA del contenido. Los offsets 24/52/88 del Visual System limitan el drag; cada estado P0 actual permite sólo su posición funcional al soltar, sin toggle del título ni acciones de accesibilidad para cambiar snap. Motion System y Reduced Motion se conservan. Selección reúne direcciones y Confirmar ubicaciones; confirmación conserva título, mapa, tres métricas, pago y Solicitar viaje. En confirmación, el bloque Origen/Destino tiene margen simétrico interno para equilibrar su posición.
-- **Mapa DEV:** sin `EXPO_PUBLIC_MAP_STYLE_URL`, usa OpenFreeMap Positron; una URL configurada prevalece. Release sin URL falla explícitamente. MapLibre 11.4 conserva Camera, RouteLayer, VehicleLayer, DestinationLayer y atribución activa. Un transform de MapLibre añade `User-Agent: VimaMobile/com.kingghhidorahx12.vima` sólo a hosts HTTPS de MapTiler; no contiene credenciales.
-- **Splash Android:** el mismo `vima_splash_lockup_final.png` aprobado se presenta con `imageWidth: 160`, `contain` y fondo blanco. Las demás plataformas conservan `imageWidth: 280`.
-- **Matching:** matchingPolicy.ts centraliza normal hasta 60 s, espera más larga de 60–120 s, prolongado desde 120 s y límite inicial 15 min. El gateway DEV publica snapshots con reloj inyectable; la UI no fabrica estados autoritativos. Prolongado continúa automáticamente y ofrece Editar / Programar / Cancelar. Se retiraron Seguir buscando y el comando de continuación.
-- **Editar / Programar:** cancelación con motivo enviada al gateway y confirmación antes de abrir el borrador/boundary. Una asignación concurrente prevalece. Se conservan origen, destino, paradas y cotización; editar reutiliza el flujo y la siguiente solicitud crea otro ID. Programar entrega la cotización completa al boundary sin inventar UI ni reserva.
-- **15 minutos:** estado terminal interno expired; el adaptador detiene timers y rechaza asignación posterior. Conserva el borrador y reutiliza revisión de ubicaciones en el mismo shell. No se inventó composición/mensaje terminal. El backend real deberá imponer/reconciliar la política y deadline; aún no está implementado.
-- **Teclado:** blur + Keyboard.dismiss en zonas no editables, toque de mapa y arrastre de lista; keyboardShouldPersistTaps=always y keyboardDismissMode=on-drag. El input conserva sus toques/foco; sin overlay/captura de responder sobre MapLibre. Resultados al primer toque. Falta confirmar gestos en Android físico.
-- **DevMenu:** había registro propio y una llamada nativa durante teardown. Ahora registra con pantalla enfocada/app activa, tras un frame; al salir invalida el callback JS sin llamar APIs de Activity. Rechazos reportados sólo en tooling y reintento al volver a primer plano. SDK 57 alineado; sin parches de node_modules. La incidencia ExpoDevMenu.addDevMenuCallbacks / current activity is no longer available requiere revalidación en dispositivo. Tools se desactiva desde su preferencia para QA.
+## IMPLEMENTADO
 
-## Validación
+- react-native-maps **1.27.2**, instalado con Expo SDK 57; RN 0.86.3/Hermes/New Architecture.
+- Key Maps SDK Android inyectada desde `GOOGLE_MAPS_ANDROID_API_KEY` a
+  `android.config.googleMaps.apiKey`. Plugin oficial aplicado mediante puente local que impide
+  serializar la key en opciones públicas. Extra sólo contiene un booleano de disponibilidad.
+  Owner, projectId, package, iconos, splash y permisos de ubicación conservados.
+- Google por defecto Android cuando está configurado; `EXPO_PUBLIC_GOOGLE_MAP_ID` opcional.
+  Sin ID: mapa Google estándar. Sin key: DEV advierte y usa MapLibre temporal; release Android
+  falla explícitamente. No se hace fallback silencioso si Google falla.
+- MapView persistente, Camera set/animate/fit con padding de sheet, Reduced Motion inmediato,
+  Polyline con colores/reveal/fade vigentes, pines origen/destino/usuario con el mismo artwork,
+  vehículo con pose/heading y salida nativa desde el loop existente de 12 Hz sin React por frame.
+  El fixture de ruta usa fit de geometría completa; Inicio mantiene centro de origen.
+  No hay regla nueva de auto-recenter después de pan.
+- Features sin imports/tipos raw de SDK. Coordinate/Bounds/CameraTarget y apariencias Vima.
+  Componentes MapLibre preservados en `src/map/legacy/`; URL/Positron DEV y header MapTiler
+  siguen disponibles sólo en ese camino y en iOS.
+- Contratos y adaptadores móviles Places/Routes: sesiones opacas, autocomplete/resolve/cierre,
+  ruta normalizada, validación de coordenadas/bounds/geometría/métricas, timeout/cancelación/
+  errores semánticos; sin keys, URLs ni respuestas Google raw en móvil. No se creó backend.
+  Endpoints exactos requeridos en [GOOGLE_GEOSPATIAL.md](GOOGLE_GEOSPATIAL.md).
+- No se conectó artificialmente el adaptador al PassengerGateway: búsqueda, cotización,
+  matching/cancelación siguen siendo fixtures DEV; expo-location sí consulta el dispositivo.
+  Release mantiene aislamiento de fixtures y no presenta servicios inexistentes.
 
-Las pruebas cubren ubicación tardía/manual, destino durante carga, fallo de ubicación, umbrales sin esperar tiempo real, continuidad prolongada, cancelación previa a editar/programar, carrera con asignación, fallo de cancelación, expiración y teclado. Verifican una sola instancia de mapa/sheet. Los dobles nativos no certifican gestos ni render Android.
+## VERIFICADO LOCALMENTE
 
-Estabilización del 2026-10-01: **TypeScript y lint OK; 37/37 tests; worklets OK en 13 módulos; Expo Doctor 21/21**. Los tests cubren resolución de style DEV/release, prioridad de URL configurada, header MapTiler restringido por host, snaps válidos single/multi, retorno desde offsets intermedios y Reduced Motion. Expo config público resuelve el splash Android a 160 dp con el PNG aprobado, `contain` y fondo blanco; Android prebuild genera el recurso mdpi con contenido visible dentro de su área (bbox 72,121–215,170 en 288×288). Bundles Hermes Android/iOS exportados y fixture isolation confirma ausencia de fixtures en ambos release. Los dobles nativos no certifican gestos ni render Android.
+- Resolución: expo 57.0.26, RN 0.86.3, react-native-maps 1.27.2. Matriz Fabric compatible;
+  Expo Doctor **21/21**.
+- TypeScript y lint **OK**. **46/46 tests**, incluidos los 37 P0 previos. Nuevos tests de
+  selección Android/release, Map ID opcional, límites de coordenadas/bounds, cámara/fit/
+  Reduced Motion, mapa persistente, Polyline/pines, comandos nativos de vehículo sin renders
+  por pose, sesiones/normalización/timeouts y separación de tipos/credenciales.
+- Worklets **16 módulos OK**.
+- Config Expo resuelto: inyección por env, configuración pública sin key, identidad Expo/EAS
+  conservada y ausencia de key soportada sin inventar valores.
+- Android prebuild: metadata Maps recibida desde env con un marcador sintético de test;
+  permisos foreground preservados, sin background location. Segundo prebuild restaura
+  configuración real y elimina el marcador. `android/` sigue ignorado.
+- Bundles Hermes release Android/iOS **OK**. Fixture isolation **OK** en ambos.
+  Export DEV Android **OK** con P0 y fixtures presentes; bundles DEV/release sin keys de servidor ni endpoints Google Places/Routes.
+- Instalación npm informó 17 advisories (12 moderados, 5 altos) en el árbol completo;
+  no se aplicaron upgrades ajenos a la migración.
+- Los tests de SDK usan dobles nativos: no certifican tiles, bitmap de pines, animatedProps
+  en Fabric, FPS, API key/SHA-1 ni render físico. **Google NO está verificado en Android físico**.
 
-Introspección Expo: Android COARSE/FINE, sin BACKGROUND_LOCATION ni FOREGROUND_SERVICE_LOCATION; sin background mode iOS. Owner y projectId conservados. Los avisos ya conocidos de detección ESM y deprecación de react-test-renderer no impidieron las pruebas. Hermes requirió permiso de ejecución local fuera del sandbox; se completó la exportación sin build nativo.
+## PENDIENTE
 
-## APK
+- Key Maps Android real, restringida a Maps SDK Android + `com.kingghhidorahx12.vima` +
+  SHA-1 del certificado del APK. El SHA-1 debe obtenerse de las credenciales EAS; no se conoce aquí.
+  Proveer mediante entorno EAS/local ignorado, nunca commit ni chat.
+- Map ID opcional y style Vima definitivo en Google Cloud. Google estándar sólo valida técnica.
+- **Backend live bloqueado:** no hay servidor en este repo, URL Vima productiva ni credenciales
+  Places/Routes de servidor. Faltan endpoints, autenticación/policies, sesiones server-side,
+  integración de sugerencia resuelta con PassengerGateway y rutas/cotizaciones autoritativas.
+  Las keys Places/Routes irán sólo al backend.
+- **Nuevo Development Build requerido** por react-native-maps/configuración nativa, además
+  de los cambios previos de expo-location/identidad/splash. No se ejecutó EAS Build ni se generó APK.
+  No se instaló JDK/Android toolchain local ni se repitió compilación local bloqueada.
+- Signoff físico antes de retirar MapLibre: mapa/atribución, cámara/fit/padding, pins/ruta/vehículo,
+  ubicación/permisos, reconnect/snap/Reduced Motion, gestos/teclado y flujo completo P0.
+  Revisar Tools desactivado desde la preferencia del Development Client.
+- Asset de vehículo/orientación visible y reglas de grosor/opacidad por zoom siguen pendientes.
+  El círculo DEV conserva su identidad; no se inventaron sprites ni umbrales de salto.
+- Regla de cámara tras pan manual, composición terminal de 15 min y las demás decisiones UX
+  previamente pendientes no se cerraron en esta migración.
+- RN Maps no expone error de autorización Android como evento JS: sin onMapLoaded en 15 s
+  se utiliza el fallo de mapa existente; diagnóstico de SDK/key requiere dispositivo.
 
-**Se requiere un nuevo Development Build Android** para incorporar el cambio nativo del splash a 160 dp, junto con expo-location y la identidad final ya configurados. El cambio de style y de sheet es JS, pero el APK anterior conserva el splash recortado. La verificación de launcher, splash, mapa, ubicación y drag real queda pendiente de instalar el nuevo APK. No se inició sesión ni se ejecutó EAS Build/Gradle/Xcode en esta ronda.
+## P0 conservado
 
-Validación local 2026-09-30: los tres PNG fuente de identidad se conservan byte por byte y el app icon Expo se exporta a 1024×1024 con escala uniforme. `expo config --type public --json` resuelve icono, splash, lockup, plugin de splash y `expo-location` 57.0.20 con COARSE/FINE_LOCATION. Android prebuild genera iconos legacy/adaptive y recursos de splash; TypeScript, lint, 33/33 tests y Expo Doctor 21/21 pasan. `android/` permanece ignorado y no se añade al repositorio.
+Inicio → selección/edición → Confirma tu viaje → matching normal/prolongado/asignado dentro
+del mismo PassengerRideShell y VimaRideSheet. Header PNG final de 28 dp sin texto runtime,
+icono final y splash Android 160/iOS 280 sin modificaciones. Sheet radio 28/margen 20, offset guiado
+por contenido, drag acotado por 24/52/88 y allowedOffsets por estado; sin toggle del título.
 
-## Pendientes reales
+Origen loading/automático/manual/no disponible, selección manual protegida de ubicación tardía.
+Matching normal 0–60 s, aviso 60–120 s, prolongado desde 120 s, límite 15 min; Editar/Programar esperan
+cancelación autoritativa y una asignación concurrente prevalece. Sin Seguir buscando, categorías,
+tabs ni pantallas nuevas. Teclado y DevMenu conservados; validación de Activity y gestos pendiente.
 
-- **Style productivo:** MapTiler Cloud Flex basado inicialmente en Streets Pastel está decidido, pero falta la URL real suministrada fuera del repositorio mediante `EXPO_PUBLIC_MAP_STYLE_URL`. Sin esa URL, producción sigue fallando; la apariencia urbana productiva y el mapa Android real aún no están validados.
-- **Cámara/recenter tras pan manual:** pendiente de UX; sin recentrado continuo. Los puntos pueden salir del viewport al panear.
-- **QA Android:** nuevo APK, permisos/carga/denegación, teclado/primer toque, safe areas, header final, splash 160, Positron DEV, composición/snap y matching, con Tools desactivado. Sin captura/render nativo de esta ronda.
-- **DevMenu:** revalidar foreground/background; cualquier fallo residual de Activity se trata como tooling, fuera del producto.
-- **Diseño:** composición terminal de 15 min, style urbano, grosores/opacidades por zoom, sprites/vehículo/iconografía final, tema oscuro y variantes de marca.
-- **Integración productiva:** backend/contratos reales de lugares, cotización, matching, cancelación, deadlines y programación. El release no activa fixtures ni presenta datos simulados como servicio.
-
-## Base conservada
-
-Expo SDK 57 / RN 0.86.3 / Hermes / New Architecture, TypeScript strict y Expo Router; `expo-splash-screen` 57.0.9 configura el splash nativo. TanStack Query para snapshots/comandos y Zustand sólo UI. Autoridad de servidor, revisión monótona e idempotencia de solicitud. MapLibre 11.4, Reanimated 4.5/Worklets, Gesture Handler y VimaRideSheet propio. Inter local, Visual/Motion System v1 desde JSON aprobados, Reduced Motion y haptics centrales. SecureStore separado de SQLite/KV. Los tres artefactos v1 permanecen intactos.
-
-EAS vinculado a @kingghidorahx12/vima, ID 30422aec-d22b-40f0-8008-c6a316633fd8; developmentClient:true, distribución interna y APK. Exportar JavaScript/Hermes no es compilar ni ejecutar nativamente. Windows sigue sin Android/JDK local; no se repitió esa validación bloqueada.
+TanStack Query para autoridad remota, Zustand sólo UI, SecureStore separado de SQLite/KV,
+Inter local, Visual/Motion v1 intactos y haptics centrales. EAS sigue vinculado a
+@kingghidorahx12/vima, projectId 30422aec-d22b-40f0-8008-c6a316633fd8; developmentClient:true,
+distribución interna y APK. Exportar Hermes/prebuild no equivale a compilar o ejecutar un APK.

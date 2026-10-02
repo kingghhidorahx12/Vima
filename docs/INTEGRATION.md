@@ -22,7 +22,9 @@ Montar `PassengerRideShell` o `DriverRideShell` una vez en la ruta del viaje. Pa
 
 Se conserva el contrato de bajo nivel `RideSheetInteraction`. Su función `settle` debe ser worklet; el factory utiliza el snap más cercano, sin umbral de velocidad/distancia inventado. Los límites de activación/fallo del gesto son opcionales, sin números visuales arbitrarios: pueden aportarse al resolver la convivencia con controles/scroll de una pantalla aprobada. Un simple tap no cancela ni cambia el snap. No hay handle dibujado: sus dimensiones exactas no se proporcionaron. Sin geometría el componente sigue siendo un contenedor estático; no calcula una altura productiva por su cuenta.
 
-## Mapa y movimiento
+## Mapa y movimiento (contrato histórico MapLibre)
+
+La migración vigente está en [GOOGLE_GEOSPATIAL.md](GOOGLE_GEOSPATIAL.md): CameraTarget y apariencia Vima, Google Android, Places/Routes sólo backend y legacy transitorio. El siguiente texto documenta el adaptador MapLibre retenido; sus tipos paint/layout/sprites no son el contrato nuevo de las features.
 
 `VimaMap` usa la URL pública. `Camera` usa `jumpTo` si Reduced Motion está activo o falta configuración; con configuración aprobada usa `setStop`. No se seleccionó proveedor ni viewport de producto.
 
