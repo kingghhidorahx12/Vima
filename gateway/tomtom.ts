@@ -49,6 +49,7 @@ export function normalizeProviderPlace(value: unknown): ResolvedPlace {
   const municipality = v.address && typeof v.address === 'object' ? text(record(v.address).municipality) : '';
   return decodePlace({ id: text(v.id), name: text(v.title), address,
     coordinate: record(v.position).coordinates, provenance: 'provider',
+    category: text(v.type) || undefined,
     regionId: regionForText(municipality || address) });
 }
 const locationTypes = Object.keys(placeTypes) as (keyof typeof placeTypes)[];
@@ -119,7 +120,9 @@ export function normalizeProviderSearch(value: unknown): ProviderChoice[] {
     try { if (v.position !== undefined) position = normalizeCoordinate(record(v.position).coordinates); }
     catch { /* A Suggest item may omit a usable position; Details remains authoritative. */ }
     return [{ suggestion: { id: randomUUID(), canonicalId, providerRef: canonicalId, name, address, provenance: 'provider' as const,
-      ...(position ? { coordinate: position } : {}), regionId: regionForText(address) }, reference: detailsReference(v, type, id) }];
+      category: type, ...(position ? { coordinate: position } : {}),
+      ...(typeof v.distanceInMeters === 'number' && v.distanceInMeters >= 0 ? { distanceMeters: v.distanceInMeters } : {}),
+      regionId: regionForText(address) }, reference: detailsReference(v, type, id) }];
   });
 }
 export function normalizeProviderRoute(value: unknown) {
@@ -196,7 +199,8 @@ export function createTomTomAdapter(key: string | undefined, config: GatewayConf
         filters: { countryCodesIso2: ['MX'], types: autocomplete ? [...locationTypes, 'discoverAction'] : locationTypes },
         ...(bias ? { origin: { type: 'point', coordinates: bias }, preferences: { geometry: { type: 'point', coordinates: bias } } } : {}) };
       const response = await request('/maps/orbis/places/' + (autocomplete ? 'suggest' : 'discover'), 3,
-        'results(id,type,title,subtitles,more)', context, 'search_unavailable', body);
+        autocomplete ? 'results(id,type,title,subtitles,address,distanceInMeters,more)' :
+          'results(id,type,title,subtitles,address,distanceInMeters,position,more)', context, 'search_unavailable', body);
       if (diagnostic) {
         const results = response && typeof response === 'object' ? (response as Record<string, unknown>).results : undefined;
         diagnostic({ operation: autocomplete ? 'autocomplete' : 'search',
@@ -211,7 +215,7 @@ export function createTomTomAdapter(key: string | undefined, config: GatewayConf
           ...(reference.poiTypes ? { poiTypes: reference.poiTypes } : {}),
           ...(reference.areaTypes ? { areaTypes: reference.areaTypes } : {}) },
         ...(bias ? { origin: { type: 'point', coordinates: bias }, preferences: { geometry: { type: 'point', coordinates: bias } } } : {}) };
-      const response = await request('/maps/orbis/places/discover', 3, 'results(id,type,title,subtitles,more)',
+      const response = await request('/maps/orbis/places/discover', 3, 'results(id,type,title,subtitles,address,distanceInMeters,position,more)',
         context, 'search_unavailable', body);
       return normalizeProviderSearch(response);
     },

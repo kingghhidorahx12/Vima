@@ -23,6 +23,7 @@ export function decodeSuggestion(value: unknown): PlaceSuggestion {
     ...(v.kind === 'action' ? { kind: 'action' as const } : {}),
     ...(v.provenance === undefined ? {} : { provenance: v.provenance }),
     ...(v.category === undefined ? {} : { category: text(v.category) }),
+    ...(v.distanceMeters === undefined ? {} : { distanceMeters: number(v.distanceMeters) }),
     ...(v.regionId === undefined ? {} : { regionId: text(v.regionId) }) };
 }
 export function decodeSuggestions(value: unknown): readonly PlaceSuggestion[] {

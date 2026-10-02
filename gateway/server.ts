@@ -93,6 +93,14 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
         }
         const body = allowFields(input, ['input', 'bias']); const inputText = query(body.input, config);
         const provider = await adapter.search(inputText, optionalBias(body.bias), action === 'autocomplete', context);
+        const actionable = action === 'autocomplete' && !provider.some(value => value.reference.kind === 'details') &&
+          rankRegionalPlaces([], options.localPlaces ?? [], inputText).length === 0
+          ? provider.find(value => value.reference.kind === 'discover') : undefined;
+        if (actionable?.reference.kind === 'discover') {
+          // At most one documented Suggest action is followed automatically per cycle.
+          try { sendSuggestions(await adapter.followDiscover(actionable.reference, optionalBias(body.bias), context), inputText, true); return; }
+          catch { /* Keep the explicit action selectable when Discover is unavailable. */ }
+        }
         sendSuggestions(provider, inputText, true); return;
       }
       if (request.method !== 'POST') { reply(404, { error: { code: 'no_result' } }); return; }

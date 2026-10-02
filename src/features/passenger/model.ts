@@ -9,6 +9,9 @@ export interface Place {
   readonly name: string;
   readonly address: string;
   readonly coordinate: Coordinate;
+  readonly canonicalId?: string;
+  readonly regionId?: string;
+  readonly category?: string;
 }
 export interface RideDraft { readonly origin: Place; readonly destination: Place; readonly stops: readonly Place[] }
 export interface RideQuote extends RideDraft {
@@ -48,6 +51,10 @@ export interface PassengerGateway extends TripGateway, RealtimeTransport {
   readonly source: 'server' | 'fixture';
   locate(signal?: AbortSignal): Promise<Place | null>;
   recentPlaces(signal?: AbortSignal): Promise<readonly Place[]>;
+  favoritePlaces?(signal?: AbortSignal): Promise<readonly Place[]>;
+  saveFavorite?(place: Place): Promise<void>;
+  removeFavorite?(canonicalId: string): Promise<void>;
+  recordConfirmedDestination?(place: Place): Promise<void>;
   findPlaces(query: string, signal?: AbortSignal): Promise<readonly Place[]>;
   suggestPlaces?(query: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
   searchPlaces?(query: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;

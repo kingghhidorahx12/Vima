@@ -118,21 +118,39 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         ? previous : { key: measureKey, height: contentHeight })}
       onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
       {flow.field ? <>
-        <View style={styles.searchField}><VimaGlyph name="search" color={t.colors.gray} />
+        <View style={styles.searchField}><SmallPin color={t.colors.red} />
           <TextInput ref={input} autoFocus onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección" value={flow.search}
             onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }} returnKeyType="search"
-            style={styles.searchInput} placeholderTextColor={t.colors.gray} /></View>
-        {flow.loadingPlaces ? <ActivityIndicator color={t.colors.greenDark} /> : null}
-        {flow.places.map((place) => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}
+            style={styles.searchInput} placeholderTextColor={t.colors.gray} />
+          {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.greenDark} /> : null}</View>
+        {flow.search.trim() ? <>
+          {flow.places.map((place) => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}
+          {flow.loadingPlaces && !flow.places.length ? <View accessible accessibilityLabel="Buscando lugares" style={styles.searchSkeleton}>
+            <View style={styles.skeletonLine} /><View style={styles.skeletonLineShort} />
+          </View> : null}
+        </> : <>
+          {flow.favorites.length ? <><VimaText variant="bodyMedium">Favoritos</VimaText>
+            {flow.favorites.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
+          {flow.recents.length ? <><VimaText variant="bodyMedium">Recientes</VimaText>
+            {flow.recents.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
+        </>}
       </> : reviewing ? <>
         <View style={styles.addressGroup}>
           <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
           <View style={styles.addressRule} />
           <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} />
         </View>
+        {gateway.saveFavorite && flow.destination ? <TextAction
+          label={flow.favorites.some(place => (place.canonicalId ?? place.id) === (flow.destination?.canonicalId ?? flow.destination?.id))
+            ? 'En Favoritos' : 'Agregar a Favoritos'} onPress={() => {
+            const place = flow.destination!; const id = place.canonicalId ?? place.id;
+            void (flow.favorites.some(favorite => (favorite.canonicalId ?? favorite.id) === id)
+              ? flow.removeFavorite(id) : flow.saveFavorite(place));
+          }} /> : null}
         <VimaButton gradient label="Confirmar ubicaciones"
           disabled={!validDraft(flow.origin, flow.destination)} onPress={() => {
             setReviewedDraft(draftKey);
+            void flow.confirmLocations();
             if (flow.phase === 'home' && flow.destination) flow.choosePlace(flow.destination, 'destination');
           }} />
       </> : flow.phase === 'home' ? <>
@@ -144,7 +162,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <View style={styles.quickRow}>
           <QuickPlace label="Casa" icon="home" onPress={() => openSearch('Casa')} />
           <QuickPlace label="Trabajo" icon="work" onPress={() => openSearch('Trabajo')} />
-          <QuickPlace label="Favoritos" icon="favorite" />
+          <QuickPlace label="Favoritos" icon="favorite" onPress={() => openSearch()} />
         </View>
         <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Viajes recientes</VimaText>
           <TextAction label="Ver todos" onPress={() => setShowAll(true)} /></View>
@@ -341,6 +359,9 @@ const styles = StyleSheet.create({
   searchField: { height: t.components.inputPrimary.heightPx, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
     paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm },
   searchInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, height: t.components.inputPrimary.heightPx, color: t.colors.carbon },
+  searchSkeleton: { height: t.components.buttonPrimary.heightPx, justifyContent: 'center', gap: sm, paddingHorizontal: md },
+  skeletonLine: { width: '62%', height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
+  skeletonLineShort: { width: '40%', height: xs, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   matchingActions: { flexDirection: 'row', alignItems: 'center', gap: sm },
   matchingTitle: { textAlign: 'center', alignSelf: 'center', maxWidth: '88%' },
   progress: { height: t.components.iconSizesPx[1], flexDirection: 'row', alignItems: 'center', marginVertical: sm },

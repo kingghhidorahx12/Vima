@@ -24,7 +24,16 @@ export interface RegionalRankingPolicy {
   readonly nearbyRegionBoost: number;
 }
 
-export const approvedLocalPlaces: readonly VimaLocalPlace[] = [];
+/** Human-reviewed public catalog. Coordinates © OpenStreetMap contributors, ODbL; see ground-truth documentation. */
+export const approvedLocalPlaces: readonly VimaLocalPlace[] = [
+  { id: 'vima-local:plaza-atlacomulco', canonicalName: 'Plaza Atlacomulco', name: 'Plaza Atlacomulco',
+    address: 'Circuito Vial Jorge Jiménez Cantú 1288, Las Mercedes, Atlacomulco',
+    coordinate: [-99.88795, 19.79021], provenance: 'vima-local', regionId: 'atlacomulco', category: 'mall', status: 'verified' },
+  { id: 'vima-local:cu-uaem-atlacomulco', canonicalName: 'Centro Universitario UAEM Atlacomulco',
+    name: 'Centro Universitario UAEM Atlacomulco', aliases: ['Centro Universitario Atlacomulco', 'UAEM Atlacomulco'],
+    address: 'Carretera Toluca–Atlacomulco km 60, Atlacomulco',
+    coordinate: [-99.84073, 19.76183], provenance: 'vima-local', regionId: 'atlacomulco', category: 'university', status: 'verified' },
+];
 
 /** Merge without filtering distant/intermunicipal results or inventing local POIs. */
 export function mergePlaces(provider: readonly ResolvedPlace[], local: readonly VimaLocalPlace[],

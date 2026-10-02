@@ -110,8 +110,8 @@ test('forward and reverse geocoding stay behind the Vima API and normalize no-re
   await assert.rejects(missing.reverseGeocode([0, 0]), { message: 'no_result' });
 });
 
-test('local places stay empty until validated and regional rank requires supplied calibration', () => {
-  assert.deepEqual(approvedLocalPlaces, []);
+test('local places include only the two reviewed public entries and regional rank requires supplied calibration', () => {
+  assert.deepEqual(approvedLocalPlaces.map(place => place.status), ['verified', 'verified']);
   const provider = [{ id: 'remote', name: 'Intermunicipal', address: '', coordinate: [-100, 20] as const,
     provenance: 'provider' as const, regionId: 'other' }];
   const local = [{ id: 'local', name: 'Local validado', address: '', coordinate: [-99.87, 19.8] as const,

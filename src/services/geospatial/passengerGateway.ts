@@ -3,14 +3,22 @@ import type { GeospatialClient } from './client.ts';
 import { GeospatialError } from './contracts.ts';
 import { createPlaceSearch } from './search.ts';
 import { geospatialClientConfig } from './config.ts';
+import type { PersonalPlacesRepository, SavedPlace } from './personalPlaces.ts';
+
+const toPlace = (place: SavedPlace) => ({ ...place, id: place.canonicalId });
 
 /** Geospatial-only P0: never fabricates pricing, payment, matching or recent trips. */
-export function createPassengerLiveGateway(client: GeospatialClient, locate: PassengerGateway['locate']): PassengerGateway {
+export function createPassengerLiveGateway(client: GeospatialClient, locate: PassengerGateway['locate'],
+  personal?: PersonalPlacesRepository): PassengerGateway {
   const search = createPlaceSearch(client, geospatialClientConfig.debounceMs);
   const unavailable = async (): Promise<never> => { throw new Error('Servicio no disponible'); };
   return {
     scope: 'vima-geospatial-live', source: 'server', locate,
-    recentPlaces: async () => [],
+    recentPlaces: async () => (await personal?.recents() ?? []).map(toPlace),
+    favoritePlaces: async () => (await personal?.favorites() ?? []).map(toPlace),
+    saveFavorite: personal ? place => personal.saveFavorite(place) : undefined,
+    removeFavorite: personal ? id => personal.removeFavorite(id) : undefined,
+    recordConfirmedDestination: personal ? place => personal.recordConfirmedDestination(place) : undefined,
     suggestPlaces: search.suggest, searchPlaces: search.search, followPlaceAction: search.followUp,
     resolvePlace: search.resolve, closePlaces: search.close,
     async findPlaces(query, signal) {

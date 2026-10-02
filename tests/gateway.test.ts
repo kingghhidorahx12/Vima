@@ -50,26 +50,27 @@ test('real adapter paths/versions/body bias normalize Search, Details, Geocode, 
   const calls: { url: string; options?: RequestInit }[] = [];
   const adapter = createTomTomAdapter(randomUUID(), config, async (url, options) => {
     calls.push({ url: String(url), options });
-    return Response.json(String(url).includes('routing') ? providerRoute : String(url).includes('details') ? providerPlace : { results: [providerPlace] });
+    return Response.json(String(url).includes('routing') ? providerRoute : String(url).includes('details') ? providerPlace :
+      { results: [String(url).includes('/suggest') ? { ...providerPlace, position: undefined } : providerPlace] });
   });
   const ctx = { ...context(), sessionId: randomUUID() };
   const suggestions = await adapter.search('Plaza', position as [number, number], true, ctx);
   assert.equal(suggestions[0]!.reference.kind, 'details');
   assert.equal(suggestions[0]!.suggestion.provenance, 'provider');
-  assert.equal(suggestions[0]!.suggestion.category, undefined);
+  assert.equal(suggestions[0]!.suggestion.category, 'poi');
   assert.notEqual(suggestions[0]!.suggestion.id, providerPlace.id);
   assert.equal('coordinate' in suggestions[0]!.suggestion, false);
   const first = calls[0]!; const body = JSON.parse(String(first.options!.body));
   assert.deepEqual(body.preferences.geometry, { type: 'point', coordinates: position });
   assert.deepEqual(body.filters.countryCodesIso2, ['MX']); assert.equal(body.radius, undefined);
   assert.equal(new Headers(first.options!.headers).get('TomTom-Api-Version'), '3');
-  assert.equal(new Headers(first.options!.headers).get('Attributes'), 'results(id,type,title,subtitles,more)');
+  assert.equal(new Headers(first.options!.headers).get('Attributes'), 'results(id,type,title,subtitles,address,distanceInMeters,more)');
   assert.equal(new Headers(first.options!.headers).get('Session-Id'), ctx.sessionId);
   await adapter.search('Plaza', undefined, false, ctx);
   assert.equal('preferences' in JSON.parse(String(calls[1]!.options!.body)), false);
   const place = await adapter.resolve(suggestions[0]!.reference as import('../gateway/state.ts').PlaceReference, ctx);
   assert.deepEqual(place.coordinate, position); assert.equal(place.regionId, 'atlacomulco');
-  assert.equal(place.category, undefined);
+  assert.equal(place.category, 'poi');
   assert.equal('unused' in place, false);
   const geocode = await adapter.geocode('address', position as [number, number], context());
   const reverse = await adapter.reverse(position as [number, number], context());
@@ -159,7 +160,7 @@ test('Suggest discover action follows bounded Discover and Details with one Sess
     { parameter: 'type', argument: 'addresses' }, { parameter: 'id', argument: providerPlace.id }] } }] }), /invalid_result/);
 });
 
-test('HTTP follow-up keeps the session open and never resolves an action as a place', async () => {
+test('HTTP Suggest follows at most one necessary discoverAction and resolves its result', async () => {
   const calls: string[] = [];
   const adapter = createTomTomAdapter('dummy-key', config, async url => {
     calls.push(String(url));
@@ -174,17 +175,11 @@ test('HTTP follow-up keeps the session open and never resolves an action as a pl
     async () => null, { development: true }), 2000);
   try {
     const session = await client.startPlacesSession();
-    const [action] = await session.autocomplete('universidades');
-    assert.equal(action?.kind, 'action');
-    await assert.rejects(session.resolve(action!.id), /invalid_result/);
-    // A new Vima session is needed after a failed resolution attempt, as on mobile.
-    const next = await client.startPlacesSession();
-    const [again] = await next.autocomplete('universidades');
-    const [result] = await next.followUp(again!.id);
+    const [result] = await session.autocomplete('universidades');
     assert.equal(result?.name, 'Plaza Atlacomulco');
-    assert.equal((await next.resolve(result!.id)).name, 'Plaza Atlacomulco');
+    assert.equal((await session.resolve(result!.id)).name, 'Plaza Atlacomulco');
     assert.deepEqual(calls.map(url => new URL(url).pathname.split('/').at(-1)),
-      ['suggest', 'suggest', 'discover', providerPlace.id]);
+      ['suggest', 'discover', providerPlace.id]);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
 
@@ -259,7 +254,7 @@ test('HTTP gateway/client integration resolves opaque sessions, local merge, lim
     assert.equal((await fetch(base + '/health')).status, 200);
     const session = await client.startPlacesSession();
     const found = await session.autocomplete('Plaza Atlacomulco');
-    assert.equal(found.length, 1); // verified local duplicate not shown twice
+    assert.equal(found.length, 2); // Suggest has no documented position; no name-only branch collapse.
     assert.equal((await session.resolve(found[0]!.id)).name, 'Plaza Atlacomulco');
     assert.throws(() => session.autocomplete('Plaza'), /search_unavailable/);
     assert.equal((await client.geocode('address')).regionId, 'atlacomulco');

@@ -5,6 +5,10 @@ import { useCriticalTripCommand, tripKey, tripQueryOptions } from '../trip/queri
 import { canRequest, isMatching, passengerPhase, passengerTrip, validDraft, type OriginStatus, type PassengerGateway, type PassengerTrip, type Place, type RideQuote } from './model';
 import { requestPassengerRide } from './requests';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
+import { approvedLocalPlaces } from '../../services/geospatial/localPlaces';
+import { createSearchCoordinator } from '../../services/geospatial/searchCoordinator';
+import { geospatialClientConfig } from '../../services/geospatial/config';
+import { isGeographicQuery } from '../../services/geospatial/regionalRanking';
 
 let operationSequence = 0;
 function operationId() { return `passenger-${Date.now()}-${++operationSequence}`; }
@@ -20,6 +24,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const [tripId, setTripId] = useState<string>();
   const [field, setField] = useState<'origin' | 'destination' | null>(null);
   const [search, setSearch] = useState('');
+  const [searchCoordinator] = useState(() => createSearchCoordinator(approvedLocalPlaces));
   const [followUpResults, setFollowUpResults] = useState<{ query: string; results: readonly PlaceSuggestion[] }>();
   const requestId = useRef<string | null>(null);
   const locked = useRef(false);
@@ -29,11 +34,22 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const location = useQuery({ queryKey: ['passenger', gateway.scope, 'location'], queryFn: ({ signal }) => gateway.locate(signal), retry: false,
     staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false });
   const recents = useQuery({ queryKey: ['passenger', gateway.scope, 'recents'], queryFn: ({ signal }) => gateway.recentPlaces(signal), retry: false });
+  const favorites = useQuery({ queryKey: ['passenger', gateway.scope, 'favorites'],
+    queryFn: ({ signal }) => gateway.favoritePlaces?.(signal) ?? Promise.resolve([]), retry: false,
+    enabled: !!gateway.favoritePlaces });
   // A late geolocation result can update its query, never an explicit selection.
   const origin = originChoice?.place ?? location.data ?? null;
   const places = useQuery({ queryKey: ['passenger', gateway.scope, 'places', field, search, origin?.coordinate],
-    queryFn: ({ signal }) => gateway.suggestPlaces ? gateway.suggestPlaces(search, signal, origin?.coordinate) : gateway.findPlaces(search, signal),
-    enabled: field !== null && search.trim().length > 0, retry: false, gcTime: 0, staleTime: 0 });
+    queryFn: async ({ signal }) => {
+      const results = gateway.suggestPlaces ? await gateway.suggestPlaces(search, signal, origin?.coordinate)
+        : await gateway.findPlaces(search, signal);
+      if (!signal.aborted) searchCoordinator.remember(search, results);
+      return results;
+    }, enabled: field !== null && search.trim().length > 0, retry: false, gcTime: 0, staleTime: 0,
+    placeholderData: previous => previous });
+  const geography = useQuery({ queryKey: ['passenger', gateway.scope, 'geography', field, search, origin?.coordinate],
+    queryFn: async ({ signal }) => gateway.findPlaces(search, signal),
+    enabled: field !== null && isGeographicQuery(search), retry: false, staleTime: 0 });
   useEffect(() => () => { selection.current?.abort(); gateway.closePlaces?.(); }, [gateway]);
   const cancelSelection = () => { selection.current?.abort(); selection.current = undefined; setResolving(false); setSelectionError(undefined); };
   const originStatus: OriginStatus = originChoice?.kind ?? (location.isPending ? 'loading' : location.data ? 'automatic' : 'unavailable');
@@ -62,7 +78,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     const nextOrigin = target === 'origin' ? value : origin;
     const nextDestination = target === 'destination' ? value : destination;
     setConfirming(validDraft(nextOrigin, nextDestination));
-    setField(null); setSearch('');
+    setField(null); setSearch(''); searchCoordinator.clear();
     gateway.closePlaces?.();
   };
   const choosePlace = async (value: Place | PlaceSuggestion, target = field ?? 'destination') => {
@@ -141,19 +157,44 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     preserveDraft(previous); setTripId(undefined); setEditing(true); setConfirming(false); setField(null); requestId.current = null;
     return previous;
   };
-  const error = selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? places.error;
+  const confirmLocations = async () => {
+    if (!validDraft(origin, destination)) return;
+    try { if (gateway.recordConfirmedDestination) {
+      await gateway.recordConfirmedDestination(destination!);
+      await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'recents'] });
+    } } catch { setSelectionError(new Error('No se pudo guardar el destino reciente')); }
+  };
+  const saveFavorite = async (place: Place) => {
+    try { await gateway.saveFavorite?.(place);
+      await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'favorites'] });
+    } catch { setSelectionError(new Error('No se pudo guardar en Favoritos')); }
+  };
+  const removeFavorite = async (id: string) => {
+    try { await gateway.removeFavorite?.(id);
+      await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'favorites'] });
+    } catch { setSelectionError(new Error('No se pudo actualizar Favoritos')); }
+  };
+  const error = selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? favorites.error ?? places.error;
+  const visiblePlaces = search.trim() ? searchCoordinator.visible(search, favorites.data ?? [],
+    [...(geography.data ?? []), ...(recents.data ?? [])],
+    followUpResults?.query === search ? followUpResults.results : places.data,
+    followUpResults?.query === search || !places.isPlaceholderData ? search : undefined) : [];
   return { phase, connection, origin, currentLocation: location.data ?? null, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
     locationAvailable: !!location.data, field, search, setSearch: (value: string) => {
-      cancelSelection(); setFollowUpResults(undefined); if (!value.trim()) gateway.closePlaces?.(); setSearch(value);
+      cancelSelection(); setFollowUpResults(undefined);
+      if (!value.trim()) { gateway.closePlaces?.(); searchCoordinator.clear(); }
+      setSearch(value);
     },
-    places: search.trim() ? followUpResults?.query === search ? followUpResults.results : places.data ?? [] : [], recents: recents.data ?? [],
+    places: visiblePlaces, settledQuery: search.trim().length >= geospatialClientConfig.noResultMinLength &&
+      !places.isFetching && !geography.isFetching && (places.isSuccess || places.isError),
+    recents: recents.data ?? [], favorites: favorites.data ?? [], saveFavorite, removeFavorite, confirmLocations,
     loadingPlaces: !!search.trim() && (places.isFetching || resolving), loadingQuote: quote.isFetching, error,
     canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending), choosePlace, submitSearch, submit, act, edit, schedule,
     openField: (target: 'origin' | 'destination') => {
       if (pending || isMatching(phase) || phase === 'assigned') return;
-      cancelSelection(); gateway.closePlaces?.(); setFollowUpResults(undefined); setField(target); setSearch('');
+      cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined); setField(target); setSearch('');
     },
-    closeField: () => { cancelSelection(); gateway.closePlaces?.(); setField(null); },
+    closeField: () => { cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setField(null); },
     retry: () => { cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
       if (tripId) void trip.refetch(); },
   };

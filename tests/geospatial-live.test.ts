@@ -5,7 +5,7 @@ import { ApiError, createApiClient } from '../src/services/api/client.ts';
 import { createGeospatialClient } from '../src/services/geospatial/client.ts';
 import { createPlaceSearch } from '../src/services/geospatial/search.ts';
 import { resolveGeoMode } from '../src/services/geospatial/config.ts';
-import { rankRegionalPlaces, rankingReason, initialRegion } from '../src/services/geospatial/regionalRanking.ts';
+import { rankRegionalPlaces, rankingReason, initialRegion, isGeographicQuery, regionForText } from '../src/services/geospatial/regionalRanking.ts';
 import { samePlace } from '../src/services/geospatial/placeIdentity.ts';
 import { providerCanonicalId } from '../gateway/tomtom.ts';
 import { localPlaces } from '../gateway/places.ts';
@@ -32,7 +32,7 @@ test('Local Places aliases dedupe provider identities and do not inject irreleva
   assert.equal(rankRegionalPlaces([candidate, candidate], localPlaces, 'UAEM Atlacomulco').length, 1);
   assert.equal(rankRegionalPlaces([], localPlaces, 'inexistente').length, 0);
   assert.equal(rankRegionalPlaces([], localPlaces, 'UAEM Atlacomulco')[0]!.provenance, 'vima-local');
-  assert.equal(rankingReason(localPlaces[1]!, 'UAEM Atlacomulco', localPlaces[1]!.aliases).reason, 'exact-name:explicit-local');
+  assert.equal(rankingReason(localPlaces[1]!, 'UAEM Atlacomulco', localPlaces[1]!.aliases).reason, 'exact-name:explicit-region');
 });
 
 test('canonical identity preserves neighboring branches and requires explicit evidence for an alias', () => {
@@ -51,6 +51,21 @@ test('canonical identity preserves neighboring branches and requires explicit ev
   assert.equal(providerCanonicalId('pois', 'abc'), providerCanonicalId('pois', 'abc'));
   assert.notEqual(providerCanonicalId('pois', 'abc'), providerCanonicalId('pois', 'def'));
   assert.doesNotMatch(providerCanonicalId('pois', 'abc'), /abc/);
+});
+
+test('explicit municipalities and area results beat generic Centro matches without rewarding Afore Coppel', () => {
+  assert.equal(regionForText('Atlacomulco de Fabela'), 'atlacomulco');
+  assert.equal(regionForText('Ixtlahuaca de Rayón'), 'ixtlahuaca');
+  assert.equal(regionForText('El Oro de Hidalgo'), 'el-oro');
+  assert.equal(isGeographicQuery('Centro Ixtlahuaca'), true);
+  assert.equal(isGeographicQuery('Coppel Atlacomulco'), false);
+  const area = { id: 'area', name: 'Ixtlahuaca de Rayón', address: 'Estado de México',
+    category: 'area', regionId: 'ixtlahuaca' };
+  const business = { id: 'business', name: 'Centro Comercial', address: 'Ixtlahuaca', category: 'poi', regionId: 'ixtlahuaca' };
+  assert.equal(rankRegionalPlaces([business, area], [], 'Centro Ixtlahuaca')[0]?.id, 'area');
+  const coppel = { id: 'shop', name: 'Coppel', address: 'Nicolás Bravo, Atlacomulco', regionId: 'atlacomulco' };
+  const afore = { id: 'afore', name: 'Afore Coppel', address: 'Nicolás Bravo, Atlacomulco', regionId: 'atlacomulco' };
+  assert.equal(rankRegionalPlaces([afore, coppel], [], 'Coppel Nicolás Bravo Atlacomulco')[0]?.id, 'shop');
 });
 
 test('search cancels/ignores old responses, shares session, forwards bias and closes on flow change', async () => {

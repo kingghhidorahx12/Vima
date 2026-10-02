@@ -5,6 +5,7 @@ export interface PlaceSuggestion {
   readonly id: string; readonly name: string; readonly address: string;
   /** Stable Vima identity; never a raw provider response or session choice ID. */
   readonly canonicalId?: string;
+  readonly distanceMeters?: number;
   readonly kind?: 'action';
   readonly provenance?: 'provider' | 'vima-local'; readonly category?: string;
   readonly regionId?: string;

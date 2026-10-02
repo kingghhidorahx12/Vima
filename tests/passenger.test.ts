@@ -107,6 +107,23 @@ async function reachMatching(harness: ReturnType<typeof createHarness>, tree: Re
   await settle(harness);
 }
 
+test('a destination becomes recent only after explicit location confirmation', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  const recorded: string[] = [];
+  const gateway: PassengerGateway = { ...fixture.gateway,
+    recordConfirmedDestination: async place => { recorded.push(place.id); } };
+  const harness = createHarness(); const tree: ReactTestRenderer = await harness.render(gateway);
+  try {
+    await settle(harness);
+    await harness.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`));
+    await settle(harness);
+    assert.deepEqual(recorded, []);
+    await harness.act(async () => press(tree, 'Confirmar ubicaciones'));
+    await settle(harness);
+    assert.deepEqual(recorded, [fixturePlaces[1]!.id]);
+  } finally { await harness.act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;
@@ -200,7 +217,7 @@ test('destination is editable while locating; late automatic origin never overwr
 test('geolocation failure permits manual origin without a permission requirement', async () => {
   const fixture = createPassengerFixtureGateway(clock, { locate: async () => { throw new Error('Device location unavailable'); } });
   const harness = createHarness();
-  const tree: ReactTestRenderer = await harness.render(fixture.gateway);
+  const tree: ReactTestRenderer = await harness.render({ ...fixture.gateway, recentPlaces: async () => [] });
   try {
     await settle(harness);
     assert.ok(text(tree).includes('No se pudo obtener tu ubicación'));
