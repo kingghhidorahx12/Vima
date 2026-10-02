@@ -118,3 +118,51 @@ test('map viewport clips native markers and Search locks camera while hiding onl
   assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, fits);
   await h.act(async () => tree.unmount());
 });
+
+test('explicit Recenter works during Search lock without automatic refit', async () => {
+  const h = createMapHarness({ reduced: true });
+  const { Camera } = h.load('src/map/Camera.tsx');
+  const scene = (sequence?: number, bottom = 300) => React.createElement(Camera, {
+    mode: 'search-locked', target: { center: [-99, 19], padding: { bottom } },
+    recenter: sequence ? { coordinate: [-99.5, 19.5], sequence } : undefined,
+  });
+  const tree: ReactTestRenderer = await h.render(scene());
+  assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
+  await h.act(async () => tree.update(scene(undefined, 450)));
+  assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
+  await h.act(async () => tree.update(scene(1, 450)));
+  assert.deepEqual(h.calls.filter((call: unknown[]) => call[0] === 'setStop').at(-1)?.[1],
+    { center: [-99.5, 19.5], duration: 0 });
+  await h.act(async () => tree.unmount());
+});
+
+test('Orbis layers remain absent without display key and use vector sources when enabled', async () => {
+  const h = createMapHarness({ reduced: true });
+  const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+  const place = { id: 'p', name: 'P', address: '', coordinate: [-99, 19] };
+  const config = { viewport: () => ({ center: [-99, 19] }), route: { width: 4, opacity: 1 },
+    vehicle: { radius: 12, color: '#000' } };
+  const scene = (available: boolean) => React.createElement(PassengerMap, { origin: place,
+    destination: null, home: true, ready: true, sheetHeight: 300, config,
+    displayKeyAvailable: available, layers: { traffic: true, incidents: true } });
+  const tree: ReactTestRenderer = await h.render(scene(false));
+  assert.equal(tree.root.findAllByType('MapLibreVectorSource' as never).length, 0);
+  await h.act(async () => tree.update(scene(true)));
+  const sources = tree.root.findAllByType('MapLibreVectorSource' as never);
+  assert.equal(sources.length, 2);
+  assert.ok(sources.every((source) => source.props.tiles[0].includes('apiVersion=2')));
+  assert.deepEqual(tree.root.findAllByType('MapLibreLayer' as never).map((layer) => layer.props['source-layer']).filter(Boolean),
+    ['Traffic flow', 'Traffic incident flow', 'Traffic incident points']);
+  await h.act(async () => tree.unmount());
+});
+
+test('launch surface uses approved image and exits when map is ready', async () => {
+  const h = createMapHarness({ reduced: true });
+  const { VimaLaunchSurface } = h.load('src/motion/VimaLaunchSurface.tsx');
+  const tree: ReactTestRenderer = await h.render(React.createElement(VimaLaunchSurface, { ready: false }));
+  assert.equal(tree.root.findAllByType('Image' as never).length, 1);
+  assert.equal(tree.root.findByType('Image' as never).props.accessibilityLabel, 'Vima');
+  await h.act(async () => tree.update(React.createElement(VimaLaunchSurface, { ready: true })));
+  assert.equal(tree.root.findAllByType('View' as never)[0]!.props.pointerEvents, 'none');
+  await h.act(async () => tree.unmount());
+});

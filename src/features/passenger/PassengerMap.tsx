@@ -1,7 +1,10 @@
 import type { CircleAppearance } from '../../map/models';
 import { useEffect, useMemo } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
-import { Camera, type CameraMode, type CameraTarget } from '../../map/Camera';
+import { Camera, type CameraMode, type CameraTarget, type RecenterIntent } from '../../map/Camera';
+import { TrafficFlowLayer } from '../../map/TrafficFlowLayer';
+import { IncidentLayer } from '../../map/IncidentLayer';
+import type { TrafficLayerPreferences } from '../../map/traffic';
 import { RouteLayer, type RouteLayerProps } from '../../map/RouteLayer';
 import { VehicleLayer } from '../../map/VehicleLayer';
 import type { VehicleMotionConfig, VehicleSample } from '../../map/vehicleMotion';
@@ -17,9 +20,10 @@ export interface PassengerMapConfig {
   readonly vehicleMotion: VehicleMotionConfig;
 }
 export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, searchPresentationActive,
-  cameraMode = 'automatic', manualSelection, config }: {
+  cameraMode = 'automatic', recenter, layers, displayKeyAvailable = false, active = true, manualSelection, config }: {
   quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
   ready: boolean; sheetHeight: number; searchPresentationActive?: boolean; cameraMode?: CameraMode;
+  recenter?: RecenterIntent; layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
   manualSelection?: { coordinate: Place['coordinate']; kind: 'origin' | 'destination' } | null; config: PassengerMapConfig;
 }) {
   const sample = useSharedValue<VehicleSample | null>(null);
@@ -29,8 +33,11 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
     return { ...view, padding: { ...view.padding, bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
   }, [assignment, config, origin, quote, sheetHeight]);
   return <>
-    <Camera target={ready ? target : undefined} mode={searchPresentationActive ? 'search-locked' : cameraMode} />
-    {(home && origin || searchPresentationActive && currentLocation) ? <PassengerUserLocation place={(searchPresentationActive ? currentLocation : origin)!} />
+    <Camera target={ready ? target : undefined} mode={searchPresentationActive ? 'search-locked' : cameraMode}
+      recenter={ready ? recenter : undefined} />
+    {displayKeyAvailable && layers?.traffic ? <TrafficFlowLayer /> : null}
+    {displayKeyAvailable && layers?.incidents ? <IncidentLayer /> : null}
+    {(home && origin || searchPresentationActive && currentLocation) ? <PassengerUserLocation place={(searchPresentationActive ? currentLocation : origin)!} active={active} />
       : (quote?.origin ?? origin) ? <PassengerMapPin place={(quote?.origin ?? origin)!} kind="origin" /> : null}
     {!searchPresentationActive && (quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}
     {manualSelection ? <PassengerMapPin place={{ id: 'manual-selection', name: '', address: '', coordinate: manualSelection.coordinate }}

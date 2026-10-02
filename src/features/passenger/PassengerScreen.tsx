@@ -13,6 +13,7 @@ import { visualTokens as t } from '../../design/tokens';
 import { semanticHaptics } from '../../motion/haptics';
 import { fadeTo } from '../../motion/helpers';
 import { SearchPulse } from '../../motion/SearchPulse';
+import { VimaLaunchSurface } from '../../motion/VimaLaunchSurface';
 import { motionTimings } from '../../motion/timing';
 import { PassengerMap, type PassengerMapConfig } from './PassengerMap';
 import { PassengerRideShell } from './PassengerRideShell';
@@ -20,6 +21,9 @@ import { isMatching, validDraft, type Assignment, type OriginStatus, type Passen
 import { usePassengerFlow } from './usePassengerFlow';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 import { normalizeCoordinate, type Coordinate } from '../../map/models';
+import { defaultTrafficLayers, displayKeyAvailable, type TrafficLayerPreferences } from '../../map/traffic';
+import { mapLayerStorage } from '../../services/storage/mapLayers';
+import { MapControls } from './MapControls';
 
 export interface PassengerBoundaries {
   readonly schedule: (quote: RideQuote | undefined) => void;
@@ -43,6 +47,15 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const [mapUserControlled, setMapUserControlled] = useState(false);
+  const [mapLayers, setMapLayers] = useState<TrafficLayerPreferences>(defaultTrafficLayers);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [recenter, setRecenter] = useState<{ coordinate: Coordinate; sequence: number }>();
+  const hasDisplayKey = displayKeyAvailable(process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY);
+  useEffect(() => {
+    let active = true;
+    void mapLayerStorage.read().then((stored) => { if (active) setMapLayers(stored); });
+    return () => { active = false; };
+  }, []);
   const [searchAction, setSearchAction] = useState<'results' | 'map' | 'contribute-map' | 'contribute-form' | 'contribute-done'>('results');
   const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate | null>(null);
   const [contributionName, setContributionName] = useState('');
@@ -112,6 +125,15 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     setMapUserControlled(false); setSearchAction('results'); setSelectedCoordinate(null); flow.openField(target);
   };
   const openSearch = (query = '') => { dismissKeyboard(); openField('destination'); flow.setSearch(query); };
+  const toggleMapLayer = (layer: keyof TrafficLayerPreferences) => {
+    const next = { ...mapLayers, [layer]: !mapLayers[layer] };
+    setMapLayers(next);
+    void mapLayerStorage.write(next);
+  };
+  const recenterMap = () => {
+    if (!flow.currentLocation) return;
+    setRecenter((previous) => ({ coordinate: flow.currentLocation!.coordinate, sequence: (previous?.sequence ?? 0) + 1 }));
+  };
   const choosePlace = (place: Place | PlaceSuggestion, target?: 'origin' | 'destination') => {
     dismissKeyboard(); setMapUserControlled(false); setSearchAction('results'); void flow.choosePlace(place, target);
   };
@@ -312,14 +334,20 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           currentLocation={flow.currentLocation}
           home={flow.phase === 'home' && !flow.destination}
           ready={mapReady} searchPresentationActive={flow.field !== null}
+          recenter={recenter} layers={mapLayers} displayKeyAvailable={hasDisplayKey} active={focused}
           manualSelection={pickingMap && selectedCoordinate ? { coordinate: selectedCoordinate,
             kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
           cameraMode={mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
           sheetHeight={interaction ? height - interaction.targetOffset : height * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
         sheet={{ interaction, header, style: styles.sheet }} renderPhase={() => content} />
-      {!mapReady && !mapFailed ? <View pointerEvents="none" style={styles.mapStatus}><ActivityIndicator accessibilityLabel="Mapa" color={t.colors.greenDark} /></View> : null}
+      {mapReady && (interaction?.targetOffset ?? height) > 130 ? <View pointerEvents="box-none"
+        style={[styles.mapControls, { bottom: height - (interaction?.targetOffset ?? height) + t.spacing.scalePx[2]! }]}>
+        <MapControls available={hasDisplayKey} canRecenter={!!flow.currentLocation} layers={mapLayers}
+          open={layersOpen} onRecenter={recenterMap} onOpen={() => setLayersOpen((value) => !value)} onToggle={toggleMapLayer} />
+      </View> : null}
       {mapFailed ? <VimaText variant="caption" style={styles.mapStatus}>Mapa · !</VimaText> : null}
     </View>
+    <VimaLaunchSurface ready={mapReady || mapFailed} />
   </SafeAreaView>;
 }
 
@@ -441,4 +469,5 @@ const styles = StyleSheet.create({
   pin: { alignItems: 'center', paddingVertical: sm, gap: xs }, vehicle: { flexDirection: 'row', alignItems: 'center', gap: lg },
   vehicleImage: { flex: 1, aspectRatio: 1, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.grayLight, justifyContent: 'center', padding: sm },
   mapStatus: { position: 'absolute', top: lg, alignSelf: 'center', backgroundColor: t.colors.white, padding: sm, borderRadius: t.radii.pillPx },
+  mapControls: { position: 'absolute', right: t.spacing.mobileHorizontalMarginPx },
 });

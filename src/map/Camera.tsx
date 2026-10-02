@@ -1,12 +1,14 @@
 import { Camera as NativeCamera, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useEffect, useRef } from 'react';
 import { useMotionPolicy } from '../motion/ReducedMotion';
+import { motionTimings } from '../motion/timing';
 import { fitBounds, type CameraTarget, type ApprovedCameraMotion } from './models';
 export type { CameraTarget, ApprovedCameraMotion } from './models';
 export type CameraMode = 'automatic' | 'search-locked' | 'user-controlled';
+export interface RecenterIntent { readonly coordinate: readonly [number, number]; readonly sequence: number }
 
-export function Camera({ target, motion, mode = 'automatic' }: {
-  target?: CameraTarget; motion?: ApprovedCameraMotion; mode?: CameraMode;
+export function Camera({ target, motion, mode = 'automatic', recenter }: {
+  target?: CameraTarget; motion?: ApprovedCameraMotion; mode?: CameraMode; recenter?: RecenterIntent;
 }) {
   const ref = useRef<CameraRef>(null);
   const { allowCameraAnimation } = useMotionPolicy();
@@ -19,5 +21,10 @@ export function Camera({ target, motion, mode = 'automatic' }: {
       : { ...options, bounds: fitBounds(target.bounds ? [target.bounds.southwest, target.bounds.northeast] : target.coordinates!) };
     void ref.current?.setStop({ ...stop, ...(allowCameraAnimation && motion ? motion : { duration: 0 }) });
   }, [target, motion, allowCameraAnimation, mode]);
+  useEffect(() => {
+    if (!recenter) return;
+    void ref.current?.setStop({ center: [...recenter.coordinate] as [number, number],
+      duration: allowCameraAnimation ? motionTimings.map.duration : 0 });
+  }, [recenter, allowCameraAnimation]);
   return <NativeCamera ref={ref} />;
 }

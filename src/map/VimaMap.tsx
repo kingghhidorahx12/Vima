@@ -1,5 +1,6 @@
-import { Map, type MapProps } from '@maplibre/maplibre-react-native';
-import { StyleSheet } from 'react-native';
+import { Map, TransformRequestManager, type MapProps } from '@maplibre/maplibre-react-native';
+import { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { resolveMapStyle } from './style';
 
 export type VimaMapProps = Omit<MapProps, 'mapStyle' | 'attribution'>;
@@ -8,6 +9,17 @@ export type VimaMapProps = Omit<MapProps, 'mapStyle' | 'attribution'>;
 export function VimaMap({ style, ...props }: VimaMapProps) {
   // Direct access is required for Expo's public environment inlining.
   const mapStyle = resolveMapStyle(process.env.EXPO_PUBLIC_MAP_STYLE_URL, __DEV__);
-  return <Map {...props} mapStyle={mapStyle} attribution style={[styles.fill, style]} />;
+  const displayKey = process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY?.trim();
+  const [credentialReady, setCredentialReady] = useState(!displayKey);
+  useEffect(() => {
+    if (!displayKey) return;
+    const id = TransformRequestManager.addHeader({ id: 'vima-tomtom-orbis-display', name: 'TomTom-Api-Key',
+      value: displayKey, match: /^https:\/\/api\.tomtom\.com\/maps\/orbis\// });
+    // Mount the native map after its first Orbis request can receive the display header.
+    queueMicrotask(() => setCredentialReady(true));
+    return () => TransformRequestManager.removeHeader(id);
+  }, [displayKey]);
+  return credentialReady ? <Map {...props} mapStyle={mapStyle} attribution style={[styles.fill, style]} />
+    : <View style={[styles.fill, style]} />;
 }
 const styles = StyleSheet.create({ fill: { flex: 1 } });

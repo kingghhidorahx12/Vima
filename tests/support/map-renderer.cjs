@@ -25,26 +25,29 @@ function createMapHarness({ reduced = false } = {}) {
       render() { return React.createElement(name, this.props, this.props.children); }
     };
   }
-  const native = { View: 'View', Platform: { OS: 'android' }, StyleSheet: { create: s => s } };
+  const native = { View: 'View', Image: 'Image', Platform: { OS: 'android' },
+    StyleSheet: { create: s => s, absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } } };
   const animated = {
-    __esModule: true, default: { createAnimatedComponent: Component => function Animated(props) {
+    __esModule: true, default: { View: 'View', createAnimatedComponent: Component => function Animated(props) {
       return React.createElement(Component, { ...props, ...props.animatedProps });
     } },
     useSharedValue: initial => { const value = React.useRef(initial); return React.useMemo(() =>
       ({ get: () => value.current, set: v => { value.current = v; } }), []); },
-    useAnimatedProps: fn => fn(),
+    useAnimatedProps: fn => fn(), useAnimatedStyle: fn => fn(),
     useAnimatedReaction: (prepare, react) => {
       const latest = React.useRef({ prepare, react }); latest.current = { prepare, react };
       React.useEffect(() => { const entry = { latest, previous: undefined }; reactions.push(entry);
         return () => { reactions.splice(reactions.indexOf(entry), 1); }; }, []);
     },
-    cancelAnimation() {}, withTiming: v => v, ReduceMotion: { Never: 0, System: 1 },
+    cancelAnimation() {}, withTiming: v => v, withSequence: (...values) => values.at(-1),
+    withRepeat: value => value, ReduceMotion: { Never: 0, System: 1 },
   };
   const overrides = {
     react: React, 'react-native': native,
     'react-native-reanimated': animated, 'react-native-worklets': { scheduleOnRN: (fn, ...args) => fn(...args) },
     '@maplibre/maplibre-react-native': { Map: component('MapLibreMap'), Marker: component('MapLibreMarker'),
-      Camera: component('MapLibreCamera'), GeoJSONSource: component('MapLibreSource'), Layer: component('MapLibreLayer') },
+      Camera: component('MapLibreCamera'), GeoJSONSource: component('MapLibreSource'),
+      VectorSource: component('MapLibreVectorSource'), Layer: component('MapLibreLayer') },
   };
   function load(file) {
     const absolute = path.resolve(root, file);
@@ -60,6 +63,7 @@ function createMapHarness({ reduced = false } = {}) {
     }).code;
     const localRequire = id => {
       if (overrides[id]) return overrides[id];
+      if (id.endsWith('.png')) return 1;
       if (!id.startsWith('.')) return require(id);
       const base = path.resolve(path.dirname(absolute), id);
       const target = [base, base + '.ts', base + '.tsx', path.join(base, 'index.ts')]

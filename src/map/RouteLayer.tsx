@@ -1,5 +1,5 @@
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import Animated, { cancelAnimation, useAnimatedProps, useSharedValue } from 'react-native-reanimated';
 import { useMotionPolicy } from '../motion/ReducedMotion';
 import { fadeTo } from '../motion/helpers';
@@ -19,6 +19,7 @@ export interface RouteLayerProps {
 export function RouteLayer({ id, data, appearance, state, activeTone, reveal = true }: RouteLayerProps) {
   const { reducedMotion } = useMotionPolicy();
   const progress = useSharedValue(reveal ? 0 : 1);
+  const mounted = useRef(false);
   const geometryKey = JSON.stringify(data.geometry);
   const color = routeColor(state, activeTone);
   const channels = [1, 3, 5].map((offset) => parseInt(color.slice(offset, offset + 2), 16));
@@ -28,10 +29,15 @@ export function RouteLayer({ id, data, appearance, state, activeTone, reveal = t
   const [r, g, b] = channels as [number, number, number];
   useEffect(() => {
     cancelAnimation(progress);
-    progress.set(reveal ? 0 : 1);
-    if (reveal) progress.set(fadeTo(1, motionTimings.map));
+    if (mounted.current) progress.set(1); // Route recalculation must not flash back to its start.
+    else {
+      mounted.current = true;
+      progress.set(reveal ? 0 : 1);
+      if (reveal) progress.set(fadeTo(1, reducedMotion ? motionTimings.focus : { ...motionTimings.map,
+        duration: motionTimings.map.duration + motionTimings.sheetEnter.duration }));
+    }
     return () => cancelAnimation(progress);
-  }, [geometryKey, progress, reveal]);
+  }, [geometryKey, progress, reducedMotion, reveal]);
   useEffect(() => {
     red.set(fadeTo(r, motionTimings.map)); green.set(fadeTo(g, motionTimings.map)); blue.set(fadeTo(b, motionTimings.map));
     return () => { cancelAnimation(red); cancelAnimation(green); cancelAnimation(blue); };

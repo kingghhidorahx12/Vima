@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { visualTokens as t } from '../tokens';
 
 /** Simple geometric UI glyphs; the production icon master and stroke are still pending. */
-export type VimaGlyphName = 'menu' | 'profile' | 'back' | 'chevron' | 'search' | 'home' | 'work' | 'favorite' | 'car' | 'clock' | 'route' | 'payment';
+export type VimaGlyphName = 'menu' | 'profile' | 'back' | 'chevron' | 'search' | 'home' | 'work' | 'favorite' | 'car' | 'clock' | 'route' | 'payment' | 'recenter' | 'layers';
 export function VimaGlyph({ name, color = t.colors.carbon }: { name: VimaGlyphName; color?: string }) {
   const line = { borderColor: color };
   const fill = { backgroundColor: color };
@@ -18,6 +18,8 @@ export function VimaGlyph({ name, color = t.colors.carbon }: { name: VimaGlyphNa
     {name === 'clock' ? <><View style={[styles.clock, line]} /><View style={[styles.clockHand, line]} /></> : null}
     {name === 'route' ? <><View style={[styles.route, line]} /><View style={[styles.routeDot, fill]} /></> : null}
     {name === 'payment' ? <><View style={[styles.payment, line]} /><View style={[styles.paymentLine, fill]} /></> : null}
+    {name === 'recenter' ? <><View style={[styles.recenterRing, line]} /><View style={[styles.recenterDot, fill]} /></> : null}
+    {name === 'layers' ? <><View style={[styles.layerBack, line]} /><View style={[styles.layerFront, line]} /></> : null}
   </View>;
 }
 
@@ -50,4 +52,8 @@ const styles = StyleSheet.create({
   routeDot: { position: 'absolute', width: 4, height: 4, borderRadius: t.radii.pillPx, top: 17, left: 16 },
   payment: { position: 'absolute', width: 20, height: 15, borderWidth: edge, borderRadius: 3, top: 5, left: 2 },
   paymentLine: { position: 'absolute', width: 18, height: edge, top: 10, left: 3 },
+  recenterRing: { position: 'absolute', width: 18, height: 18, top: 3, left: 3, borderWidth: edge, borderRadius: t.radii.pillPx },
+  recenterDot: { position: 'absolute', width: 4, height: 4, top: 10, left: 10, borderRadius: t.radii.pillPx },
+  layerBack: { position: 'absolute', width: 14, height: 14, top: 7, left: 5, borderWidth: edge, transform: [{ rotate: '45deg' }] },
+  layerFront: { position: 'absolute', width: 14, height: 14, top: 3, left: 5, borderWidth: edge, transform: [{ rotate: '45deg' }] },
 });

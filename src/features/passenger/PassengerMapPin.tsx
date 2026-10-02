@@ -1,25 +1,56 @@
 import { MapMarker as Marker } from '../../map/MapMarker';
 import { StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence } from 'react-native-reanimated';
 import { visualTokens as t } from '../../design/tokens';
+import { useMotionPolicy } from '../../motion/ReducedMotion';
+import { fadeTo } from '../../motion/helpers';
+import { motionTimings } from '../../motion/timing';
+import { motionTokens } from '../../motion/tokens';
+import { pinEntrance } from '../../map/pinMotion';
 import type { Place } from './model';
 
 /** Native Vima marker with the approved origin/destination color semantics. */
 export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' | 'destination' }) {
   const color = kind === 'origin' ? t.colors.green : t.colors.red;
+  const { reducedMotion } = useMotionPolicy();
+  const entrance = pinEntrance(reducedMotion);
+  const translateY = useSharedValue(entrance.fromY);
+  const opacity = useSharedValue(0);
+  useEffect(() => {
+    cancelAnimation(translateY); cancelAnimation(opacity);
+    translateY.set(entrance.fromY); opacity.set(0);
+    translateY.set(reducedMotion ? 0 : withSequence(
+      fadeTo(entrance.settleY, entrance.enter), fadeTo(0, entrance.settle)));
+    opacity.set(fadeTo(1, entrance.fade));
+    return () => { cancelAnimation(translateY); cancelAnimation(opacity); };
+  }, [place.id, reducedMotion, entrance.fromY, entrance.settleY, entrance.enter, entrance.settle, entrance.fade, opacity, translateY]);
+  const animated = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: translateY.get() }] }));
   return <Marker id={`passenger-${kind}-pin`} coordinate={place.coordinate} anchor="bottom">
-    <View accessible={false} style={styles.footprint}>
+    <Animated.View accessible={false} style={[styles.footprint, animated]}>
       <View style={[styles.pin, { backgroundColor: color }]} />
       <View style={[styles.inner, { backgroundColor: t.colors.white }]} />
-    </View>
+    </Animated.View>
   </Marker>;
 }
 
 /** Home location dot and halo, distinct from a confirmed origin pin. */
-export function PassengerUserLocation({ place }: { place: Place }) {
+export function PassengerUserLocation({ place, active = true }: { place: Place; active?: boolean }) {
+  const { allowDecorativeLoops } = useMotionPolicy();
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    cancelAnimation(pulse); pulse.set(0);
+    if (active && allowDecorativeLoops) pulse.set(withRepeat(fadeTo(1, {
+      duration: motionTokens.durationsMs.ambient, easing: motionTimings.map.easing,
+    }), -1, true));
+    return () => cancelAnimation(pulse);
+  }, [active, allowDecorativeLoops, pulse]);
+  const halo = useAnimatedStyle(() => ({ opacity: allowDecorativeLoops ? 1 - pulse.get() * 0.6 : 1,
+    transform: [{ scale: allowDecorativeLoops ? 1 + pulse.get() * 0.25 : 1 }] }));
   return <Marker id="passenger-user-location" coordinate={place.coordinate}>
-    <View accessible={false} style={styles.locationHalo}>
+    <Animated.View accessible={false} style={[styles.locationHalo, halo]}>
       <View style={styles.locationRing}><View style={styles.locationDot} /></View>
-    </View>
+    </Animated.View>
   </Marker>;
 }
 
