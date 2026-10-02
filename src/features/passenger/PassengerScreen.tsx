@@ -18,6 +18,7 @@ import { PassengerMap, type PassengerMapConfig } from './PassengerMap';
 import { PassengerRideShell } from './PassengerRideShell';
 import { isMatching, validDraft, type Assignment, type OriginStatus, type PassengerGateway, type Place, type RideQuote } from './model';
 import { usePassengerFlow } from './usePassengerFlow';
+import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 
 export interface PassengerBoundaries {
   readonly schedule: (quote: RideQuote | undefined) => void;
@@ -99,7 +100,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     if (draft) { setReviewedDraft(undefined); boundaries.schedule(draft); }
   };
   const openSearch = (query = '') => { dismissKeyboard(); flow.openField('destination'); flow.setSearch(query); };
-  const choosePlace = (place: Place, target?: 'origin' | 'destination') => { dismissKeyboard(); flow.choosePlace(place, target); };
+  const choosePlace = (place: Place | PlaceSuggestion, target?: 'origin' | 'destination') => { dismissKeyboard(); void flow.choosePlace(place, target); };
   const money = (amount: number, currency: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
   const content = <Animated.View style={[styles.fill, animatedContent]}>
     {flow.connection !== 'online' ? <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>Sin conexión · Intentando reconectar</VimaText> : null}
@@ -156,9 +157,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           <View style={styles.metrics}>
             <Metric icon="car" value={`${flow.quote.durationMinutes} min`} label="Duración" />
             <Metric icon="route" value={`${flow.quote.distanceKm} km`} label="Distancia" />
-            <Metric icon="payment" value={money(flow.quote.price.amount, flow.quote.price.currency)} label="Precio estimado" />
+            <Metric icon="payment" value={flow.quote.price ? money(flow.quote.price.amount, flow.quote.price.currency) : '—'} label="Precio estimado" />
           </View>
-          <View style={styles.paymentRow}><VimaGlyph name="payment" /><VimaText variant="bodySmall" style={styles.fill}>{flow.quote.paymentMethod}</VimaText><VimaGlyph name="chevron" color={t.colors.gray} /></View>
+          <View style={styles.paymentRow}><VimaGlyph name="payment" /><VimaText variant="bodySmall" style={styles.fill}>{flow.quote.paymentMethod ?? '—'}</VimaText><VimaGlyph name="chevron" color={t.colors.gray} /></View>
         </> : null}
         <VimaButton gradient label="Solicitar viaje" onPress={() => { void flow.submit(); }} haptic="requestRide"
           loading={flow.phase === 'requesting'} disabled={!flow.canSubmit} />
@@ -262,7 +263,7 @@ function AddressField({ label, place, color, onPress, disabled }: { label: strin
       {place ? <VimaText variant="caption" style={styles.muted} numberOfLines={1}>{place.address}</VimaText> : null}</View>
   </Pressable>;
 }
-function PlaceRow({ place, onPress }: { place: Place; onPress: () => void }) {
+function PlaceRow({ place, onPress }: { place: PlaceSuggestion; onPress: () => void }) {
   const lower = place.name.toLowerCase();
   const glyph: VimaGlyphName = lower.includes('casa') ? 'home' : lower.includes('trabajo') ? 'work' : 'route';
   return <Pressable accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress} style={styles.recent}>

@@ -114,6 +114,31 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+test('live suggestions resolve before selection; stale selection cannot overwrite a newer query', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  const resolution = deferred<Place>();
+  let count = 0;
+  const gateway: PassengerGateway = { ...fixture.gateway, source: 'server',
+    suggestPlaces: async () => [{ id: 'suggestion', name: 'Suggestion', address: 'Atlacomulco' }],
+    resolvePlace: async () => ++count === 1 ? resolution.promise : fixturePlaces[2]!, closePlaces() {} };
+  const harness = createHarness(); const tree: ReactTestRenderer = await harness.render(gateway);
+  try {
+    await settle(harness);
+    await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await settle(harness);
+    await harness.act(async () => press(tree, 'Suggestion, Atlacomulco'));
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination, null);
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('new query'));
+    await harness.act(async () => resolution.resolve(fixturePlaces[1]!));
+    await settle(harness);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination, null);
+    await harness.act(async () => press(tree, 'Suggestion, Atlacomulco'));
+    await settle(harness);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination.id, fixturePlaces[2]!.id);
+    assert.equal(harness.mounted.map, 1);
+  } finally { await harness.act(async () => tree.unmount()); harness.client.clear(); fixture.controls.dispose(); }
+});
+
 test('destination is editable while locating; late automatic origin never overwrites manual choice', async () => {
   const location = deferred<Place | null>();
   const fixture = createPassengerFixtureGateway(clock, { locate: () => location.promise });

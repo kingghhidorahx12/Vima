@@ -2,6 +2,7 @@ import type { Coordinate, VehicleSample } from '../../map/vehicleMotion.ts';
 import type { RouteFeature } from '../../map/routeGeometry.ts';
 import type { RealtimeTransport } from '../../services/realtime/index';
 import type { AuthoritativeTrip, TripGateway } from '../trip/contracts.ts';
+import type { PlaceSuggestion } from '../../services/geospatial/contracts.ts';
 
 export interface Place {
   readonly id: string;
@@ -15,8 +16,9 @@ export interface RideQuote extends RideDraft {
   readonly route: RouteFeature;
   readonly durationMinutes: number;
   readonly distanceKm: number;
-  readonly price: { readonly amount: number; readonly currency: string };
-  readonly paymentMethod: string;
+  /** Absent for a route preview until an authoritative pricing backend exists. */
+  readonly price?: { readonly amount: number; readonly currency: string };
+  readonly paymentMethod?: string;
 }
 export interface Assignment {
   readonly id: string;
@@ -47,6 +49,9 @@ export interface PassengerGateway extends TripGateway, RealtimeTransport {
   locate(signal?: AbortSignal): Promise<Place | null>;
   recentPlaces(signal?: AbortSignal): Promise<readonly Place[]>;
   findPlaces(query: string, signal?: AbortSignal): Promise<readonly Place[]>;
+  suggestPlaces?(query: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
+  resolvePlace?(id: string, signal?: AbortSignal): Promise<Place>;
+  closePlaces?(): void;
   quote(draft: RideDraft, signal?: AbortSignal): Promise<RideQuote>;
   /** Editing/scheduling must confirm cancellation of the active request before a new request. */
   request(quote: RideQuote, requestId: string): Promise<PassengerTrip>;
@@ -80,7 +85,7 @@ export function isMatching(phase: PassengerPhase): phase is MatchingPhase {
   return phase === 'searching' || phase === 'expanding' || phase === 'prolonged' || phase === 'reassigning';
 }
 export function canRequest(quote: RideQuote | undefined, connection: Connection, pending: boolean): boolean {
-  return !!quote && validDraft(quote.origin, quote.destination) && connection === 'online' && !pending;
+  return !!quote?.price && !!quote.paymentMethod && validDraft(quote.origin, quote.destination) && connection === 'online' && !pending;
 }
 export function passengerTitle(phase: PassengerPhase): string {
   if (phase === 'assigned') return 'Tu conductor va en camino';

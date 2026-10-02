@@ -1,0 +1,30 @@
+import type { PassengerGateway } from '../../features/passenger/model.ts';
+import type { GeospatialClient } from './client.ts';
+import { GeospatialError } from './contracts.ts';
+import { createPlaceSearch } from './search.ts';
+import { geospatialClientConfig } from './config.ts';
+
+/** Geospatial-only P0: never fabricates pricing, payment, matching or recent trips. */
+export function createPassengerLiveGateway(client: GeospatialClient, locate: PassengerGateway['locate']): PassengerGateway {
+  const search = createPlaceSearch(client, geospatialClientConfig.debounceMs);
+  const unavailable = async (): Promise<never> => { throw new Error('Servicio no disponible'); };
+  return {
+    scope: 'vima-geospatial-live', source: 'server', locate,
+    recentPlaces: async () => [],
+    suggestPlaces: search.suggest, resolvePlace: search.resolve, closePlaces: search.close,
+    async findPlaces(query, signal) {
+      const result = await client.geocode(query, signal);
+      return result ? [result] : [];
+    },
+    async quote(draft, signal) {
+      const route = await client.route({ origin: draft.origin.coordinate, destination: draft.destination.coordinate,
+        stops: draft.stops.map(place => place.coordinate) }, signal);
+      if (!route.geometry) throw new GeospatialError('invalid_result');
+      return { ...draft, id: `route-preview:${draft.origin.id}:${draft.destination.id}`, route: route.geometry,
+        durationMinutes: Math.ceil((route.trafficDurationSeconds ?? route.durationSeconds) / 60),
+        distanceKm: Math.round(route.distanceMeters / 100) / 10 };
+    },
+    request: unavailable, fetch: unavailable, execute: unavailable,
+    getConnection: () => 'online', subscribeConnection: () => () => {}, subscribeTrip: () => () => {},
+  };
+}

@@ -4,6 +4,7 @@ import { connectTripRealtime } from '../../services/realtime';
 import { useCriticalTripCommand, tripKey, tripQueryOptions } from '../trip/queries';
 import { canRequest, isMatching, passengerPhase, passengerTrip, validDraft, type OriginStatus, type PassengerGateway, type PassengerTrip, type Place, type RideQuote } from './model';
 import { requestPassengerRide } from './requests';
+import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 
 let operationSequence = 0;
 function operationId() { return `passenger-${Date.now()}-${++operationSequence}`; }
@@ -21,13 +22,19 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const [search, setSearch] = useState('');
   const requestId = useRef<string | null>(null);
   const locked = useRef(false);
+  const selection = useRef<AbortController | undefined>(undefined);
+  const [selectionError, setSelectionError] = useState<Error>();
+  const [resolving, setResolving] = useState(false);
   const location = useQuery({ queryKey: ['passenger', gateway.scope, 'location'], queryFn: ({ signal }) => gateway.locate(signal), retry: false,
     staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false });
   const recents = useQuery({ queryKey: ['passenger', gateway.scope, 'recents'], queryFn: ({ signal }) => gateway.recentPlaces(signal), retry: false });
-  const places = useQuery({ queryKey: ['passenger', gateway.scope, 'places', search],
-    queryFn: ({ signal }) => gateway.findPlaces(search, signal), enabled: field !== null, retry: false });
   // A late geolocation result can update its query, never an explicit selection.
   const origin = originChoice?.place ?? location.data ?? null;
+  const places = useQuery({ queryKey: ['passenger', gateway.scope, 'places', field, search, origin?.coordinate],
+    queryFn: ({ signal }) => gateway.suggestPlaces ? gateway.suggestPlaces(search, signal, origin?.coordinate) : gateway.findPlaces(search, signal),
+    enabled: field !== null, retry: false, gcTime: 0, staleTime: 0 });
+  useEffect(() => () => { selection.current?.abort(); gateway.closePlaces?.(); }, [gateway]);
+  const cancelSelection = () => { selection.current?.abort(); selection.current = undefined; setResolving(false); setSelectionError(undefined); };
   const originStatus: OriginStatus = originChoice?.kind ?? (location.isPending ? 'loading' : location.data ? 'automatic' : 'unavailable');
   const trip = useQuery({ ...tripQueryOptions(gateway, tripId ?? ''), enabled: !!tripId && connection === 'online',
     select: passengerTrip, retry: false });
@@ -43,11 +50,11 @@ export function usePassengerFlow(gateway: PassengerGateway) {
 
   const request = useMutation({ mutationFn: () => requestPassengerRide(client, gateway, quote.data!, requestId.current!), retry: false });
   const command = useCriticalTripCommand(gateway);
-  const pending = request.isPending || command.isPending;
+  const pending = request.isPending || command.isPending || resolving;
   const phase = passengerPhase(trip.data, editing, confirming, request.isPending);
   const activeQuote = phase === 'home' || phase === 'confirm' || phase === 'requesting' ? quote.data : trip.data?.quote;
 
-  const choosePlace = (value: Place, target = field ?? 'destination') => {
+  const applyPlace = (value: Place, target: 'origin' | 'destination') => {
     if (pending || isMatching(phase) || phase === 'assigned') return;
     requestId.current = null;
     if (target === 'origin') setOrigin({ place: value, kind: 'manual' }); else setDestination(value);
@@ -55,6 +62,20 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     const nextDestination = target === 'destination' ? value : destination;
     setConfirming(validDraft(nextOrigin, nextDestination));
     setField(null); setSearch('');
+    gateway.closePlaces?.();
+  };
+  const choosePlace = async (value: Place | PlaceSuggestion, target = field ?? 'destination') => {
+    if (pending || isMatching(phase) || phase === 'assigned') return;
+    if ('coordinate' in value) { applyPlace(value, target); return; }
+    if (!gateway.resolvePlace) return;
+    cancelSelection();
+    const controller = new AbortController(); selection.current = controller; setResolving(true);
+    try {
+      const resolved = await gateway.resolvePlace(value.id, controller.signal);
+      if (!controller.signal.aborted) applyPlace(resolved, target);
+    } catch (error) {
+      if (!controller.signal.aborted) setSelectionError(error instanceof Error ? error : new Error('search_unavailable'));
+    } finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
   };
   const submit = async () => {
     if (locked.current || phase !== 'confirm' || !canRequest(quote.data, connection, pending)) return;
@@ -102,17 +123,17 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     preserveDraft(previous); setTripId(undefined); setEditing(true); setConfirming(false); setField(null); requestId.current = null;
     return previous;
   };
-  const error = request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? places.error;
+  const error = selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? places.error;
   return { phase, connection, origin, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
-    locationAvailable: !!location.data, field, search, setSearch, places: places.data ?? [], recents: recents.data ?? [],
-    loadingPlaces: places.isFetching, loadingQuote: quote.isFetching, error,
+    locationAvailable: !!location.data, field, search, setSearch: (value: string) => { cancelSelection(); setSearch(value); }, places: places.data ?? [], recents: recents.data ?? [],
+    loadingPlaces: places.isFetching || resolving, loadingQuote: quote.isFetching, error,
     canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending), choosePlace, submit, act, edit, schedule,
     openField: (target: 'origin' | 'destination') => {
       if (pending || isMatching(phase) || phase === 'assigned') return;
-      setField(target); setSearch('');
+      cancelSelection(); gateway.closePlaces?.(); setField(target); setSearch('');
     },
-    closeField: () => setField(null),
-    retry: () => { request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
+    closeField: () => { cancelSelection(); gateway.closePlaces?.(); setField(null); },
+    retry: () => { cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
       if (tripId) void trip.refetch(); },
   };
 }

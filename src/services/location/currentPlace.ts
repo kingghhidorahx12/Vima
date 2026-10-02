@@ -1,8 +1,9 @@
 import * as Location from 'expo-location';
 import type { Place } from '../../features/passenger/model';
+import type { GeospatialClient } from '../geospatial/client';
 
 /** Foreground, one-shot location. A denial/failure leaves manual entry available. */
-export async function locateCurrentPlace(signal?: AbortSignal): Promise<Place | null> {
+export async function locateCurrentPlace(signal?: AbortSignal, reverse?: GeospatialClient['reverseGeocode']): Promise<Place | null> {
   signal?.throwIfAborted();
   const permission = await Location.requestForegroundPermissionsAsync();
   signal?.throwIfAborted();
@@ -11,9 +12,11 @@ export async function locateCurrentPlace(signal?: AbortSignal): Promise<Place | 
   signal?.throwIfAborted();
   let address = '';
   try {
-    const [reference] = await Location.reverseGeocodeAsync(coords);
-    if (reference) address = [reference.street, reference.streetNumber, reference.district, reference.city]
-      .filter(Boolean).join(', ');
+    if (reverse) address = (await reverse([coords.longitude, coords.latitude], signal))?.address ?? '';
+    else {
+      const [reference] = await Location.reverseGeocodeAsync(coords);
+      if (reference) address = [reference.street, reference.streetNumber, reference.district, reference.city].filter(Boolean).join(', ');
+    }
   } catch { /* Coordinates remain useful when the device geocoder has no address. */ }
   signal?.throwIfAborted();
   return { id: `current-location:${coords.longitude}:${coords.latitude}`, name: 'Tu ubicación actual', address,
