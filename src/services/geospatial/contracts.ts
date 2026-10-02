@@ -25,8 +25,8 @@ export class GeospatialError extends Error {
   constructor(code: GeospatialErrorCode) { super(code); this.name = 'GeospatialError'; this.code = code; }
 }
 export interface PlacesSession {
-  autocomplete(input: string, signal?: AbortSignal): Promise<readonly PlaceSuggestion[]>;
-  search(input: string, signal?: AbortSignal): Promise<readonly PlaceSuggestion[]>;
+  autocomplete(input: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
+  search(input: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
   resolve(id: string, signal?: AbortSignal): Promise<ResolvedPlace>;
   close(signal?: AbortSignal): Promise<void>;
 }

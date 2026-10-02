@@ -5,6 +5,7 @@ import type { ResolvedPlace } from './contracts.ts';
 export interface VimaLocalPlace extends ResolvedPlace {
   readonly provenance: 'vima-local';
   readonly regionId: string;
+  readonly aliases?: readonly string[];
 }
 
 export interface RegionalRankingPolicy {

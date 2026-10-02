@@ -1,5 +1,5 @@
 import { ApiError, type ApiClient, type ApiRequest } from '../api/client.ts';
-import { normalizeCoordinate } from '../../map/models.ts';
+import { normalizeCoordinate, type Coordinate } from '../../map/models.ts';
 import { GeospatialError, type GeospatialErrorCode, type PlacesSession, type RouteRequest } from './contracts.ts';
 import { decodeOptionalPlace, decodePlace, decodeRoute, decodeSession, decodeSuggestions } from './normalize.ts';
 
@@ -24,6 +24,9 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
       if (input.signal?.aborted) throw new GeospatialError('cancelled');
       if (error instanceof GeospatialError) throw error;
       if (error instanceof ApiError) {
+        const codes: readonly string[] = ['map_unavailable', 'search_unavailable', 'geocoding_unavailable', 'route_unavailable',
+          'no_result', 'timeout', 'invalid_result', 'network_recoverable', 'cancelled'];
+        if (error.code && codes.includes(error.code)) throw new GeospatialError(error.code as GeospatialErrorCode);
         if (error.status === 404) throw new GeospatialError('no_result');
         if (error.status === 408 || error.status === 504) throw new GeospatialError('timeout');
         throw new GeospatialError(unavailable);
@@ -40,14 +43,14 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
       const path = '/v1/geospatial/places/sessions/' + encodeURIComponent(sessionId);
       const requireOpen = () => { if (closed) throw new GeospatialError('search_unavailable'); };
       return {
-        autocomplete(input, signal) {
+        autocomplete(input, signal, bias) {
           requireOpen();
-          return request({ path: path + '/autocomplete', method: 'POST', body: { input },
+          return request({ path: path + '/autocomplete', method: 'POST', body: { input, ...(bias ? { bias } : {}) },
             decode: decodeSuggestions, signal }, 'search_unavailable');
         },
-        search(input, signal) {
+        search(input, signal, bias) {
           requireOpen();
-          return request({ path: path + '/search', method: 'POST', body: { input },
+          return request({ path: path + '/search', method: 'POST', body: { input, ...(bias ? { bias } : {}) },
             decode: decodeSuggestions, signal }, 'search_unavailable');
         },
         async resolve(id, signal) {
@@ -64,9 +67,9 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
         },
       };
     },
-    geocode(input: string, signal?: AbortSignal) {
+    geocode(input: string, signal?: AbortSignal, bias?: Coordinate) {
       if (!input.trim()) throw new GeospatialError('invalid_result');
-      return request({ path: '/v1/geospatial/geocode', method: 'POST', body: { input },
+      return request({ path: '/v1/geospatial/geocode', method: 'POST', body: { input, ...(bias ? { bias } : {}) },
         decode: decodeOptionalPlace, signal }, 'geocoding_unavailable');
     },
     reverseGeocode(coordinate: readonly [number, number], signal?: AbortSignal) {
@@ -84,3 +87,4 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
     },
   };
 }
+export type GeospatialClient = ReturnType<typeof createGeospatialClient>;
