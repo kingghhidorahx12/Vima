@@ -41,6 +41,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [height, setHeight] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
+  const [mapUserControlled, setMapUserControlled] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [pulseVisible, setPulseVisible] = useState(true);
   const [reviewedDraft, setReviewedDraft] = useState<string>();
@@ -99,8 +100,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const draft = await flow.schedule();
     if (draft) { setReviewedDraft(undefined); boundaries.schedule(draft); }
   };
-  const openSearch = (query = '') => { dismissKeyboard(); flow.openField('destination'); flow.setSearch(query); };
-  const choosePlace = (place: Place | PlaceSuggestion, target?: 'origin' | 'destination') => { dismissKeyboard(); void flow.choosePlace(place, target); };
+  const openField = (target: 'origin' | 'destination') => { setMapUserControlled(false); flow.openField(target); };
+  const openSearch = (query = '') => { dismissKeyboard(); openField('destination'); flow.setSearch(query); };
+  const choosePlace = (place: Place | PlaceSuggestion, target?: 'origin' | 'destination') => {
+    dismissKeyboard(); setMapUserControlled(false); void flow.choosePlace(place, target);
+  };
   const money = (amount: number, currency: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
   const content = <Animated.View style={[styles.fill, animatedContent]}>
     {flow.connection !== 'online' ? <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>Sin conexión · Intentando reconectar</VimaText> : null}
@@ -122,9 +126,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         {flow.places.map((place) => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}
       </> : reviewing ? <>
         <View style={styles.addressGroup}>
-          <OriginField place={flow.origin} status={flow.originStatus} onPress={() => flow.openField('origin')} />
+          <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
           <View style={styles.addressRule} />
-          <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => flow.openField('destination')} />
+          <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} />
         </View>
         <VimaButton gradient label="Confirmar ubicaciones"
           disabled={!validDraft(flow.origin, flow.destination)} onPress={() => {
@@ -132,7 +136,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             if (flow.phase === 'home' && flow.destination) flow.choosePlace(flow.destination, 'destination');
           }} />
       </> : flow.phase === 'home' ? <>
-        <OriginField place={flow.origin} status={flow.originStatus} onPress={() => flow.openField('origin')} />
+        <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
         <Pressable onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vas?" style={styles.homeSearch}>
           <SmallPin color={t.colors.red} />
           <VimaText variant="bodySmall" style={styles.muted}>Buscar un lugar o dirección</VimaText>
@@ -148,10 +152,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
         <View style={[styles.addressGroup, styles.confirmAddressGroup]}>
-          <AddressField label="Origen" place={flow.origin} color={t.colors.green} onPress={() => flow.openField('origin')} disabled={blocked} />
+          <AddressField label="Origen" place={flow.origin} color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />
           {flow.quote?.stops.map((place) => <AddressField key={place.id} label={place.name} place={place} color={t.colors.gray} disabled />)}
           <View style={styles.addressRule} />
-          <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => flow.openField('destination')} disabled={blocked} />
+          <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} disabled={blocked} />
         </View>
         {flow.loadingQuote ? <ActivityIndicator color={t.colors.greenDark} /> : null}
         {flow.quote ? <>
@@ -224,10 +228,14 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     </View>
     <View style={styles.fill} onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
       <PassengerRideShell trip={flow.trip}
-        map={{ onTouchStart: dismissKeyboard, onDidFinishLoadingMap: () => { setMapReady(true); setMapFailed(false); }, onDidFailLoadingMap: () => setMapFailed(true) }}
+        map={{ onTouchStart: () => { dismissKeyboard(); setMapUserControlled(true); },
+          onDidFinishLoadingMap: () => { setMapReady(true); setMapFailed(false); }, onDidFailLoadingMap: () => setMapFailed(true) }}
         mapContent={<PassengerMap quote={flow.quote} assignment={assignment} origin={flow.origin} destination={flow.destination}
+          currentLocation={flow.currentLocation}
           home={flow.phase === 'home' && !flow.destination}
-          ready={mapReady} config={mapConfig} sheetHeight={interaction ? height - interaction.targetOffset : height * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
+          ready={mapReady} searchPresentationActive={flow.field !== null}
+          cameraMode={mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
+          sheetHeight={interaction ? height - interaction.targetOffset : height * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
         sheet={{ interaction, header, style: styles.sheet }} renderPhase={() => content} />
       {!mapReady && !mapFailed ? <View pointerEvents="none" style={styles.mapStatus}><ActivityIndicator accessibilityLabel="Mapa" color={t.colors.greenDark} /></View> : null}
       {mapFailed ? <VimaText variant="caption" style={styles.mapStatus}>Mapa · !</VimaText> : null}

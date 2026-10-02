@@ -142,7 +142,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     return previous;
   };
   const error = selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? places.error;
-  return { phase, connection, origin, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
+  return { phase, connection, origin, currentLocation: location.data ?? null, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
     locationAvailable: !!location.data, field, search, setSearch: (value: string) => {
       cancelSelection(); setFollowUpResults(undefined); if (!value.trim()) gateway.closePlaces?.(); setSearch(value);
     },

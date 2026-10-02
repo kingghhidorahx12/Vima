@@ -1,7 +1,7 @@
 import type { CircleAppearance } from '../../map/models';
 import { useEffect, useMemo } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
-import { Camera, type CameraTarget } from '../../map/Camera';
+import { Camera, type CameraMode, type CameraTarget } from '../../map/Camera';
 import { RouteLayer, type RouteLayerProps } from '../../map/RouteLayer';
 import { VehicleLayer } from '../../map/VehicleLayer';
 import type { VehicleMotionConfig, VehicleSample } from '../../map/vehicleMotion';
@@ -16,9 +16,10 @@ export interface PassengerMapConfig {
   readonly viewport: (quote: RideQuote | undefined, assignment: Assignment | undefined, origin: Place | null) => CameraTarget;
   readonly vehicleMotion: VehicleMotionConfig;
 }
-export function PassengerMap({ quote, assignment, origin, destination, home, ready, sheetHeight, config }: {
-  quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; home: boolean;
-  ready: boolean; sheetHeight: number; config: PassengerMapConfig;
+export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, searchPresentationActive,
+  cameraMode = 'automatic', config }: {
+  quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
+  ready: boolean; sheetHeight: number; searchPresentationActive?: boolean; cameraMode?: CameraMode; config: PassengerMapConfig;
 }) {
   const sample = useSharedValue<VehicleSample | null>(null);
   useEffect(() => { sample.set(assignment?.sample ?? null); }, [assignment?.sample, sample]);
@@ -27,12 +28,13 @@ export function PassengerMap({ quote, assignment, origin, destination, home, rea
     return { ...view, padding: { ...view.padding, bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
   }, [assignment, config, origin, quote, sheetHeight]);
   return <>
-    <Camera target={ready ? target : undefined} />
-    {home && origin ? <PassengerUserLocation place={origin} />
+    <Camera target={ready ? target : undefined} mode={searchPresentationActive ? 'search-locked' : cameraMode} />
+    {(home && origin || searchPresentationActive && currentLocation) ? <PassengerUserLocation place={(searchPresentationActive ? currentLocation : origin)!} />
       : (quote?.origin ?? origin) ? <PassengerMapPin place={(quote?.origin ?? origin)!} kind="origin" /> : null}
-    {(quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}
-    {quote ? <RouteLayer id="passenger-route" data={assignment?.routeToOrigin ?? quote.route}
+    {!searchPresentationActive && (quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}
+    {!searchPresentationActive && quote ? <RouteLayer id="passenger-route" data={assignment?.routeToOrigin ?? quote.route}
       activeTone="greenDark" state="active" appearance={config.route} /> : null}
-    <VehicleLayer id="passenger-assigned-vehicle" kind="circle" sample={sample} appearance={config.vehicle} motion={config.vehicleMotion} />
+    {!searchPresentationActive ? <VehicleLayer id="passenger-assigned-vehicle" kind="circle" sample={sample}
+      appearance={config.vehicle} motion={config.vehicleMotion} /> : null}
   </>;
 }

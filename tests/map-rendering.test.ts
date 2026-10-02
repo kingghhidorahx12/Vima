@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import React from 'react';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import type { ReactTestRenderer } from 'react-test-renderer';
 
 const require = createRequire(import.meta.url);
@@ -81,5 +82,39 @@ test('MapLibre vehicle pose flows through animated GeoJSON without React pose re
   h.poses.set({ coordinate: [-98, 20], heading: 10 });
   await h.flush();
   assert.equal(renders, afterMount);
+  await h.act(async () => tree.unmount());
+});
+
+test('map viewport clips native markers and Search locks camera while hiding only prior presentation', async () => {
+  const h = createMapHarness({ reduced: true });
+  const { VimaMap } = h.load('src/map/VimaMap.tsx');
+  const { MapViewportClip } = h.load('src/map/MapViewportClip.tsx');
+  const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+  const origin = { id: 'origin', name: 'Origen', address: '', coordinate: [-99, 19] };
+  const destination = { id: 'destination', name: 'Destino', address: '', coordinate: [-98, 20] };
+  const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[-99, 19], [-98, 20]] } };
+  const quote = { origin, destination, route };
+  const config = { viewport: () => ({ center: [-99, 19], zoom: 14 }), route: { width: 4, opacity: 1 },
+    vehicle: { radius: 12, color: '#000' } };
+  const scene = (locked: boolean, sheetHeight: number, mode = 'automatic') => React.createElement(MapViewportClip, null,
+    React.createElement(VimaMap, null, React.createElement(PassengerMap,
+      { quote, origin, destination, currentLocation: origin, home: false, ready: true,
+        searchPresentationActive: locked, cameraMode: mode, sheetHeight, config })));
+  const tree: ReactTestRenderer = await h.render(scene(true, 300));
+  const map = tree.root.findByType('MapLibreMap' as never).instance;
+  assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
+  assert.equal(tree.root.findAllByType('MapLibreMarker' as never).length, 1);
+  assert.equal(tree.root.findAllByType('MapLibreSource' as never).length, 0);
+  assert.ok(tree.root.findAllByType('View' as never).some((view) => view.props.style?.overflow === 'hidden'));
+  assert.match(readFileSync('src/features/trip/RideShell.tsx', 'utf8'), /<MapViewportClip><VimaMap/);
+  await h.act(async () => tree.update(scene(true, 420)));
+  assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
+  await h.act(async () => tree.update(scene(false, 420)));
+  assert.equal(tree.root.findByType('MapLibreMap' as never).instance, map);
+  assert.equal(tree.root.findAllByType('MapLibreMarker' as never).length, 2);
+  assert.equal(tree.root.findAllByType('MapLibreSource' as never).length, 2);
+  const fits = h.calls.filter((call: unknown[]) => call[0] === 'setStop').length;
+  await h.act(async () => tree.update(scene(false, 500, 'user-controlled')));
+  assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, fits);
   await h.act(async () => tree.unmount());
 });

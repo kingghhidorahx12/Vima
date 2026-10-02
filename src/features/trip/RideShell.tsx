@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { VimaRideSheet, type VimaRideSheetProps } from '../../design/components/VimaRideSheet';
 import { VimaMap, type VimaMapProps } from '../../map/VimaMap';
+import { MapViewportClip } from '../../map/MapViewportClip';
 import type { AuthoritativeTrip } from './contracts';
 import { useTripUiStore } from './uiStore';
 
@@ -17,7 +18,7 @@ export function RideShell({ trip, map, mapContent, sheet, renderPhase }: RideShe
   const interactionEnabled = useTripUiStore((state) => state.sheetInteractionEnabled);
   return (
     <View style={styles.fill}>
-      <VimaMap {...map}>{mapContent}</VimaMap>
+      <MapViewportClip><VimaMap {...map}>{mapContent}</VimaMap></MapViewportClip>
       <VimaRideSheet {...sheet} enabled={interactionEnabled}>
         {renderPhase(trip)}
       </VimaRideSheet>
