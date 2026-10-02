@@ -1,25 +1,20 @@
-import { useEffect } from 'react';
+import { Camera as NativeCamera, type CameraRef } from '@maplibre/maplibre-react-native';
+import { useEffect, useRef } from 'react';
 import { useMotionPolicy } from '../motion/ReducedMotion';
-import { Camera as LegacyCamera } from './legacy/Camera';
-import { useMapContext } from './MapContext';
-import { googleCameraCommand } from './google/camera';
-import type { CameraTarget, ApprovedCameraMotion } from './models';
+import { fitBounds, type CameraTarget, type ApprovedCameraMotion } from './models';
 export type { CameraTarget, ApprovedCameraMotion } from './models';
 
 export function Camera({ target, motion }: { target?: CameraTarget; motion?: ApprovedCameraMotion }) {
-  const { provider, map, ready, padding, setPadding } = useMapContext();
-  const { reducedMotion } = useMotionPolicy();
+  const ref = useRef<CameraRef>(null);
+  const { allowCameraAnimation } = useMotionPolicy();
   useEffect(() => {
-    if (provider !== 'google' || !ready || !target) return;
-    const next = target.padding ?? {};
-    if (JSON.stringify(padding) !== JSON.stringify(next)) { setPadding(next); return; }
-    const frame = requestAnimationFrame(() => {
-      const command = googleCameraCommand(target, reducedMotion, motion);
-      if (command.kind === 'fit') map.current?.fitToCoordinates(command.coordinates, command.options);
-      else if (command.animated) map.current?.animateCamera(command.camera, { duration: command.duration });
-      else map.current?.setCamera(command.camera);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [provider, ready, target, motion, reducedMotion, map, padding, setPadding]);
-  return provider === 'maplibre' ? <LegacyCamera target={target} motion={motion} /> : null;
+    if (!target) return;
+    const { padding, zoom, pitch, bearing } = target;
+    const options = { padding, zoom, pitch, bearing };
+    const stop = target.center
+      ? { ...options, center: [...target.center] as [number, number] }
+      : { ...options, bounds: fitBounds(target.bounds ? [target.bounds.southwest, target.bounds.northeast] : target.coordinates!) };
+    void ref.current?.setStop({ ...stop, ...(allowCameraAnimation && motion ? motion : { duration: 0 }) });
+  }, [target, motion, allowCameraAnimation]);
+  return <NativeCamera ref={ref} />;
 }

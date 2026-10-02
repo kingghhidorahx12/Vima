@@ -5,7 +5,7 @@ const React = require('react');
 const renderer = require('react-test-renderer');
 const { transformSync } = require('@babel/core');
 
-function createMapHarness({ configured = true, reduced = false } = {}) {
+function createMapHarness({ reduced = false } = {}) {
   const root = path.resolve(__dirname, '../..');
   const modules = new Map(); const calls = []; const reactions = []; const frames = [];
   const policy = { reducedMotion: reduced, allowCameraAnimation: !reduced };
@@ -21,12 +21,11 @@ function createMapHarness({ configured = true, reduced = false } = {}) {
       setCoordinates(...args) { calls.push(['setCoordinates', ...args]); }
       setNativeProps(...args) { calls.push(['setNativeProps', ...args]); }
       redraw() { calls.push(['redraw']); }
+      setStop(...args) { calls.push(['setStop', ...args]); return Promise.resolve(); }
       render() { return React.createElement(name, this.props, this.props.children); }
     };
   }
   const native = { View: 'View', Platform: { OS: 'android' }, StyleSheet: { create: s => s } };
-  const maps = { __esModule: true, default: component('GoogleMap'), PROVIDER_GOOGLE: 'google',
-    Marker: component('GoogleMarker'), Polyline: component('GooglePolyline') };
   const animated = {
     __esModule: true, default: { createAnimatedComponent: Component => function Animated(props) {
       return React.createElement(Component, { ...props, ...props.animatedProps });
@@ -42,12 +41,10 @@ function createMapHarness({ configured = true, reduced = false } = {}) {
     cancelAnimation() {}, withTiming: v => v, ReduceMotion: { Never: 0, System: 1 },
   };
   const overrides = {
-    react: React, 'react-native': native, 'react-native-maps': maps,
+    react: React, 'react-native': native,
     'react-native-reanimated': animated, 'react-native-worklets': { scheduleOnRN: (fn, ...args) => fn(...args) },
-    'expo-constants': { __esModule: true, default: { expoConfig: { extra: { googleMapsAndroidConfigured: configured } } } },
-    '@maplibre/maplibre-react-native': { Map: component('LegacyMap'), Marker: component('LegacyMarker'),
-      Camera: component('LegacyCamera'), GeoJSONSource: component('LegacySource'), Layer: component('LegacyLayer'),
-      TransformRequestManager: { addHeader() {} } },
+    '@maplibre/maplibre-react-native': { Map: component('MapLibreMap'), Marker: component('MapLibreMarker'),
+      Camera: component('MapLibreCamera'), GeoJSONSource: component('MapLibreSource'), Layer: component('MapLibreLayer') },
   };
   function load(file) {
     const absolute = path.resolve(root, file);

@@ -25,3 +25,22 @@ export function normalizeBounds(value: unknown): Bounds {
   if (southwest[1] > northeast[1]) throw new Error('invalid_bounds');
   return { southwest, northeast };
 }
+
+/** Smallest longitudinal arc containing all points, then south/north bounds. */
+export function fitBounds(points: readonly Coordinate[]): [number, number, number, number] {
+  if (points.length < 2) throw new Error('invalid_bounds');
+  const valid = points.map(normalizeCoordinate);
+  const latitudes = valid.map((point) => point[1]);
+  const longitudes = valid.map((point) => (point[0] + 360) % 360).sort((a, b) => a - b);
+  let largestGap = -1;
+  let end = 0;
+  for (let i = 0; i < longitudes.length; i += 1) {
+    const next = (i + 1) % longitudes.length;
+    const gap = (longitudes[next]! - longitudes[i]! + 360) % 360;
+    if (gap > largestGap) { largestGap = gap; end = next; }
+  }
+  const west = longitudes[end]! > 180 ? longitudes[end]! - 360 : longitudes[end]!;
+  const eastIndex = (end + longitudes.length - 1) % longitudes.length;
+  const east = longitudes[eastIndex]! > 180 ? longitudes[eastIndex]! - 360 : longitudes[eastIndex]!;
+  return [west, Math.min(...latitudes), east, Math.max(...latitudes)];
+}

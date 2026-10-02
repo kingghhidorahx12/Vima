@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { QueryClient } from '@tanstack/react-query';
 import { resolveMapStyle } from '../src/map/style.ts';
-import { mapTilerUserAgentHeader } from '../src/map/requestPolicy.ts';
 import { createMotionPolicy } from '../src/motion/policy.ts';
 import { canInterpolateVehicle, interpolateCoordinate, validateVehicleSample, type VehicleMotionConfig } from '../src/map/vehicleMotion.ts';
 import { sanitizePreferences, sanitizeSnapshot } from '../src/services/storage/contracts.ts';
@@ -19,14 +18,6 @@ test('development map defaults to OpenFreeMap Positron; production requires expl
   assert.throws(() => resolveMapStyle('http://example.test/style.json', false));
   assert.throws(() => resolveMapStyle('https://user:secret@example.test/style.json', true));
   assert.equal(resolveMapStyle('https://example.test/style.json', false), 'https://example.test/style.json');
-});
-
-test('MapTiler request identity is restricted to its HTTPS hosts', () => {
-  assert.equal(mapTilerUserAgentHeader.name, 'User-Agent');
-  assert.equal(mapTilerUserAgentHeader.value, 'VimaMobile/com.kingghhidorahx12.vima');
-  assert.match('https://api.maptiler.com/maps/style.json', mapTilerUserAgentHeader.match);
-  assert.doesNotMatch('https://tiles.openfreemap.org/styles/positron', mapTilerUserAgentHeader.match);
-  assert.doesNotMatch('https://maptiler.com.evil.test/style.json', mapTilerUserAgentHeader.match);
 });
 
 test('reduced motion disables vehicle interpolation, route reveal and camera animation', () => {

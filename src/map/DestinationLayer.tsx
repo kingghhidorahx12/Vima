@@ -1,6 +1,5 @@
-import { View } from 'react-native';
-import { MapMarker } from './MapMarker';
-import { normalizeCoordinate, type CircleAppearance } from './models';
+import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
+import type { CircleAppearance } from './models';
 import { mapColors } from './semantics';
 
 export interface DestinationLayerProps {
@@ -8,9 +7,8 @@ export interface DestinationLayerProps {
   readonly kind: 'circle'; readonly appearance: CircleAppearance;
 }
 export function DestinationLayer({ id, data, appearance: a }: DestinationLayerProps) {
-  return <>{data.features.map((feature, index) => <MapMarker key={feature.id ?? index}
-    id={`${id}-${feature.id ?? index}`} coordinate={normalizeCoordinate(feature.geometry.coordinates)}>
-    <View style={{ width: a.radius * 2, height: a.radius * 2, borderRadius: a.radius,
-      backgroundColor: mapColors.destination, borderWidth: a.strokeWidth, borderColor: a.strokeColor }} />
-  </MapMarker>)}</>;
+  return <GeoJSONSource id={`${id}-source`} data={data}>
+    <Layer id={id} type="circle" paint={{ 'circle-radius': a.radius, 'circle-color': mapColors.destination,
+      'circle-stroke-width': a.strokeWidth, 'circle-stroke-color': a.strokeColor }} />
+  </GeoJSONSource>;
 }
