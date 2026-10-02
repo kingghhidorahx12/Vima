@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Keyboard, Pressable, ScrollView, StyleSheet, TextInput, View, type ImageSourcePropType } from 'react-native';
+import { ActivityIndicator, BackHandler, Image, Keyboard, Pressable, ScrollView, StyleSheet, TextInput, View, type ImageSourcePropType } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
@@ -24,6 +24,8 @@ import { normalizeCoordinate, type Coordinate } from '../../map/models';
 import { defaultTrafficLayers, displayKeyAvailable, type TrafficLayerPreferences } from '../../map/traffic';
 import { mapLayerStorage } from '../../services/storage/mapLayers';
 import { MapControls } from './MapControls';
+import { IncidentCard } from './IncidentCard';
+import type { IncidentDetails } from '../../map/incidentDetails';
 
 export interface PassengerBoundaries {
   readonly schedule: (quote: RideQuote | undefined) => void;
@@ -49,6 +51,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [mapUserControlled, setMapUserControlled] = useState(false);
   const [mapLayers, setMapLayers] = useState<TrafficLayerPreferences>(defaultTrafficLayers);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [incident, setIncident] = useState<IncidentDetails | null>(null);
   const [recenter, setRecenter] = useState<{ coordinate: Coordinate; sequence: number }>();
   const hasDisplayKey = displayKeyAvailable(process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY);
   useEffect(() => {
@@ -122,11 +125,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     if (draft) { setReviewedDraft(undefined); boundaries.schedule(draft); }
   };
   const openField = (target: 'origin' | 'destination') => {
-    setMapUserControlled(false); setSearchAction('results'); setSelectedCoordinate(null); flow.openField(target);
+    setIncident(null); setMapUserControlled(false); setSearchAction('results'); setSelectedCoordinate(null); flow.openField(target);
   };
   const openSearch = (query = '') => { dismissKeyboard(); openField('destination'); flow.setSearch(query); };
   const toggleMapLayer = (layer: keyof TrafficLayerPreferences) => {
     const next = { ...mapLayers, [layer]: !mapLayers[layer] };
+    if (layer === 'incidents') setIncident(null);
     setMapLayers(next);
     void mapLayerStorage.write(next);
   };
@@ -148,6 +152,20 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       ...(contributionReference.trim() ? { reference: contributionReference.trim() } : {}) });
     if (place) { setContributedPlace(place); setSearchAction('contribute-done'); }
   };
+  const goBack = () => {
+    dismissKeyboard();
+    if (incident) { setIncident(null); return; }
+    if (layersOpen) { setLayersOpen(false); return; }
+    if (flow.field) { setSearchAction('results'); setSelectedCoordinate(null); flow.closeField(); return; }
+    flow.returnHome(); setReviewedDraft(undefined); setMapUserControlled(false);
+  };
+  // Scope Android back to the focused shell; active rides keep explicit cancellation.
+  const backAction = useRef(goBack);
+  useEffect(() => { backAction.current = goBack; });
+  useFocusEffect(useCallback(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => { backAction.current(); return true; });
+    return () => subscription.remove();
+  }, []));
   const money = (amount: number, currency: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
   const content = <Animated.View style={[styles.fill, animatedContent]}>
     {flow.connection !== 'online' ? <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>Sin conexión · Intentando reconectar</VimaText> : null}
@@ -155,7 +173,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>{flow.error.message} ↻</VimaText>
     </Pressable> : null}
     <ScrollView ref={scroll} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets
-      onTouchStart={dismissKeyboard} onScrollBeginDrag={dismissKeyboard}
+      onTouchStart={() => { dismissKeyboard(); setIncident(null); }} onScrollBeginDrag={dismissKeyboard}
       contentContainerStyle={styles.content}
       onContentSizeChange={(_width, contentHeight) => setContentMeasure((previous) => previous?.key === measureKey && previous.height === contentHeight
         ? previous : { key: measureKey, height: contentHeight })}
@@ -319,8 +337,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <View style={styles.headerSide}><VimaGlyph name="profile" /></View>
       </>
         : <>{matching ? <View style={styles.headerSide}><VimaGlyph name="menu" /></View>
-          : <Pressable accessibilityRole="button" accessibilityLabel="Volver" disabled={(reviewing && !flow.field) || flow.phase === 'requesting' || !!assignment}
-            onPress={flow.field ? () => { setSearchAction('results'); flow.closeField(); } : () => { void edit(); }} style={styles.headerSide}><VimaGlyph name="back" /></Pressable>}
+          : <Pressable accessibilityRole="button" accessibilityLabel="Volver" disabled={flow.phase === 'requesting' || !!assignment}
+            onPress={goBack} style={styles.headerSide}><VimaGlyph name="back" /></Pressable>}
           <VimaText variant={assignment ? 'h2' : 'h3'} style={styles.headerTitle} accessibilityRole="header">
             {assignment ? 'Tu conductor va en camino' : matching ? 'Buscando un conductor' : reviewing ? '' : flow.field ? '' : 'Confirma tu viaje'}
           </VimaText><View style={styles.headerSide}>{matching ? <VimaGlyph name="profile" /> : null}</View></>}
@@ -328,10 +346,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     <View style={styles.fill} onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
       <PassengerRideShell trip={flow.trip}
         map={{ onTouchStart: () => { dismissKeyboard(); setMapUserControlled(true); },
-          onPress: event => { if (pickingMap) setSelectedCoordinate(normalizeCoordinate(event.nativeEvent.lngLat)); },
+          onPress: event => { setIncident(null); if (pickingMap) setSelectedCoordinate(normalizeCoordinate(event.nativeEvent.lngLat)); },
           onDidFinishLoadingMap: () => { setMapReady(true); setMapFailed(false); }, onDidFailLoadingMap: () => setMapFailed(true) }}
         mapContent={<PassengerMap quote={flow.quote} assignment={assignment} origin={flow.origin} destination={flow.destination}
-          currentLocation={flow.currentLocation}
+          currentLocation={flow.currentLocation} onIncidentSelect={pickingMap ? undefined : setIncident}
           home={flow.phase === 'home' && !flow.destination}
           ready={mapReady} searchPresentationActive={flow.field !== null}
           recenter={recenter} layers={mapLayers} displayKeyAvailable={hasDisplayKey} active={focused}
@@ -345,6 +363,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <MapControls available={hasDisplayKey} canRecenter={!!flow.currentLocation} layers={mapLayers}
           open={layersOpen} onRecenter={recenterMap} onOpen={() => setLayersOpen((value) => !value)} onToggle={toggleMapLayer} />
       </View> : null}
+      {incident && (interaction?.targetOffset ?? height) > 100 ? <IncidentCard details={incident}
+        maxHeight={Math.min(200, (interaction?.targetOffset ?? height) - 24)} onClose={() => setIncident(null)} /> : null}
       {mapFailed ? <VimaText variant="caption" style={styles.mapStatus}>Mapa · !</VimaText> : null}
     </View>
     <VimaLaunchSurface ready={mapReady || mapFailed} />

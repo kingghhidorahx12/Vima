@@ -227,6 +227,14 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     loadingPlaces: !!search.trim() && (places.isFetching || resolving), loadingQuote: quote.isFetching, error,
     canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending), choosePlace, chooseMapCoordinate,
     contributePlace, submitSearch, submit, act, edit, schedule,
+    returnHome: () => {
+      // Back never cancels or abandons an in-flight/active ride.
+      if (locked.current || request.isPending || command.isPending || isMatching(phase) || phase === 'assigned') return;
+      cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear();
+      setField(null); setSearch(''); setFollowUpResults(undefined);
+      setDestination(null); setStops([]); setConfirming(false); setEditing(false); setTripId(undefined);
+      requestId.current = null; request.reset();
+    },
     openField: (target: 'origin' | 'destination') => {
       if (pending || isMatching(phase) || phase === 'assigned') return;
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined); setField(target); setSearch('');

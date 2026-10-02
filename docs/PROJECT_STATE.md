@@ -5,6 +5,25 @@ Actualizado 2026-10-02 en `codex/local-search-map-motion-p0`, creada desde
 
 ## IMPLEMENTADO
 
+### Corrección incremental Android P0 — 2026-10-02
+
+- Volver desde revisión de ubicaciones o confirmación regresa a Inicio, conserva el origen
+  y descarta el destino del borrador sin desmontar mapa/shell. Back de Android se consume
+  sólo mientras el shell está enfocado; cierra Search/detalle/capas primero. No cancela
+  viajes activos ni solicitudes pendientes ni sustituye su cancelación explícita.
+- Recenter usa el padding vigente de cámara, incluida la altura medida del sheet.
+  Header y safe area ya están fuera del contenedor del mapa y no se descuentan dos veces.
+  Search mantiene su bloqueo automático y Reduced Motion sigue usando duración cero.
+- Tap de un punto de incidente abre una tarjeta pequeña con categoría, descripción y
+  magnitud del retraso disponibles en el tile Orbis. Se cierra con ×, back o toque en el mapa
+  o contenido del sheet. No se inventan calles: el esquema de tiles no ofrece nombre de vía.
+  No se añadió consulta Incident Details ni dependencias/configuración nativa.
+  Esquema consultado: [TomTom Orbis Vector Incident Tiles](https://docs.tomtom.com/traffic-api/documentation/tomtom-orbis-maps/v2/traffic-incidents/vector-incident-tiles).
+- Validación de esta corrección: TypeScript, lint y `npm test` (93/93) PASS.
+  Pruebas de React con límites nativos simulados; pendiente comprobar back físico,
+  recenter/encuadre y selección de incidentes live en Android real. No se generó APK.
+  Persisten los warnings conocidos de Node sobre tipo de módulo y react-test-renderer.
+
 - Shell persistente de pasajero con MapLibre y `MapViewportClip` externo. Search conserva el
   estado del viaje, oculta sólo ruta/destino/vehículo previos y bloquea ajustes automáticos de
   cámara. Recenter envía una intención explícita aun durante Search.

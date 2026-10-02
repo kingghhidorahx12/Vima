@@ -596,3 +596,50 @@ test('missing location requires an explicit valid origin; recoverable request fa
     harness.client.clear(); fixture.controls.dispose();
   }
 });
+
+test('header and Android back return drafts home without unmounting the shell or cancelling active rides', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  const h = createHarness(); const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle(h);
+    for (const confirmed of [false, true]) {
+      await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`));
+      await settle(h);
+      if (confirmed) await h.act(async () => press(tree, 'Confirmar ubicaciones'));
+      await h.act(async () => confirmed ? assert.equal(h.back(), true) : press(tree, 'Volver'));
+      assert.ok(text(tree).includes('Viajes recientes'));
+      assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination, null);
+      assert.equal(h.mounted.map, 1);
+    }
+    await h.act(async () => press(tree, '¿A dónde vas?'));
+    await h.act(async () => assert.equal(h.back(), true));
+    assert.equal(nativeNodes(tree, 'TextInput').length, 0);
+    await reachMatching(h, tree);
+    await h.act(async () => assert.equal(h.back(), true));
+    assert.ok(text(tree).includes('Buscando un conductor'));
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+  assert.equal(h.back(), undefined);
+});
+
+test('incident detail closes by outside tap, close button and Android back, including sparse data', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  const h = createHarness(); const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle(h);
+    const layout = tree.root.findAllByType('View' as never).find(node => node.props.onLayout && node.props.style?.flex === 1)!;
+    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { height: 700 } } }));
+    for (const close of ['button', 'outside', 'back']) {
+      await h.act(async () => nativeNode(tree, 'PassengerMapContent').props.onIncidentSelect({ category: 'Obras', description: 'Obras en la vía', severity: 'Tráfico lento' }));
+      assert.ok(text(tree).includes('Obras en la vía'));
+      await h.act(async () => {
+        if (close === 'button') press(tree, 'Cerrar detalle del incidente');
+        else if (close === 'back') h.back();
+        else nativeNode(tree, 'NativeMapBoundary').props.onPress({ nativeEvent: { lngLat: [-99, 19] } });
+      });
+      assert.ok(!text(tree).includes('Obras en la vía'));
+    }
+    await h.act(async () => nativeNode(tree, 'PassengerMapContent').props.onIncidentSelect({}));
+    assert.ok(text(tree).includes('Incidente'));
+    await h.act(async () => press(tree, 'Cerrar detalle del incidente'));
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+});

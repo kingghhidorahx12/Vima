@@ -4,6 +4,7 @@ import { useSharedValue } from 'react-native-reanimated';
 import { Camera, type CameraMode, type CameraTarget, type RecenterIntent } from '../../map/Camera';
 import { TrafficFlowLayer } from '../../map/TrafficFlowLayer';
 import { IncidentLayer } from '../../map/IncidentLayer';
+import type { IncidentDetails } from '../../map/incidentDetails';
 import type { TrafficLayerPreferences } from '../../map/traffic';
 import { RouteLayer, type RouteLayerProps } from '../../map/RouteLayer';
 import { VehicleLayer } from '../../map/VehicleLayer';
@@ -20,23 +21,26 @@ export interface PassengerMapConfig {
   readonly vehicleMotion: VehicleMotionConfig;
 }
 export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, searchPresentationActive,
-  cameraMode = 'automatic', recenter, layers, displayKeyAvailable = false, active = true, manualSelection, config }: {
+  cameraMode = 'automatic', recenter, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
   quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
   ready: boolean; sheetHeight: number; searchPresentationActive?: boolean; cameraMode?: CameraMode;
   recenter?: RecenterIntent; layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
+  onIncidentSelect?: (details: IncidentDetails) => void;
   manualSelection?: { coordinate: Place['coordinate']; kind: 'origin' | 'destination' } | null; config: PassengerMapConfig;
 }) {
   const sample = useSharedValue<VehicleSample | null>(null);
   useEffect(() => { sample.set(assignment?.sample ?? null); }, [assignment?.sample, sample]);
   const target = useMemo(() => {
     const view = config.viewport(quote, assignment, origin);
+    // Map bounds already exclude the shell header and SafeAreaView insets.
+    // Only the overlapping sheet is added here, for both fit and explicit recenter.
     return { ...view, padding: { ...view.padding, bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
   }, [assignment, config, origin, quote, sheetHeight]);
   return <>
     <Camera target={ready ? target : undefined} mode={searchPresentationActive ? 'search-locked' : cameraMode}
       recenter={ready ? recenter : undefined} />
     {displayKeyAvailable && layers?.traffic ? <TrafficFlowLayer /> : null}
-    {displayKeyAvailable && layers?.incidents ? <IncidentLayer /> : null}
+    {displayKeyAvailable && layers?.incidents ? <IncidentLayer onSelect={onIncidentSelect} /> : null}
     {(home && origin || searchPresentationActive && currentLocation) ? <PassengerUserLocation place={(searchPresentationActive ? currentLocation : origin)!} active={active} />
       : (quote?.origin ?? origin) ? <PassengerMapPin place={(quote?.origin ?? origin)!} kind="origin" /> : null}
     {!searchPresentationActive && (quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}

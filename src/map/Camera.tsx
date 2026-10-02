@@ -12,6 +12,9 @@ export function Camera({ target, motion, mode = 'automatic', recenter }: {
 }) {
   const ref = useRef<CameraRef>(null);
   const { allowCameraAnimation } = useMotionPolicy();
+  // Read the latest viewport at an explicit recenter without refitting on sheet changes during Search.
+  const currentPadding = useRef(target?.padding);
+  useEffect(() => { currentPadding.current = target?.padding; }, [target]);
   useEffect(() => {
     if (!target || mode !== 'automatic') return;
     const { padding, zoom, pitch, bearing } = target;
@@ -24,6 +27,7 @@ export function Camera({ target, motion, mode = 'automatic', recenter }: {
   useEffect(() => {
     if (!recenter) return;
     void ref.current?.setStop({ center: [...recenter.coordinate] as [number, number],
+      padding: currentPadding.current,
       duration: allowCameraAnimation ? motionTimings.map.duration : 0 });
   }, [recenter, allowCameraAnimation]);
   return <NativeCamera ref={ref} />;

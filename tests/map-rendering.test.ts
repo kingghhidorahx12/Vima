@@ -132,7 +132,7 @@ test('explicit Recenter works during Search lock without automatic refit', async
   assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
   await h.act(async () => tree.update(scene(1, 450)));
   assert.deepEqual(h.calls.filter((call: unknown[]) => call[0] === 'setStop').at(-1)?.[1],
-    { center: [-99.5, 19.5], duration: 0 });
+    { center: [-99.5, 19.5], padding: { bottom: 450 }, duration: 0 });
   await h.act(async () => tree.unmount());
 });
 
@@ -164,5 +164,23 @@ test('launch surface uses approved image and exits when map is ready', async () 
   assert.equal(tree.root.findByType('Image' as never).props.accessibilityLabel, 'Vima');
   await h.act(async () => tree.update(React.createElement(VimaLaunchSurface, { ready: true })));
   assert.equal(tree.root.findAllByType('View' as never)[0]!.props.pointerEvents, 'none');
+  await h.act(async () => tree.unmount());
+});
+
+test('incident point taps normalize documented fields and stop map dismissal bubbling', async () => {
+  const h = createMapHarness();
+  const { IncidentLayer } = h.load('src/map/IncidentLayer.tsx');
+  const selected: unknown[] = []; let stopped = false;
+  const tree: ReactTestRenderer = await h.render(React.createElement(IncidentLayer, { onSelect: (value: unknown) => selected.push(value) }));
+  const source = tree.root.findByType('MapLibreVectorSource' as never);
+  source.props.onPress({ nativeEvent: { features: [{ geometry: { type: 'Point' }, properties: {
+    icon_category_0: 'roadWorks', description_0: ' Obras ', magnitude_of_delay: 'minor', road_category: 'street',
+  } }] }, stopPropagation: () => { stopped = true; } });
+  assert.equal(stopped, true);
+  assert.deepEqual(selected, [{ category: 'Obras', description: 'Obras', severity: 'Tráfico lento' }]);
+  const { incidentDetails } = h.load('src/map/incidentDetails.ts');
+  assert.deepEqual(incidentDetails(null), {});
+  assert.deepEqual(incidentDetails({ icon_category_0: 'unknown', description_0: {}, magnitude_of_delay: 'undefined' }),
+    { category: undefined, description: undefined, severity: undefined });
   await h.act(async () => tree.unmount());
 });

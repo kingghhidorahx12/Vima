@@ -14,6 +14,8 @@ function createHarness(boundaryOverrides = {}) {
   const native = Object.fromEntries(['View', 'Text', 'Pressable', 'ScrollView', 'TextInput', 'Image', 'ActivityIndicator'].map((name) => [name, name]));
   native.StyleSheet = { create: (styles) => styles, absoluteFill: { position: 'absolute' } };
   native.AppState = { currentState: 'active', addEventListener: () => ({ remove() {} }) };
+  let back;
+  native.BackHandler = { addEventListener: (_event, fn) => { back = fn; return { remove() { back = undefined; } }; } };
   native.Keyboard = { dismiss() { mounted.keyboardDismiss++; mounted.inputFocused = false; } };
   const animated = { default: { View: 'AnimatedView' }, cancelAnimation() {}, ReduceMotion: { System: 'system', Never: 'never' },
     useSharedValue: (initial) => { const value = React.useRef(initial); return React.useMemo(() => ({ get: () => value.current, set: (next) => { value.current = next; } }), []); },
@@ -69,7 +71,7 @@ function createHarness(boundaryOverrides = {}) {
   const fakeMapConfig = {};
   const boundaries = { schedule() {}, call() {}, safety() {}, ...boundaryOverrides };
   const client = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
-  return { mounted, client, kv, async render(gateway) {
+  return { mounted, client, kv, back: () => back?.(), async render(gateway) {
     let tree;
     await renderer.act(async () => { tree = renderer.create(React.createElement(query.QueryClientProvider, { client },
       React.createElement(Screen, { gateway, mapConfig: fakeMapConfig, boundaries })), { createNodeMock(element) {
