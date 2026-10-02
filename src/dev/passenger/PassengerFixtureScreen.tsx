@@ -8,22 +8,23 @@ import { visualTokens as t } from '../../design/tokens';
 import { PassengerScreen } from '../../features/passenger/PassengerScreen';
 import type { PassengerMapConfig } from '../../features/passenger/PassengerMap';
 import { createVehicleMotion } from '../../map/vehicleMotion';
+import { normalizeCoordinate } from '../../map/models';
 import { createPassengerFixtureGateway, type FixtureOutcome } from './gateway';
 import { locateCurrentPlace } from '../../services/location/currentPlace';
 
 /** All temporary map measurements stay in this dev adapter, never become approved tokens. */
 const fixtureMap: PassengerMapConfig = {
-  route: { paint: { 'line-width': t.spacing.scalePx[0]!, 'line-opacity': 1 }, layout: { 'line-cap': 'round', 'line-join': 'round' } },
-  point: { paint: { 'circle-radius': t.components.iconSizesPx[0]! / 2, 'circle-stroke-width': t.borders.standardWidthPx, 'circle-stroke-color': t.colors.white } },
-  vehicle: { paint: { 'circle-radius': t.components.iconSizesPx[1]! / 2, 'circle-color': t.colors.carbon,
-    'circle-stroke-width': t.borders.standardWidthPx, 'circle-stroke-color': t.colors.white } },
+  route: { width: t.spacing.scalePx[0]!, opacity: 1, cap: 'round', join: 'round' },
+  point: { radius: t.components.iconSizesPx[0]! / 2, strokeWidth: t.borders.standardWidthPx, strokeColor: t.colors.white },
+  vehicle: { radius: t.components.iconSizesPx[1]! / 2, color: t.colors.carbon,
+    strokeWidth: t.borders.standardWidthPx, strokeColor: t.colors.white },
   viewport: (quote, assignment, origin) => {
-    const coordinates = assignment?.routeToOrigin.geometry.coordinates ?? quote?.route.geometry.coordinates;
-    const center = coordinates && typeof coordinates[0]?.[0] === 'number'
-      ? coordinates as number[][] : null;
-    return { center: center?.length ? [center.reduce((sum, value) => sum + value[0]!, 0) / center.length,
-      center.reduce((sum, value) => sum + value[1]!, 0) / center.length] : [...(origin?.coordinate ?? [-99.1645, 19.4262])],
-      zoom: 14, padding: { top: t.spacing.scalePx[5]!, left: t.spacing.mobileHorizontalMarginPx, right: t.spacing.mobileHorizontalMarginPx, bottom: 0 } };
+    const geometry = (assignment?.routeToOrigin ?? quote?.route)?.geometry;
+    const points = geometry ? (geometry.type === 'LineString' ? geometry.coordinates : geometry.coordinates.flat()) : [];
+    const padding = { top: t.spacing.scalePx[5]!, left: t.spacing.mobileHorizontalMarginPx,
+      right: t.spacing.mobileHorizontalMarginPx, bottom: 0 };
+    return points.length >= 2 ? { coordinates: points.map(normalizeCoordinate), padding }
+      : { center: origin?.coordinate ?? [-99.1645, 19.4262], zoom: 14, padding };
   },
   // Only a single assigned sample exists in this fixture. This is not a production jump policy.
   vehicleMotion: createVehicleMotion(() => { 'worklet'; return false; }),

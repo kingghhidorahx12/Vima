@@ -1,6 +1,7 @@
 import { motionTimings } from '../motion/timing.ts';
 
-export type Coordinate = readonly [longitude: number, latitude: number];
+import type { Coordinate } from './models.ts';
+export type { Coordinate } from './models.ts';
 
 export interface VehiclePose {
   readonly coordinate: Coordinate;

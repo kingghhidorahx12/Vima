@@ -1,23 +1,25 @@
-import { Camera as NativeCamera, type CameraRef, type CameraCenterOptions, type CameraOptions, type CameraEasing } from '@maplibre/maplibre-react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useMotionPolicy } from '../motion/ReducedMotion';
-
-export type CameraTarget = CameraCenterOptions & CameraOptions;
-export interface ApprovedCameraMotion {
-  readonly duration: number;
-  readonly easing: Exclude<CameraEasing, undefined>;
-}
+import { Camera as LegacyCamera } from './legacy/Camera';
+import { useMapContext } from './MapContext';
+import { googleCameraCommand } from './google/camera';
+import type { CameraTarget, ApprovedCameraMotion } from './models';
+export type { CameraTarget, ApprovedCameraMotion } from './models';
 
 export function Camera({ target, motion }: { target?: CameraTarget; motion?: ApprovedCameraMotion }) {
-  const ref = useRef<CameraRef>(null);
-  const { allowCameraAnimation } = useMotionPolicy();
+  const { provider, map, ready, padding, setPadding } = useMapContext();
+  const { reducedMotion } = useMotionPolicy();
   useEffect(() => {
-    if (!target) return;
-    if (!allowCameraAnimation || !motion) {
-      ref.current?.jumpTo(target);
-    } else {
-      void ref.current?.setStop({ ...target, ...motion });
-    }
-  }, [target, motion, allowCameraAnimation]);
-  return <NativeCamera ref={ref} />;
+    if (provider !== 'google' || !ready || !target) return;
+    const next = target.padding ?? {};
+    if (JSON.stringify(padding) !== JSON.stringify(next)) { setPadding(next); return; }
+    const frame = requestAnimationFrame(() => {
+      const command = googleCameraCommand(target, reducedMotion, motion);
+      if (command.kind === 'fit') map.current?.fitToCoordinates(command.coordinates, command.options);
+      else if (command.animated) map.current?.animateCamera(command.camera, { duration: command.duration });
+      else map.current?.setCamera(command.camera);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [provider, ready, target, motion, reducedMotion, map, padding, setPadding]);
+  return provider === 'maplibre' ? <LegacyCamera target={target} motion={motion} /> : null;
 }

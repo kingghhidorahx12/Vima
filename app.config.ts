@@ -1,11 +1,14 @@
 import type { ExpoConfig } from 'expo/config';
 
+// Build-only SDK key: never copied into extra or an EXPO_PUBLIC variable.
+const androidMapsKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim();
 const config: ExpoConfig = {
   name: 'Vima',
   slug: 'vima',
   owner: 'kingghidorahx12',
   extra: {
     eas: { projectId: '30422aec-d22b-40f0-8008-c6a316633fd8' },
+    googleMapsAndroidConfigured: Boolean(androidMapsKey),
   },
   version: '0.0.1',
   scheme: 'vima',
@@ -16,6 +19,7 @@ const config: ExpoConfig = {
     icon: './assets/brand/vima_app_icon_final_1024.png',
   },
   android: {
+    ...(androidMapsKey ? { config: { googleMaps: { apiKey: androidMapsKey } } } : {}),
     package: 'com.kingghhidorahx12.vima',
     icon: './assets/brand/vima_app_icon_final_1024.png',
     adaptiveIcon: {
@@ -27,6 +31,7 @@ const config: ExpoConfig = {
     'expo-router',
     'expo-dev-client',
     '@maplibre/maplibre-react-native',
+    './scripts/with-google-maps.cjs',
     'expo-secure-store',
     'expo-sqlite',
     'expo-font',

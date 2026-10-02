@@ -1,4 +1,4 @@
-import { type CircleLayerSpecification } from '@maplibre/maplibre-react-native';
+import type { CircleAppearance } from '../../map/models';
 import { useEffect, useMemo } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
 import { Camera, type CameraTarget } from '../../map/Camera';
@@ -11,8 +11,8 @@ import { PassengerMapPin, PassengerUserLocation } from './PassengerMapPin';
 /** Required appearance/viewports are injected. The unfinished map design gets no production defaults. */
 export interface PassengerMapConfig {
   readonly route: RouteLayerProps['appearance'];
-  readonly point: Pick<CircleLayerSpecification, 'paint' | 'layout'>;
-  readonly vehicle: Pick<CircleLayerSpecification, 'paint' | 'layout'>;
+  readonly point: CircleAppearance;
+  readonly vehicle: CircleAppearance;
   readonly viewport: (quote: RideQuote | undefined, assignment: Assignment | undefined, origin: Place | null) => CameraTarget;
   readonly vehicleMotion: VehicleMotionConfig;
 }

@@ -1,24 +1,16 @@
-import { GeoJSONSource, Layer, type SymbolLayerSpecification, type CircleLayerSpecification } from '@maplibre/maplibre-react-native';
+import { View } from 'react-native';
+import { MapMarker } from './MapMarker';
+import { normalizeCoordinate, type CircleAppearance } from './models';
 import { mapColors } from './semantics';
 
 export interface DestinationLayerProps {
-  readonly id: string;
-  readonly data: GeoJSON.FeatureCollection<GeoJSON.Point>;
-  readonly appearance: Pick<SymbolLayerSpecification, 'paint' | 'layout'>;
+  readonly id: string; readonly data: GeoJSON.FeatureCollection<GeoJSON.Point>;
+  readonly kind: 'circle'; readonly appearance: CircleAppearance;
 }
-
-export interface CircleDestinationProps {
-  readonly id: string;
-  readonly data: GeoJSON.FeatureCollection<GeoJSON.Point>;
-  readonly kind: 'circle';
-  readonly appearance: Pick<CircleLayerSpecification, 'paint' | 'layout'>;
-}
-
-export function DestinationLayer(props: DestinationLayerProps | CircleDestinationProps) {
-  const { id, data, appearance } = props;
-  if ('kind' in props) return <GeoJSONSource id={`${id}-source`} data={data}>
-    <Layer id={id} type="circle" {...props.appearance} paint={{ ...props.appearance.paint, 'circle-color': mapColors.destination }} />
-  </GeoJSONSource>;
-  return <GeoJSONSource id={`${id}-source`} data={data}><Layer id={id} type="symbol" {...appearance}
-    paint={{ ...appearance.paint, 'icon-color': mapColors.destination }} /></GeoJSONSource>;
+export function DestinationLayer({ id, data, appearance: a }: DestinationLayerProps) {
+  return <>{data.features.map((feature, index) => <MapMarker key={feature.id ?? index}
+    id={`${id}-${feature.id ?? index}`} coordinate={normalizeCoordinate(feature.geometry.coordinates)}>
+    <View style={{ width: a.radius * 2, height: a.radius * 2, borderRadius: a.radius,
+      backgroundColor: mapColors.destination, borderWidth: a.strokeWidth, borderColor: a.strokeColor }} />
+  </MapMarker>)}</>;
 }

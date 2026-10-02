@@ -1,12 +1,12 @@
-import { Marker } from '@maplibre/maplibre-react-native';
+import { MapMarker as Marker } from '../../map/MapMarker';
 import { StyleSheet, View } from 'react-native';
 import { visualTokens as t } from '../../design/tokens';
 import type { Place } from './model';
 
-/** Native MapLibre marker with the approved origin/destination color semantics. */
+/** Native Vima marker with the approved origin/destination color semantics. */
 export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' | 'destination' }) {
   const color = kind === 'origin' ? t.colors.green : t.colors.red;
-  return <Marker id={`passenger-${kind}-pin`} lngLat={[...place.coordinate]} anchor="bottom">
+  return <Marker id={`passenger-${kind}-pin`} coordinate={place.coordinate} anchor="bottom">
     <View accessible={false} style={styles.footprint}>
       <View style={[styles.pin, { backgroundColor: color }]} />
       <View style={[styles.inner, { backgroundColor: t.colors.white }]} />
@@ -16,7 +16,7 @@ export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' 
 
 /** Home location dot and halo, distinct from a confirmed origin pin. */
 export function PassengerUserLocation({ place }: { place: Place }) {
-  return <Marker id="passenger-user-location" lngLat={[...place.coordinate]}>
+  return <Marker id="passenger-user-location" coordinate={place.coordinate}>
     <View accessible={false} style={styles.locationHalo}>
       <View style={styles.locationRing}><View style={styles.locationDot} /></View>
     </View>
