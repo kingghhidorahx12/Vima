@@ -16,7 +16,8 @@ function number(value: unknown): number {
 export function decodeSession(value: unknown): string { return text(object(value).sessionId); }
 export function decodeSuggestion(value: unknown): PlaceSuggestion {
   const v = object(value);
-  if (v.provenance !== undefined && v.provenance !== 'provider' && v.provenance !== 'vima-local') throw new GeospatialError('invalid_result');
+  if (v.provenance !== undefined && v.provenance !== 'provider' && v.provenance !== 'vima-local' &&
+    v.provenance !== 'contribution') throw new GeospatialError('invalid_result');
   if (v.kind !== undefined && v.kind !== 'action') throw new GeospatialError('invalid_result');
   return { id: text(v.id), name: text(v.name), address: text(v.address, true),
     ...(v.canonicalId === undefined ? {} : { canonicalId: text(v.canonicalId) }),
@@ -39,6 +40,21 @@ export function decodeOptionalPlace(value: unknown): ResolvedPlace {
   const v = object(value);
   if (v.result === null) throw new GeospatialError('no_result');
   return decodePlace(v.result);
+}
+export function decodeContribution(value: unknown) {
+  const v = object(value);
+  if (v.status !== 'pending') throw new GeospatialError('invalid_result');
+  return { contributionId: text(v.contributionId), status: 'pending' as const, place: decodePlace(v.place) };
+}
+export function decodeDiscovery(value: unknown) {
+  const v = object(value);
+  if (!Array.isArray(v.popular) || !Array.isArray(v.featured)) throw new GeospatialError('invalid_result');
+  return { popular: v.popular.map(decodeSuggestion), featured: v.featured.map(decodeSuggestion) };
+}
+export function decodeSignalAck(value: unknown) {
+  const v = object(value);
+  if (typeof v.accepted !== 'boolean') throw new GeospatialError('invalid_result');
+  return { accepted: v.accepted };
 }
 export function decodeRoute(value: unknown): RouteResult {
   try {

@@ -4,6 +4,7 @@ export interface ApiRequest<T> {
   readonly decode: (value: unknown) => T;
   readonly body?: unknown;
   readonly signal?: AbortSignal;
+  readonly idempotencyKey?: string;
 }
 
 export interface ApiClient {
@@ -28,17 +29,19 @@ export function createApiClient(baseUrl: string, readCredential: () => Promise<s
   if (base.protocol !== 'https:' && !localHttp) throw new Error('API requires HTTPS');
   if (base.username || base.password || base.search || base.hash) throw new Error('Invalid API base URL');
   return {
-    async request<T>({ path, method, body, signal, decode }: ApiRequest<T>): Promise<T> {
+    async request<T>({ path, method, body, signal, decode, idempotencyKey }: ApiRequest<T>): Promise<T> {
       const url = new URL(path, base);
       if (url.origin !== base.origin) throw new Error('API requests must stay on the configured origin');
       const credential = await readCredential();
       if (localHttp && credential) throw new Error('Credentials require HTTPS');
+      if (idempotencyKey && !/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) throw new Error('Invalid idempotency key');
       const response = await fetch(url.toString(), {
         method, signal,
         headers: {
           Accept: 'application/json',
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
           ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
+          ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });

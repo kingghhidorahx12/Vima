@@ -19,6 +19,7 @@ import { PassengerRideShell } from './PassengerRideShell';
 import { isMatching, validDraft, type Assignment, type OriginStatus, type PassengerGateway, type Place, type RideQuote } from './model';
 import { usePassengerFlow } from './usePassengerFlow';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
+import { normalizeCoordinate, type Coordinate } from '../../map/models';
 
 export interface PassengerBoundaries {
   readonly schedule: (quote: RideQuote | undefined) => void;
@@ -42,6 +43,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const [mapUserControlled, setMapUserControlled] = useState(false);
+  const [searchAction, setSearchAction] = useState<'results' | 'map' | 'contribute-map' | 'contribute-form' | 'contribute-done'>('results');
+  const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate | null>(null);
+  const [contributionName, setContributionName] = useState('');
+  const [contributionReference, setContributionReference] = useState('');
+  const [contributedPlace, setContributedPlace] = useState<Place | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [pulseVisible, setPulseVisible] = useState(true);
   const [reviewedDraft, setReviewedDraft] = useState<string>();
@@ -56,8 +62,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const assignment = flow.phase === 'assigned' ? flow.trip?.assignment : undefined;
   const draftKey = `${flow.origin?.id ?? ''}:${flow.destination?.id ?? ''}`;
   const reviewing = (flow.phase === 'confirm' && reviewedDraft !== draftKey) || (flow.phase === 'home' && !!flow.destination);
-  const snap: SheetSnap = flow.field ? 2 : 1;
-  const measureKey = `${flow.phase}:${flow.field ?? ''}:${reviewing}`;
+  const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
+  const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
+  const measureKey = `${flow.phase}:${flow.field ?? ''}:${searchAction}:${reviewing}`;
   const naturalHeight = contentMeasure?.key === measureKey ? contentMeasure.height + headerHeight : 0;
   const interaction = useMemo(() => {
     if (height <= 0) return undefined;
@@ -86,7 +93,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     }
   }, [assignment]);
   const animatedContent = useAnimatedStyle(() => ({ opacity: contentOpacity.get() }));
-  const sheetTitle = flow.field ? flow.field === 'origin' ? '¿Desde dónde?' : '¿A dónde vas?'
+  const sheetTitle = flow.field ? pickingMap ? 'Elegir en el mapa' : searchAction === 'contribute-form' ? 'Agregar lugar' :
+    searchAction === 'contribute-done' ? '' : flow.field === 'origin' ? '¿Desde dónde?' : '¿A dónde vas?'
     : assignment ? `Llegará en ${assignment.etaMinutes} min` : flow.phase === 'home' && !reviewing ? '¿A dónde vas?' : '';
   const header = <View onTouchStart={dismissKeyboard} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)} style={styles.sheetHeader}>
     <View style={styles.handle} />
@@ -100,10 +108,23 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const draft = await flow.schedule();
     if (draft) { setReviewedDraft(undefined); boundaries.schedule(draft); }
   };
-  const openField = (target: 'origin' | 'destination') => { setMapUserControlled(false); flow.openField(target); };
+  const openField = (target: 'origin' | 'destination') => {
+    setMapUserControlled(false); setSearchAction('results'); setSelectedCoordinate(null); flow.openField(target);
+  };
   const openSearch = (query = '') => { dismissKeyboard(); openField('destination'); flow.setSearch(query); };
   const choosePlace = (place: Place | PlaceSuggestion, target?: 'origin' | 'destination') => {
-    dismissKeyboard(); setMapUserControlled(false); void flow.choosePlace(place, target);
+    dismissKeyboard(); setMapUserControlled(false); setSearchAction('results'); void flow.choosePlace(place, target);
+  };
+  const confirmMapSelection = () => {
+    if (!selectedCoordinate) return;
+    setSearchAction('results'); setMapUserControlled(false);
+    void flow.chooseMapCoordinate(selectedCoordinate, flow.field ?? 'destination');
+  };
+  const submitContribution = async () => {
+    if (!selectedCoordinate || !contributionName.trim()) return;
+    const place = await flow.contributePlace({ name: contributionName.trim(), coordinate: selectedCoordinate,
+      ...(contributionReference.trim() ? { reference: contributionReference.trim() } : {}) });
+    if (place) { setContributedPlace(place); setSearchAction('contribute-done'); }
   };
   const money = (amount: number, currency: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
   const content = <Animated.View style={[styles.fill, animatedContent]}>
@@ -117,7 +138,31 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       onContentSizeChange={(_width, contentHeight) => setContentMeasure((previous) => previous?.key === measureKey && previous.height === contentHeight
         ? previous : { key: measureKey, height: contentHeight })}
       onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
-      {flow.field ? <>
+      {flow.field && pickingMap ? <>
+        <VimaText variant="bodySmall" style={styles.center}>Toca el mapa para elegir la ubicación</VimaText>
+        <VimaButton gradient label={searchAction === 'map' ? 'Confirmar ubicación' : 'Continuar'}
+          disabled={!selectedCoordinate} onPress={() => { if (searchAction === 'map') confirmMapSelection();
+            else setSearchAction('contribute-form'); }} />
+        <TextAction label="Cancelar" onPress={() => { setSearchAction('results'); setSelectedCoordinate(null); }} />
+      </> : flow.field && searchAction === 'contribute-form' ? <>
+        <VimaText variant="bodySmall">Nombre del lugar *</VimaText>
+        <TextInput accessibilityLabel="Nombre del lugar" value={contributionName} onChangeText={setContributionName}
+          style={styles.contributionInput} maxLength={120} />
+        <VimaText variant="bodySmall">Referencia (opcional)</VimaText>
+        <TextInput accessibilityLabel="Referencia" value={contributionReference} onChangeText={setContributionReference}
+          style={styles.contributionInput} maxLength={240} />
+        <VimaText variant="caption" style={styles.muted}>Este lugar quedará pendiente de validación pública.</VimaText>
+        <VimaButton gradient label="Guardar" disabled={!contributionName.trim() || flow.pending}
+          onPress={() => { void submitContribution(); }} />
+      </> : flow.field && searchAction === 'contribute-done' ? <>
+        <VimaText variant="h3" style={styles.center}>Lugar agregado</VimaText>
+        <VimaText variant="bodySmall" style={styles.center}>Ya puedes usar este lugar como destino.</VimaText>
+        <VimaButton gradient label="Usar ahora" disabled={!contributedPlace} onPress={() => { if (contributedPlace) choosePlace(contributedPlace); }} />
+        <VimaButton secondary label="Agregar otro lugar" onPress={() => {
+          setContributedPlace(null); setSelectedCoordinate(null); setContributionName(''); setContributionReference('');
+          setSearchAction('contribute-map');
+        }} />
+      </> : flow.field ? <>
         <View style={styles.searchField}><SmallPin color={t.colors.red} />
           <TextInput ref={input} autoFocus onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección" value={flow.search}
             onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }} returnKeyType="search"
@@ -128,11 +173,25 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           {flow.loadingPlaces && !flow.places.length ? <View accessible accessibilityLabel="Buscando lugares" style={styles.searchSkeleton}>
             <View style={styles.skeletonLine} /><View style={styles.skeletonLineShort} />
           </View> : null}
+          {flow.settledQuery && !flow.places.length && !flow.error ? <>
+            <VimaText variant="h3" style={styles.center}>No encontramos resultados</VimaText>
+            <VimaButton secondary label="Elegir en el mapa" onPress={() => {
+              setSelectedCoordinate(null); setSearchAction('map');
+            }} />
+            <VimaButton gradient label="Agregar lugar" onPress={() => {
+              setSelectedCoordinate(null); setContributionName(flow.search.trim()); setContributionReference('');
+              setSearchAction('contribute-map');
+            }} />
+          </> : null}
         </> : <>
           {flow.favorites.length ? <><VimaText variant="bodyMedium">Favoritos</VimaText>
             {flow.favorites.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
           {flow.recents.length ? <><VimaText variant="bodyMedium">Recientes</VimaText>
             {flow.recents.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
+          {flow.popular.length ? <><VimaText variant="bodyMedium">Populares en tu zona</VimaText>
+            {flow.popular.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
+          {flow.featured.length ? <><VimaText variant="bodyMedium">Vima Local</VimaText>
+            {flow.featured.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
         </>}
       </> : reviewing ? <>
         <View style={styles.addressGroup}>
@@ -239,7 +298,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       </>
         : <>{matching ? <View style={styles.headerSide}><VimaGlyph name="menu" /></View>
           : <Pressable accessibilityRole="button" accessibilityLabel="Volver" disabled={(reviewing && !flow.field) || flow.phase === 'requesting' || !!assignment}
-            onPress={flow.field ? flow.closeField : () => { void edit(); }} style={styles.headerSide}><VimaGlyph name="back" /></Pressable>}
+            onPress={flow.field ? () => { setSearchAction('results'); flow.closeField(); } : () => { void edit(); }} style={styles.headerSide}><VimaGlyph name="back" /></Pressable>}
           <VimaText variant={assignment ? 'h2' : 'h3'} style={styles.headerTitle} accessibilityRole="header">
             {assignment ? 'Tu conductor va en camino' : matching ? 'Buscando un conductor' : reviewing ? '' : flow.field ? '' : 'Confirma tu viaje'}
           </VimaText><View style={styles.headerSide}>{matching ? <VimaGlyph name="profile" /> : null}</View></>}
@@ -247,11 +306,14 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     <View style={styles.fill} onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
       <PassengerRideShell trip={flow.trip}
         map={{ onTouchStart: () => { dismissKeyboard(); setMapUserControlled(true); },
+          onPress: event => { if (pickingMap) setSelectedCoordinate(normalizeCoordinate(event.nativeEvent.lngLat)); },
           onDidFinishLoadingMap: () => { setMapReady(true); setMapFailed(false); }, onDidFailLoadingMap: () => setMapFailed(true) }}
         mapContent={<PassengerMap quote={flow.quote} assignment={assignment} origin={flow.origin} destination={flow.destination}
           currentLocation={flow.currentLocation}
           home={flow.phase === 'home' && !flow.destination}
           ready={mapReady} searchPresentationActive={flow.field !== null}
+          manualSelection={pickingMap && selectedCoordinate ? { coordinate: selectedCoordinate,
+            kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
           cameraMode={mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
           sheetHeight={interaction ? height - interaction.targetOffset : height * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
         sheet={{ interaction, header, style: styles.sheet }} renderPhase={() => content} />
@@ -359,6 +421,9 @@ const styles = StyleSheet.create({
   searchField: { height: t.components.inputPrimary.heightPx, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
     paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm },
   searchInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, height: t.components.inputPrimary.heightPx, color: t.colors.carbon },
+  contributionInput: { ...textStyle({ variant: 'body', weight: 400 }), height: t.components.inputPrimary.heightPx,
+    borderRadius: t.radii.fieldPx, borderWidth: t.borders.standardWidthPx, borderColor: t.colors.grayLight,
+    paddingHorizontal: md, color: t.colors.carbon },
   searchSkeleton: { height: t.components.buttonPrimary.heightPx, justifyContent: 'center', gap: sm, paddingHorizontal: md },
   skeletonLine: { width: '62%', height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   skeletonLineShort: { width: '40%', height: xs, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },

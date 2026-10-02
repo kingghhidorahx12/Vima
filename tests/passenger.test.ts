@@ -124,6 +124,51 @@ test('a destination becomes recent only after explicit location confirmation', a
   } finally { await harness.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
+test('no-result map choice keeps tapped coordinate when Reverse has no address', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  const gateway: PassengerGateway = { ...fixture.gateway, findPlaces: async () => [],
+    reversePlace: async () => null };
+  const harness = createHarness(); const tree: ReactTestRenderer = await harness.render(gateway);
+  try {
+    await settle(harness);
+    await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('sin resultado'));
+    await settle(harness);
+    assert.ok(text(tree).includes('No encontramos resultados'));
+    await harness.act(async () => press(tree, 'Elegir en el mapa'));
+    await harness.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onPress({ nativeEvent: { lngLat: [-99.81, 19.81] } }));
+    await harness.act(async () => press(tree, 'Confirmar ubicación'));
+    assert.deepEqual(nativeNode(tree, 'PassengerMapContent').props.destination.coordinate, [-99.81, 19.81]);
+  } finally { await harness.act(async () => tree.unmount()); harness.client.clear(); fixture.controls.dispose(); }
+});
+
+test('a contributed place can be used immediately without making it a public catalog entry', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  const submissions: { name: string; coordinate: readonly [number, number]; key: string }[] = [];
+  const gateway: PassengerGateway = { ...fixture.gateway, findPlaces: async () => [],
+    contributePlace: async (input, key) => {
+      submissions.push({ name: input.name, coordinate: input.coordinate, key });
+      return { id: 'contribution:pending', name: input.name, address: input.reference ?? '', coordinate: input.coordinate };
+    } };
+  const harness = createHarness(); const tree: ReactTestRenderer = await harness.render(gateway);
+  try {
+    await settle(harness);
+    await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Lugar nuevo'));
+    await settle(harness);
+    await harness.act(async () => press(tree, 'Agregar lugar'));
+    await harness.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onPress({ nativeEvent: { lngLat: [-99.82, 19.82] } }));
+    await harness.act(async () => press(tree, 'Continuar'));
+    await harness.act(async () => press(tree, 'Guardar'));
+    await settle(harness);
+    assert.equal(submissions.length, 1);
+    assert.equal(submissions[0]!.name, 'Lugar nuevo');
+    assert.deepEqual(submissions[0]!.coordinate, [-99.82, 19.82]);
+    await harness.act(async () => press(tree, 'Usar ahora'));
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination.id, 'contribution:pending');
+  } finally { await harness.act(async () => tree.unmount()); harness.client.clear(); fixture.controls.dispose(); }
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;

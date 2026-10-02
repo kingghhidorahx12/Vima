@@ -1,7 +1,8 @@
 import { ApiError, type ApiClient, type ApiRequest } from '../api/client.ts';
 import { normalizeCoordinate, type Coordinate } from '../../map/models.ts';
 import { GeospatialError, type GeospatialErrorCode, type PlacesSession, type RouteRequest } from './contracts.ts';
-import { decodeOptionalPlace, decodePlace, decodeRoute, decodeSession, decodeSuggestions } from './normalize.ts';
+import { decodeContribution, decodeDiscovery, decodeOptionalPlace, decodePlace, decodeRoute, decodeSession,
+  decodeSignalAck, decodeSuggestions } from './normalize.ts';
 
 /** Dormant until a Vima HTTPS backend is supplied. Provider credentials never enter the app. */
 export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
@@ -82,6 +83,24 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
       try { point = normalizeCoordinate(coordinate); } catch { throw new GeospatialError('invalid_result'); }
       return request({ path: '/v1/geospatial/reverse-geocode', method: 'POST', body: { coordinate: point },
         decode: decodeOptionalPlace, signal }, 'geocoding_unavailable');
+    },
+    contributePlace(input: { name: string; coordinate: Coordinate; reference?: string }, idempotencyKey: string,
+      signal?: AbortSignal) {
+      let point;
+      try { point = normalizeCoordinate(input.coordinate); } catch { throw new GeospatialError('invalid_result'); }
+      return request({ path: '/v1/geospatial/place-contributions', method: 'POST',
+        body: { name: input.name, coordinate: point, ...(input.reference ? { reference: input.reference } : {}) },
+        idempotencyKey, decode: decodeContribution, signal }, 'search_unavailable');
+    },
+    discovery(regionId: string, signal?: AbortSignal) {
+      if (!/^[a-z-]{3,40}$/.test(regionId)) throw new GeospatialError('invalid_result');
+      return request({ path: `/v1/geospatial/discovery?regionId=${encodeURIComponent(regionId)}`, method: 'GET',
+        decode: decodeDiscovery, signal }, 'search_unavailable');
+    },
+    signalPlace(input: { eventId: string; type: 'place_selected' | 'destination_confirmed'; canonicalPlaceId: string;
+      regionId: string; occurredAt: number; installationId: string }, signal?: AbortSignal) {
+      return request({ path: '/v1/geospatial/place-signals', method: 'POST', body: input,
+        decode: decodeSignalAck, signal }, 'search_unavailable');
     },
     route(input: RouteRequest, signal?: AbortSignal) {
       let body: RouteRequest;

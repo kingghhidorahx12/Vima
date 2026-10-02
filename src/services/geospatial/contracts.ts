@@ -7,7 +7,7 @@ export interface PlaceSuggestion {
   readonly canonicalId?: string;
   readonly distanceMeters?: number;
   readonly kind?: 'action';
-  readonly provenance?: 'provider' | 'vima-local'; readonly category?: string;
+  readonly provenance?: 'provider' | 'vima-local' | 'contribution'; readonly category?: string;
   readonly regionId?: string;
 }
 export interface ResolvedPlace extends PlaceSuggestion { readonly coordinate: Coordinate }

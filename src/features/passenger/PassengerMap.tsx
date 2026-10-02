@@ -17,9 +17,10 @@ export interface PassengerMapConfig {
   readonly vehicleMotion: VehicleMotionConfig;
 }
 export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, searchPresentationActive,
-  cameraMode = 'automatic', config }: {
+  cameraMode = 'automatic', manualSelection, config }: {
   quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
-  ready: boolean; sheetHeight: number; searchPresentationActive?: boolean; cameraMode?: CameraMode; config: PassengerMapConfig;
+  ready: boolean; sheetHeight: number; searchPresentationActive?: boolean; cameraMode?: CameraMode;
+  manualSelection?: { coordinate: Place['coordinate']; kind: 'origin' | 'destination' } | null; config: PassengerMapConfig;
 }) {
   const sample = useSharedValue<VehicleSample | null>(null);
   useEffect(() => { sample.set(assignment?.sample ?? null); }, [assignment?.sample, sample]);
@@ -32,6 +33,8 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
     {(home && origin || searchPresentationActive && currentLocation) ? <PassengerUserLocation place={(searchPresentationActive ? currentLocation : origin)!} />
       : (quote?.origin ?? origin) ? <PassengerMapPin place={(quote?.origin ?? origin)!} kind="origin" /> : null}
     {!searchPresentationActive && (quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}
+    {manualSelection ? <PassengerMapPin place={{ id: 'manual-selection', name: '', address: '', coordinate: manualSelection.coordinate }}
+      kind={manualSelection.kind} /> : null}
     {!searchPresentationActive && quote ? <RouteLayer id="passenger-route" data={assignment?.routeToOrigin ?? quote.route}
       activeTone="greenDark" state="active" appearance={config.route} /> : null}
     {!searchPresentationActive ? <VehicleLayer id="passenger-assigned-vehicle" kind="circle" sample={sample}

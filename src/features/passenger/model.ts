@@ -60,6 +60,12 @@ export interface PassengerGateway extends TripGateway, RealtimeTransport {
   searchPlaces?(query: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
   followPlaceAction?(id: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
   resolvePlace?(id: string, signal?: AbortSignal): Promise<Place>;
+  reversePlace?(coordinate: Coordinate, signal?: AbortSignal): Promise<Place | null>;
+  contributePlace?(input: { name: string; coordinate: Coordinate; reference?: string }, idempotencyKey: string,
+    signal?: AbortSignal): Promise<Place>;
+  discoverPlaces?(regionId: string, signal?: AbortSignal): Promise<{ popular: readonly PlaceSuggestion[];
+    featured: readonly PlaceSuggestion[] }>;
+  sendPlaceSignal?(type: 'place_selected' | 'destination_confirmed', place: Place): Promise<void>;
   closePlaces?(): void;
   quote(draft: RideDraft, signal?: AbortSignal): Promise<RideQuote>;
   /** Editing/scheduling must confirm cancellation of the active request before a new request. */

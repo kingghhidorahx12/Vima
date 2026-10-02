@@ -8,6 +8,8 @@ import type { GatewayConfig } from './config.ts';
 import { createGatewayState } from './state.ts';
 import { allowFields, coordinate, optionalBias, query, routeRequest } from './validation.ts';
 import { providerCanonicalId, type TomTomAdapter, type UpstreamContext } from './tomtom.ts';
+import { createContributionRepository } from './contributions.ts';
+import { createPopularityRepository } from './popularity.ts';
 
 export interface GatewayLog { requestId: string; endpoint: string; durationMs: number; upstreamStatus?: number; count: number; error?: GeospatialErrorCode }
 async function readBody(request: IncomingMessage, maximum: number): Promise<unknown> {
@@ -26,6 +28,8 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
 } = {}) {
   const now = options.now ?? Date.now;
   const state = createGatewayState(config, now);
+  const contributions = createContributionRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
+  const popularity = createPopularityRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const cleanup = setInterval(state.cleanup, config.cleanupMs); cleanup.unref();
   const server = createServer({ maxHeaderSize: config.maxBodyBytes, requestTimeout: config.upstreamTimeoutMs * 2 }, async (request, response) => {
     const requestId = randomUUID(); const started = now(); const controller = new AbortController();
@@ -33,20 +37,46 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
     let endpoint = 'unknown'; let count = 0; let category: GeospatialErrorCode | undefined;
     request.on('aborted', () => controller.abort());
     response.on('close', () => { if (!response.writableEnded) controller.abort(); });
-    const reply = (status: number, value: unknown) => {
+    const reply = (status: number, value: unknown, cache = false) => {
       if (response.destroyed) return;
-      response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
+      response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': cache ? 'private, max-age=60' : 'no-store',
         'X-Request-Id': requestId, 'X-Content-Type-Options': 'nosniff' });
       response.end(JSON.stringify(value));
     };
     try {
       const path = request.url ?? '';
-      if (path.length > 512 || path.includes('?') || path.includes('#')) throw new GeospatialError('invalid_result');
+      if (path.length > 512 || path.includes('#')) throw new GeospatialError('invalid_result');
       if (!state.allow(request.socket.remoteAddress ?? 'unknown')) {
         category = 'network_recoverable'; reply(429, { error: { code: category } }); return;
       }
       if (request.method === 'GET' && path === '/health') {
         endpoint = 'health'; reply(200, { status: 'ok', configured: options.configured === true }); return;
+      }
+      if (request.method === 'GET' && path.startsWith('/v1/geospatial/discovery?')) {
+        endpoint = 'discovery'; const url = new URL(path, 'http://localhost');
+        if (url.pathname !== '/v1/geospatial/discovery' || [...url.searchParams.keys()].length !== 1 ||
+          !url.searchParams.has('regionId')) throw new GeospatialError('invalid_result');
+        const result = await popularity.discovery(url.searchParams.get('regionId')!);
+        count = result.popular.length + result.featured.length; reply(200, result, true); return;
+      }
+      if (path.includes('?')) throw new GeospatialError('invalid_result');
+      if (request.method === 'POST' && path === '/v1/geospatial/place-signals') {
+        endpoint = 'place-signals';
+        if (!state.allowSignal(request.socket.remoteAddress ?? 'unknown')) throw new GeospatialError('network_recoverable');
+        const result = await popularity.signal(await readBody(request, config.maxBodyBytes) as Parameters<typeof popularity.signal>[0]);
+        count = result.accepted ? 1 : 0; reply(200, result); return;
+      }
+      if (request.method === 'POST' && path === '/v1/geospatial/place-contributions') {
+        endpoint = 'place-contributions';
+        if (!config.serviceAreaBounds) throw new GeospatialError('map_unavailable');
+        if (!state.allowContribution(request.socket.remoteAddress ?? 'unknown')) throw new GeospatialError('network_recoverable');
+        const body = allowFields(await readBody(request, config.maxBodyBytes), ['name', 'coordinate', 'reference']);
+        const point = coordinate(body.coordinate); const [west, south, east, north] = config.serviceAreaBounds;
+        if (point[0] < west || point[0] > east || point[1] < south || point[1] > north) throw new GeospatialError('invalid_result');
+        const key = request.headers['idempotency-key'];
+        if (typeof key !== 'string') throw new GeospatialError('invalid_result');
+        const result = await contributions.add({ name: body.name, coordinate: point, reference: body.reference }, key);
+        count = 1; reply(201, result); return;
       }
       const sessionMatch = /^\/v1\/geospatial\/places\/sessions\/([a-f0-9-]{36})(?:\/(autocomplete|search|resolve|follow-up))?$/.exec(path);
       if (request.method === 'POST' && path === '/v1/geospatial/places/sessions') {

@@ -9,7 +9,7 @@ const toPlace = (place: SavedPlace) => ({ ...place, id: place.canonicalId });
 
 /** Geospatial-only P0: never fabricates pricing, payment, matching or recent trips. */
 export function createPassengerLiveGateway(client: GeospatialClient, locate: PassengerGateway['locate'],
-  personal?: PersonalPlacesRepository): PassengerGateway {
+  personal?: PersonalPlacesRepository, installationId?: () => Promise<string>): PassengerGateway {
   const search = createPlaceSearch(client, geospatialClientConfig.debounceMs);
   const unavailable = async (): Promise<never> => { throw new Error('Servicio no disponible'); };
   return {
@@ -21,6 +21,16 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
     recordConfirmedDestination: personal ? place => personal.recordConfirmedDestination(place) : undefined,
     suggestPlaces: search.suggest, searchPlaces: search.search, followPlaceAction: search.followUp,
     resolvePlace: search.resolve, closePlaces: search.close,
+    reversePlace: client.reverseGeocode,
+    contributePlace: async (input, key, signal) => (await client.contributePlace(input, key, signal)).place,
+    discoverPlaces: client.discovery,
+    sendPlaceSignal: installationId ? async (type, place) => {
+      const canonicalPlaceId = place.canonicalId ?? place.id;
+      if (!place.regionId || !/^(vima-local:|tomtom:)/.test(canonicalPlaceId)) return;
+      const eventId = `signal-${Date.now()}-${Math.floor(Math.random() * 0x1_0000_0000).toString(16)}`;
+      await client.signalPlace({ eventId, type, canonicalPlaceId, regionId: place.regionId,
+        occurredAt: Date.now(), installationId: await installationId() });
+    } : undefined,
     async findPlaces(query, signal) {
       const result = await client.geocode(query, signal);
       return result ? [result] : [];

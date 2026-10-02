@@ -27,6 +27,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const [searchCoordinator] = useState(() => createSearchCoordinator(approvedLocalPlaces));
   const [followUpResults, setFollowUpResults] = useState<{ query: string; results: readonly PlaceSuggestion[] }>();
   const requestId = useRef<string | null>(null);
+  const contributionRequest = useRef<{ fingerprint: string; id: string } | undefined>(undefined);
   const locked = useRef(false);
   const selection = useRef<AbortController | undefined>(undefined);
   const [selectionError, setSelectionError] = useState<Error>();
@@ -39,6 +40,10 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     enabled: !!gateway.favoritePlaces });
   // A late geolocation result can update its query, never an explicit selection.
   const origin = originChoice?.place ?? location.data ?? null;
+  const discoveryRegion = origin?.regionId ?? 'atlacomulco';
+  const discovery = useQuery({ queryKey: ['passenger', gateway.scope, 'discovery', discoveryRegion],
+    queryFn: ({ signal }) => gateway.discoverPlaces?.(discoveryRegion, signal) ?? Promise.resolve({ popular: [], featured: [] }),
+    enabled: field !== null && !search.trim() && !!gateway.discoverPlaces, retry: false, staleTime: 60_000 });
   const places = useQuery({ queryKey: ['passenger', gateway.scope, 'places', field, search, origin?.coordinate],
     queryFn: async ({ signal }) => {
       const results = gateway.suggestPlaces ? await gateway.suggestPlaces(search, signal, origin?.coordinate)
@@ -74,7 +79,10 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const applyPlace = (value: Place, target: 'origin' | 'destination') => {
     if (pending || isMatching(phase) || phase === 'assigned') return;
     requestId.current = null;
-    if (target === 'origin') setOrigin({ place: value, kind: 'manual' }); else setDestination(value);
+    if (target === 'origin') setOrigin({ place: value, kind: 'manual' }); else {
+      setDestination(value);
+      void gateway.sendPlaceSignal?.('place_selected', value)?.catch(() => {});
+    }
     const nextOrigin = target === 'origin' ? value : origin;
     const nextDestination = target === 'destination' ? value : destination;
     setConfirming(validDraft(nextOrigin, nextDestination));
@@ -110,6 +118,31 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     } catch (error) {
       if (!controller.signal.aborted) setSelectionError(error instanceof Error ? error : new Error('search_unavailable'));
     } finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
+  };
+  const chooseMapCoordinate = async (coordinate: Place['coordinate'], target = field ?? 'destination') => {
+    if (pending || isMatching(phase) || phase === 'assigned') return;
+    cancelSelection(); const controller = new AbortController(); selection.current = controller; setResolving(true);
+    try {
+      let resolved: Place | null = null;
+      try { resolved = await gateway.reversePlace?.(coordinate, controller.signal) ?? null; }
+      catch { /* The touched coordinate remains authoritative when Reverse is unavailable. */ }
+      if (!controller.signal.aborted) applyPlace({ id: `manual:${coordinate.join(',')}`, name: resolved?.name || 'Ubicación en el mapa',
+        address: resolved?.address ?? '', coordinate }, target);
+    } finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
+  };
+  const contributePlace = async (input: { name: string; coordinate: Place['coordinate']; reference?: string }) => {
+    if (!gateway.contributePlace) { setSelectionError(new Error('Agregar lugar no disponible')); return null; }
+    const fingerprint = `${input.name}|${input.coordinate.join(',')}|${input.reference ?? ''}`;
+    if (contributionRequest.current?.fingerprint !== fingerprint)
+      contributionRequest.current = { fingerprint, id: operationId() };
+    cancelSelection(); const controller = new AbortController(); selection.current = controller; setResolving(true);
+    try {
+      const place = await gateway.contributePlace(input, contributionRequest.current.id, controller.signal);
+      if (controller.signal.aborted) return null;
+      contributionRequest.current = undefined;
+      return place;
+    } catch { if (!controller.signal.aborted) setSelectionError(new Error('No se pudo agregar el lugar')); return null; }
+    finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
   };
   const submit = async () => {
     if (locked.current || phase !== 'confirm' || !canRequest(quote.data, connection, pending)) return;
@@ -159,6 +192,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   };
   const confirmLocations = async () => {
     if (!validDraft(origin, destination)) return;
+    void gateway.sendPlaceSignal?.('destination_confirmed', destination!)?.catch(() => {});
     try { if (gateway.recordConfirmedDestination) {
       await gateway.recordConfirmedDestination(destination!);
       await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'recents'] });
@@ -187,9 +221,12 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     },
     places: visiblePlaces, settledQuery: search.trim().length >= geospatialClientConfig.noResultMinLength &&
       !places.isFetching && !geography.isFetching && (places.isSuccess || places.isError),
-    recents: recents.data ?? [], favorites: favorites.data ?? [], saveFavorite, removeFavorite, confirmLocations,
+    recents: recents.data ?? [], favorites: favorites.data ?? [],
+    popular: discovery.data?.popular ?? [], featured: discovery.data?.featured ?? [],
+    saveFavorite, removeFavorite, confirmLocations,
     loadingPlaces: !!search.trim() && (places.isFetching || resolving), loadingQuote: quote.isFetching, error,
-    canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending), choosePlace, submitSearch, submit, act, edit, schedule,
+    canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending), choosePlace, chooseMapCoordinate,
+    contributePlace, submitSearch, submit, act, edit, schedule,
     openField: (target: 'origin' | 'destination') => {
       if (pending || isMatching(phase) || phase === 'assigned') return;
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined); setField(target); setSearch('');
