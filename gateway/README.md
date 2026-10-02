@@ -48,9 +48,22 @@ npm run geo:smoke
 ```
 
 Smoke usa la key del proceso y arranca/cierra su propia instancia local efímera. Sin key devuelve
-SKIP explícito y salida 0. Con key imprime sólo PASS/FAIL y categoría de error, salida 1 ante fallo.
+SKIP explícito y salida 0. Con key imprime PASS/FAIL, categoría de error y trazas
+estructurales del caso UAEM; devuelve salida 1 ante fallo.
+Cada FAIL de ground truth indica la etapa (`autocomplete`, `search`, `provider match`,
+`resolve/details` o `final normalization`). El caso UAEM añade trazas estructurales acotadas:
+tipo, presencia de ID/título/posición/dirección y enlace de Details. No imprime IDs del
+proveedor, coordenadas, direcciones, query privada, cabeceras ni respuesta raw.
+Search solicita el campo `more` documentado sólo para confirmar si el resultado ofrece el
+seguimiento Details; el gateway sigue validando el tipo y conserva su origen TomTom fijo.
 La key necesita acceso real a los cuatro servicios Orbis/versiones documentados. Unit tests usan
 fetch simulado y una credencial aleatoria efímera; nunca dependen de Internet ni de una key real.
+
+Node 24 puede emitir `MODULE_TYPELESS_PACKAGE_JSON` cuando `--experimental-strip-types` importa
+archivos TS de `src/` o `tests/` bajo la raíz sin `type` declarado. Es una advertencia de
+inferencia del formato ESM, no un fallo del adapter ni del smoke. `gateway/package.json` ya fija
+el tipo sólo para el gateway; no se cambia el tipo global porque Expo/Metro/Babel y scripts
+existentes comparten la raíz.
 
 ## Límites operacionales DEV
 

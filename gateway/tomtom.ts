@@ -11,6 +11,28 @@ const origin = 'https://api.tomtom.com';
 const placeTypes = { poi: 'pois', address: 'addresses', street: 'streets', intersection: 'intersections', area: 'areas' } as const;
 export interface UpstreamContext { signal: AbortSignal; sessionId?: string; status?: number }
 export interface ProviderChoice { suggestion: PlaceSuggestion; reference: PlaceReference }
+export interface ProviderShape {
+  kind: 'object' | 'array' | 'other';
+  type: 'poi' | 'address' | 'street' | 'intersection' | 'area' | 'other';
+  hasId: boolean; hasTitle: boolean; hasPosition: boolean; positionType?: 'Point' | 'other';
+  hasAddress: boolean; hasSubtitles: boolean; hasDetailsLink: boolean;
+}
+export interface ProviderDiagnostic { operation: 'autocomplete' | 'search' | 'details'; results: readonly ProviderShape[] }
+/** Bounded structural diagnostics only; never expose provider IDs, queries, addresses or coordinates. */
+export function providerShape(value: unknown): ProviderShape {
+  const kind = Array.isArray(value) ? 'array' : value && typeof value === 'object' ? 'object' : 'other';
+  const item = kind === 'object' ? value as Record<string, unknown> : {};
+  const type = typeof item.type === 'string' && item.type in placeTypes ? item.type as ProviderShape['type'] : 'other';
+  const position = item.position && typeof item.position === 'object' && !Array.isArray(item.position)
+    ? item.position as Record<string, unknown> : undefined;
+  const more = item.more && typeof item.more === 'object' && !Array.isArray(item.more)
+    ? item.more as Record<string, unknown> : undefined;
+  return { kind, type, hasId: typeof item.id === 'string' && !!item.id,
+    hasTitle: typeof item.title === 'string' && !!item.title,
+    hasPosition: !!position, ...(position ? { positionType: position.type === 'Point' ? 'Point' as const : 'other' as const } : {}),
+    hasAddress: !!item.address && typeof item.address === 'object' && !Array.isArray(item.address),
+    hasSubtitles: Array.isArray(item.subtitles), hasDetailsLink: more?.operation === 'details' };
+}
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
 const subtitles = (value: unknown) => Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string').join(', ') : '';
 function addressLabel(value: unknown) {
@@ -69,7 +91,8 @@ export function normalizeProviderRoute(value: unknown) {
     distanceMeters: summary.lengthInMeters, durationSeconds: live - delay, trafficDurationSeconds: live });
 }
 
-export function createTomTomAdapter(key: string | undefined, config: GatewayConfig, fetcher: typeof fetch = fetch) {
+export function createTomTomAdapter(key: string | undefined, config: GatewayConfig, fetcher: typeof fetch = fetch,
+  diagnostic?: (event: ProviderDiagnostic) => void) {
   async function request(path: string, version: number, attributes: string, context: UpstreamContext,
     unavailable: GeospatialErrorCode, body?: unknown) {
     if (!key?.trim()) throw new GeospatialError(unavailable);
@@ -114,13 +137,21 @@ export function createTomTomAdapter(key: string | undefined, config: GatewayConf
       const body = { query: input, maxResults: config.maxResults,
         filters: { countryCodesIso2: ['MX'], types: ['poi', 'address', 'street', 'intersection', 'area'] },
         ...(bias ? { origin: { type: 'point', coordinates: bias }, preferences: { geometry: { type: 'point', coordinates: bias } } } : {}) };
-      return normalizeProviderSearch(await request('/maps/orbis/places/' + (autocomplete ? 'suggest' : 'discover'), 3,
-        'results(id,type,title,subtitles)', context, 'search_unavailable', body));
+      const response = await request('/maps/orbis/places/' + (autocomplete ? 'suggest' : 'discover'), 3,
+        'results(id,type,title,subtitles,more)', context, 'search_unavailable', body);
+      if (diagnostic) {
+        const results = response && typeof response === 'object' ? (response as Record<string, unknown>).results : undefined;
+        diagnostic({ operation: autocomplete ? 'autocomplete' : 'search',
+          results: Array.isArray(results) ? results.slice(0, config.maxResults).map(providerShape) : [providerShape(results)] });
+      }
+      return normalizeProviderSearch(response);
     },
     async resolve(reference: PlaceReference, context: UpstreamContext) {
       if (!Object.values(placeTypes).includes(reference.type)) throw new GeospatialError('invalid_result');
-      return normalizeProviderPlace(await request(`/maps/orbis/places/details/${reference.type}/${encodeURIComponent(reference.id)}`,
-        3, 'id,type,title,subtitles,position,address', context, 'search_unavailable'));
+      const response = await request(`/maps/orbis/places/details/${reference.type}/${encodeURIComponent(reference.id)}`,
+        3, 'id,type,title,subtitles,position,address', context, 'search_unavailable');
+      diagnostic?.({ operation: 'details', results: [providerShape(response)] });
+      return normalizeProviderPlace(response);
     },
     async geocode(input: string, bias: Coordinate | undefined, context: UpstreamContext) {
       const params = new URLSearchParams({ query: input, countryCodesIso2: 'MX', maxResults: '1' });

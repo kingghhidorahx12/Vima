@@ -6,7 +6,7 @@ import test from 'node:test';
 import { gatewayConfig } from '../gateway/config.ts';
 import { createGateway, type GatewayLog } from '../gateway/server.ts';
 import { createGatewayState } from '../gateway/state.ts';
-import { createTomTomAdapter, normalizeProviderRoute, normalizeProviderSearch } from '../gateway/tomtom.ts';
+import { createTomTomAdapter, normalizeProviderRoute, normalizeProviderSearch, providerShape, type ProviderDiagnostic } from '../gateway/tomtom.ts';
 import { allowFields, query, routeRequest } from '../gateway/validation.ts';
 import { createApiClient } from '../src/services/api/client.ts';
 import { createGeospatialClient } from '../src/services/geospatial/client.ts';
@@ -60,6 +60,7 @@ test('real adapter paths/versions/body bias normalize Search, Details, Geocode, 
   assert.deepEqual(body.preferences.geometry, { type: 'point', coordinates: position });
   assert.deepEqual(body.filters.countryCodesIso2, ['MX']); assert.equal(body.radius, undefined);
   assert.equal(new Headers(first.options!.headers).get('TomTom-Api-Version'), '3');
+  assert.equal(new Headers(first.options!.headers).get('Attributes'), 'results(id,type,title,subtitles,more)');
   assert.equal(new Headers(first.options!.headers).get('Session-Id'), ctx.sessionId);
   await adapter.search('Plaza', undefined, false, ctx);
   assert.equal('preferences' in JSON.parse(String(calls[1]!.options!.body)), false);
@@ -83,6 +84,39 @@ test('real adapter paths/versions/body bias normalize Search, Details, Geocode, 
 test('normalization rejects malformed geometry/traffic and omits nonselectable search actions', () => {
   assert.deepEqual(normalizeProviderSearch({ results: [{ type: 'category', title: 'category' }] }), []);
   assert.throws(() => normalizeProviderSearch({ results: 'invalid' }), /invalid_result/);
+});
+
+test('provider diagnostics report only bounded structure before a malformed Details result is rejected', async () => {
+  const events: ProviderDiagnostic[] = [];
+  const upstream = { id: 'raw-provider-id', type: 'area', title: 'Centro Universitario UAEM Atlacomulco',
+    address: { municipality: 'Atlacomulco', street: 'private-address' }, position: { type: 'Point', coordinates: position },
+    more: { operation: 'details', pathParameters: [{ parameter: 'id', argument: 'raw-provider-id' }] } };
+  const adapter = createTomTomAdapter('dummy-key', config, async url => Response.json(String(url).includes('details')
+    ? { ...upstream, position: undefined } : { results: [upstream] }), event => events.push(event));
+  const choices = await adapter.search('Centro Universitario UAEM Atlacomulco', undefined, false, context());
+  assert.equal(choices[0]!.reference.type, 'areas');
+  await assert.rejects(adapter.resolve(choices[0]!.reference, context()), /invalid_result/);
+  assert.deepEqual(events.map(event => event.operation), ['search', 'details']);
+  assert.deepEqual(events[1]!.results[0], {
+    kind: 'object', type: 'area', hasId: true, hasTitle: true, hasPosition: false,
+    hasAddress: true, hasSubtitles: false, hasDetailsLink: true,
+  });
+  const diagnosticText = JSON.stringify(events);
+  for (const sensitive of ['raw-provider-id', 'private-address', String(position[0]), 'dummy-key', upstream.title]) {
+    assert.equal(diagnosticText.includes(sensitive), false);
+  }
+  assert.equal(providerShape(null).kind, 'other');
+});
+
+test('a documented area Details response with a valid Point and no address remains a resolved Vima place', async () => {
+  const adapter = createTomTomAdapter('dummy-key', config, async () => Response.json({
+    id: 'area-id', type: 'area', title: 'Centro Universitario Atlacomulco',
+    position: { type: 'Point', coordinates: position },
+  }));
+  const place = await adapter.resolve({ type: 'areas', id: 'area-id' }, context());
+  assert.equal(place.name, 'Centro Universitario Atlacomulco');
+  assert.equal(place.address, '');
+  assert.deepEqual(place.coordinate, position);
 });
 
 test('routing rejects invalid geometry, negative traffic and missing summaries', () => {
