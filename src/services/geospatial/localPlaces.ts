@@ -5,7 +5,13 @@ import type { ResolvedPlace } from './contracts.ts';
 export interface VimaLocalPlace extends ResolvedPlace {
   readonly provenance: 'vima-local';
   readonly regionId: string;
+  readonly canonicalName: string;
   readonly aliases?: readonly string[];
+  /** Opaque, stable provider reference keys; raw provider payloads are never retained. */
+  readonly providerRefs?: readonly string[];
+  readonly status: 'verified' | 'pending' | 'disabled';
+  readonly verifiedAt?: string;
+  readonly locality?: string;
 }
 
 export interface RegionalRankingPolicy {

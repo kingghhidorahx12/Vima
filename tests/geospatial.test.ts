@@ -115,7 +115,7 @@ test('local places stay empty until validated and regional rank requires supplie
   const provider = [{ id: 'remote', name: 'Intermunicipal', address: '', coordinate: [-100, 20] as const,
     provenance: 'provider' as const, regionId: 'other' }];
   const local = [{ id: 'local', name: 'Local validado', address: '', coordinate: [-99.87, 19.8] as const,
-    provenance: 'vima-local' as const, regionId: 'atlacomulco' }];
+    provenance: 'vima-local' as const, regionId: 'atlacomulco', canonicalName: 'Local validado', status: 'verified' as const }];
   assert.deepEqual(mergePlaces(provider, local), [...provider, ...local]);
   assert.deepEqual(mergePlaces(provider, local, { origin: [-99.87, 19.8], initialRegionId: 'atlacomulco',
     nearbyRegionIds: [], distanceWeight: 1, initialRegionBoost: 1, nearbyRegionBoost: 0 }), [local[0], provider[0]]);

@@ -7,7 +7,7 @@ import type { VimaLocalPlace } from '../src/services/geospatial/localPlaces.ts';
 import type { GatewayConfig } from './config.ts';
 import { createGatewayState } from './state.ts';
 import { allowFields, coordinate, optionalBias, query, routeRequest } from './validation.ts';
-import type { TomTomAdapter, UpstreamContext } from './tomtom.ts';
+import { providerCanonicalId, type TomTomAdapter, type UpstreamContext } from './tomtom.ts';
 
 export interface GatewayLog { requestId: string; endpoint: string; durationMs: number; upstreamStatus?: number; count: number; error?: GeospatialErrorCode }
 async function readBody(request: IncomingMessage, maximum: number): Promise<unknown> {
@@ -68,7 +68,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
           for (const result of ranked) {
             const ref = provider.find(value => value.suggestion.id === result.id)?.reference;
             if (ref) session.choices.set(result.id, ref);
-            else if ('coordinate' in result) session.choices.set(result.id, result);
+            else if ('status' in result && result.coordinate) session.choices.set(result.id, result);
           }
           while (session.choices.size > config.maxResults * 3) session.choices.delete(session.choices.keys().next().value!);
           count = ranked.length; reply(200, { suggestions: ranked.map(decodeSuggestion) });
@@ -79,7 +79,8 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
           if (!choice) throw new GeospatialError('no_result');
           if (!('coordinate' in choice) && choice.kind !== 'details') throw new GeospatialError('invalid_result');
           let place;
-          try { place = 'coordinate' in choice ? decodePlace(choice) : await adapter.resolve(choice, context); }
+          try { place = 'coordinate' in choice ? decodePlace(choice) :
+            { ...await adapter.resolve(choice, context), canonicalId: providerCanonicalId(choice.type, choice.id) }; }
           finally { state.close(id); }
           count = 1; reply(200, place); return;
         }

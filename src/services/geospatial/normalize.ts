@@ -19,6 +19,7 @@ export function decodeSuggestion(value: unknown): PlaceSuggestion {
   if (v.provenance !== undefined && v.provenance !== 'provider' && v.provenance !== 'vima-local') throw new GeospatialError('invalid_result');
   if (v.kind !== undefined && v.kind !== 'action') throw new GeospatialError('invalid_result');
   return { id: text(v.id), name: text(v.name), address: text(v.address, true),
+    ...(v.canonicalId === undefined ? {} : { canonicalId: text(v.canonicalId) }),
     ...(v.kind === 'action' ? { kind: 'action' as const } : {}),
     ...(v.provenance === undefined ? {} : { provenance: v.provenance }),
     ...(v.category === undefined ? {} : { category: text(v.category) }),

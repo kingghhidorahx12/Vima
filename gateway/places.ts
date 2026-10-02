@@ -6,9 +6,11 @@ import type { VimaLocalPlace } from '../src/services/geospatial/localPlaces.ts';
  */
 export const localPlaces: readonly VimaLocalPlace[] = [
   { id: 'vima-local:plaza-atlacomulco', name: 'Plaza Atlacomulco',
+    canonicalName: 'Plaza Atlacomulco', status: 'verified',
     address: 'Circuito Vial Jorge Jiménez Cantú 1288, Las Mercedes, Atlacomulco',
     coordinate: [-99.88795, 19.79021], provenance: 'vima-local', regionId: 'atlacomulco', category: 'mall' },
   { id: 'vima-local:cu-uaem-atlacomulco', name: 'Centro Universitario UAEM Atlacomulco',
+    canonicalName: 'Centro Universitario UAEM Atlacomulco', status: 'verified',
     aliases: ['Centro Universitario Atlacomulco', 'UAEM Atlacomulco'],
     address: 'Carretera Toluca–Atlacomulco km 60, Atlacomulco',
     coordinate: [-99.84073, 19.76183], provenance: 'vima-local', regionId: 'atlacomulco', category: 'university' },

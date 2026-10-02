@@ -1,5 +1,6 @@
 import type { PlaceSuggestion } from './contracts.ts';
 import type { VimaLocalPlace } from './localPlaces.ts';
+import { samePlace } from './placeIdentity.ts';
 
 export const initialRegion = ['atlacomulco', 'jocotitlan', 'san-felipe-del-progreso', 'el-oro', 'acambay', 'ixtlahuaca', 'temascalcingo'] as const;
 export const normalizeSearchText = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -28,19 +29,15 @@ export function rankingReason(place: PlaceSuggestion, query: string, aliases: re
 /** Lexicographic relevance then region. No geographic exclusion, numeric weights or radius. */
 export function rankRegionalPlaces<T extends PlaceSuggestion>(provider: readonly T[], local: readonly VimaLocalPlace[], query: string): readonly (T | VimaLocalPlace)[] {
   const candidates: (T | VimaLocalPlace)[] = [];
-  const seen = new Set<string>();
   for (const place of provider) {
-    const key = `${place.provenance ?? 'provider'}:${place.id}`;
-    const addressKey = `${normalizeSearchText(place.name)}:${normalizeSearchText(place.address)}`;
-    if (seen.has(key) || seen.has(addressKey)) continue;
-    seen.add(key); seen.add(addressKey); candidates.push(place);
+    if (!candidates.some(other => samePlace(other, place))) candidates.push(place);
   }
   for (const place of local) {
+    if (place.status === 'pending' || place.status === 'disabled') continue;
     if (rankingReason(place, query, place.aliases).relevance === 3) continue;
-    const names = [place.name, ...(place.aliases ?? [])].map(normalizeSearchText);
-    const duplicate = candidates.some(other => names.includes(normalizeSearchText(other.name)) &&
-      (other.regionId ?? regionForText(other.address)) === place.regionId);
-    if (!duplicate) candidates.push(place);
+    const duplicate = candidates.findIndex(other => samePlace(other, place));
+    if (duplicate < 0) candidates.push(place);
+    else candidates[duplicate] = place;
   }
   return candidates.map((place, index) => ({ place, index,
     rank: rankingReason(place, query, 'aliases' in place ? place.aliases : []) }))

@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { fitBounds, type Coordinate } from '../src/map/models.ts';
+import { createHash, randomUUID } from 'node:crypto';
+import { fitBounds, normalizeCoordinate, type Coordinate } from '../src/map/models.ts';
 import { GeospatialError, type GeospatialErrorCode, type PlaceSuggestion, type ResolvedPlace, type RouteRequest } from '../src/services/geospatial/contracts.ts';
 import { decodePlace, decodeRoute } from '../src/services/geospatial/normalize.ts';
 import type { GatewayConfig } from './config.ts';
@@ -10,7 +10,9 @@ import { regionForText } from '../src/services/geospatial/regionalRanking.ts';
 const origin = 'https://api.tomtom.com';
 const placeTypes = { poi: 'pois', address: 'addresses', street: 'streets', intersection: 'intersections', area: 'areas' } as const;
 export interface UpstreamContext { signal: AbortSignal; sessionId?: string; status?: number }
-export interface ProviderChoice { suggestion: PlaceSuggestion; reference: ProviderReference }
+export interface ProviderChoice { suggestion: PlaceSuggestion & { coordinate?: Coordinate; providerRef?: string }; reference: ProviderReference }
+export const providerCanonicalId = (type: string, id: string) =>
+  `tomtom:${createHash('sha256').update(`${type}:${id}`).digest('hex').slice(0, 32)}`;
 export interface ProviderShape {
   kind: 'object' | 'array' | 'other';
   type: 'poi' | 'address' | 'street' | 'intersection' | 'area' | 'other';
@@ -112,8 +114,12 @@ export function normalizeProviderSearch(value: unknown): ProviderChoice[] {
     const id = text(v.id); const name = text(v.title);
     if (!id || !name) throw new GeospatialError('invalid_result');
     const address = subtitles(v.subtitles) || addressLabel(v.address);
-    return [{ suggestion: { id: randomUUID(), name, address, provenance: 'provider' as const,
-      regionId: regionForText(address) }, reference: detailsReference(v, type, id) }];
+    const canonicalId = providerCanonicalId(placeTypes[type], id);
+    let position: Coordinate | undefined;
+    try { if (v.position !== undefined) position = normalizeCoordinate(record(v.position).coordinates); }
+    catch { /* A Suggest item may omit a usable position; Details remains authoritative. */ }
+    return [{ suggestion: { id: randomUUID(), canonicalId, providerRef: canonicalId, name, address, provenance: 'provider' as const,
+      ...(position ? { coordinate: position } : {}), regionId: regionForText(address) }, reference: detailsReference(v, type, id) }];
   });
 }
 export function normalizeProviderRoute(value: unknown) {

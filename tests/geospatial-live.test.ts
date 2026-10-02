@@ -6,6 +6,8 @@ import { createGeospatialClient } from '../src/services/geospatial/client.ts';
 import { createPlaceSearch } from '../src/services/geospatial/search.ts';
 import { resolveGeoMode } from '../src/services/geospatial/config.ts';
 import { rankRegionalPlaces, rankingReason, initialRegion } from '../src/services/geospatial/regionalRanking.ts';
+import { samePlace } from '../src/services/geospatial/placeIdentity.ts';
+import { providerCanonicalId } from '../gateway/tomtom.ts';
 import { localPlaces } from '../gateway/places.ts';
 import type { PlaceSuggestion } from '../src/services/geospatial/contracts.ts';
 import { createPassengerLiveGateway } from '../src/services/geospatial/passengerGateway.ts';
@@ -31,6 +33,24 @@ test('Local Places aliases dedupe provider identities and do not inject irreleva
   assert.equal(rankRegionalPlaces([], localPlaces, 'inexistente').length, 0);
   assert.equal(rankRegionalPlaces([], localPlaces, 'UAEM Atlacomulco')[0]!.provenance, 'vima-local');
   assert.equal(rankingReason(localPlaces[1]!, 'UAEM Atlacomulco', localPlaces[1]!.aliases).reason, 'exact-name:explicit-local');
+});
+
+test('canonical identity preserves neighboring branches and requires explicit evidence for an alias', () => {
+  const branch = { id: 'branch-a', name: 'Coppel', address: 'Atlacomulco', coordinate: [-99.87, 19.80] as const,
+    provenance: 'provider' as const, regionId: 'atlacomulco' };
+  const nearbyBranch = { ...branch, id: 'branch-b', coordinate: [-99.8704, 19.8004] as const };
+  assert.equal(samePlace(branch, nearbyBranch), false);
+  assert.equal(rankRegionalPlaces([branch, nearbyBranch], [], 'Coppel').length, 2);
+  const local = { ...branch, id: 'vima-local:coppel-a', canonicalName: 'Coppel A', name: 'Coppel A', aliases: ['Coppel'],
+    status: 'verified' as const, provenance: 'vima-local' as const };
+  assert.equal(samePlace(branch, local), true);
+  assert.equal(samePlace({ ...branch, coordinate: [-99.9, 19.8] }, local), false);
+  assert.equal(samePlace({ ...branch, providerRef: 'known' }, { ...local, providerRefs: ['known'] }), true);
+  assert.equal(rankRegionalPlaces([branch], [local], 'Coppel')[0]!.id, local.id);
+  assert.deepEqual(rankRegionalPlaces([], [{ ...local, status: 'pending' }], 'Coppel'), []);
+  assert.equal(providerCanonicalId('pois', 'abc'), providerCanonicalId('pois', 'abc'));
+  assert.notEqual(providerCanonicalId('pois', 'abc'), providerCanonicalId('pois', 'def'));
+  assert.doesNotMatch(providerCanonicalId('pois', 'abc'), /abc/);
 });
 
 test('search cancels/ignores old responses, shares session, forwards bias and closes on flow change', async () => {
