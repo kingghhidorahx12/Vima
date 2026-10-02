@@ -1,0 +1,180 @@
+{
+  "meta": {
+    "name": "Vima Visual System v1",
+    "status": "FINAL P0 para implementación, salvo dark theme exacto y assets master de producción",
+    "scope": "P0 beta"
+  },
+  "colors": {
+    "carbon": "#0B0F0E",
+    "graphite": "#2A2E2D",
+    "gray": "#6B6F6E",
+    "grayLight": "#D9DDDC",
+    "background": "#F7F8F7",
+    "white": "#FFFFFF",
+    "green": "#00D68F",
+    "greenDark": "#00826F",
+    "greenBright": "#2DFFB3",
+    "red": "#FF3830",
+    "blue": "#3B82F6",
+    "amber": "#F59E0B"
+  },
+  "semanticRoles": {
+    "textPrimary": "carbon",
+    "textSecondary": "graphite",
+    "border": "grayLight",
+    "tertiary": "gray",
+    "disabledAndSubtleSurface": "grayLight",
+    "screenBackground": "background",
+    "contrastSurface": "white",
+    "primaryActionAndSuccess": "green",
+    "activeAndProgress": "greenDark",
+    "highlightAndMotion": "greenBright",
+    "destinationAndCriticalMapPin": "red",
+    "communicationAndInformation": "blue",
+    "warningAndWait": "amber"
+  },
+  "typography": {
+    "family": "Inter",
+    "scale": {
+      "display": {
+        "sizePxRange": [
+          32,
+          36
+        ],
+        "weight": 700
+      },
+      "h1": {
+        "sizePx": 28,
+        "weight": 700
+      },
+      "h2": {
+        "sizePx": 24,
+        "weight": 600
+      },
+      "h3": {
+        "sizePx": 20,
+        "weight": 600
+      },
+      "body": {
+        "sizePx": 16,
+        "weightRange": [
+          400,
+          500
+        ]
+      },
+      "bodySmall": {
+        "sizePx": 14,
+        "weight": 400
+      },
+      "caption": {
+        "sizePx": 12,
+        "weight": 400
+      }
+    }
+  },
+  "spacing": {
+    "scalePx": [
+      4,
+      8,
+      12,
+      16,
+      20,
+      24,
+      32,
+      40,
+      48
+    ],
+    "mobileHorizontalMarginPx": 20
+  },
+  "radii": {
+    "smallPx": 8,
+    "fieldPx": 12,
+    "cardPx": 16,
+    "sheetPx": 28,
+    "pillPx": 999
+  },
+  "borders": {
+    "standardWidthPx": 1,
+    "standardColor": "#D9DDDC"
+  },
+  "elevation": {
+    "level0": {
+      "description": "flat"
+    },
+    "level1": {
+      "offsetX": 0,
+      "offsetY": 2,
+      "blur": 8,
+      "spread": 0,
+      "opacity": 0.06
+    },
+    "level2": {
+      "offsetX": 0,
+      "offsetY": 8,
+      "blur": 24,
+      "spread": 0,
+      "opacity": 0.1
+    }
+  },
+  "components": {
+    "buttonPrimary": {
+      "heightPx": 56,
+      "radiusPx": 999
+    },
+    "inputPrimary": {
+      "heightPx": 52,
+      "radiusPx": 12
+    },
+    "iconSizesPx": [
+      16,
+      20,
+      24
+    ],
+    "bottomSheetSnapPointsPercent": [
+      24,
+      52,
+      88
+    ]
+  },
+  "gradientPrimary": {
+    "direction": "horizontal",
+    "angleDeg": 0,
+    "stops": [
+      {
+        "token": "carbon",
+        "positionPercent": 0
+      },
+      {
+        "token": "greenDark",
+        "positionPercent": 58
+      },
+      {
+        "token": "greenBright",
+        "positionPercent": 100
+      }
+    ]
+  },
+  "mapSemantics": {
+    "origin": "green",
+    "destination": "red",
+    "user": "blue/green location dot with halo depending context",
+    "routeActive": "greenDark or carbon by context",
+    "routeCompleted": "gray",
+    "communicationAction": "blue",
+    "waitWarning": "amber"
+  },
+  "brandRules": {
+    "name": "Vima",
+    "logo": "dark near-black map-texture background; white + bright-green V; red pin above/inside V",
+    "wordmark": "Vima in carbon/near-black",
+    "splash": "approved road illustration; no added green glow/light on the road",
+    "darkTheme": "same identity; exact dark-theme surface tokens still pending"
+  },
+  "stillUndefined": [
+    "dark theme exact surface/text/border/map tokens",
+    "production master SVG/logo/wordmark/app icon/splash assets",
+    "exact map style JSON and zoom-dependent line widths/opacities",
+    "exact paddings/min widths for some components beyond decided heights/margins",
+    "exact icon library/stroke width"
+  ]
+}

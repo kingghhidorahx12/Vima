@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+<title id="title">Símbolo Vima</title>
+<desc id="desc">Símbolo Vima con fondo carbón, trama sutil tipo mapa, V blanca y verde brillante, y pin rojo.</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0B0F0E"/>
+    <stop offset="70%" stop-color="#111816"/>
+    <stop offset="100%" stop-color="#0E221B"/>
+  </linearGradient>
+  <linearGradient id="greenArm" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#00D68F"/>
+    <stop offset="100%" stop-color="#2DFFB3"/>
+  </linearGradient>
+  <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#000000" flood-opacity="0.22"/>
+  </filter>
+  <clipPath id="clip">
+    <rect x="12" y="12" width="232" height="232" rx="50"/>
+  </clipPath>
+</defs>
+
+<rect x="12" y="12" width="232" height="232" rx="50" fill="url(#bg)"/>
+
+<!-- Subtle map-like linework -->
+<g clip-path="url(#clip)" fill="none" stroke="#D9DDDC" stroke-width="2" opacity="0.065">
+  <path d="M-10 58 L74 58 L112 20 L175 20 L266 111"/>
+  <path d="M-18 112 L49 45 L110 106 L168 48 L274 48"/>
+  <path d="M5 205 L81 129 L137 183 L207 113 L270 176"/>
+  <path d="M18 16 L18 93 L86 161 L86 260"/>
+  <path d="M139 -8 L139 67 L207 135 L207 268"/>
+  <path d="M-20 156 L56 156 L93 119 L151 119 L191 159 L272 159"/>
+</g>
+
+<!-- V mark -->
+<g filter="url(#softShadow)">
+  <path d="M64 100 C81 120 102 149 128 181"
+        fill="none" stroke="#FFFFFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M192 100 C174 123 153 150 128 181"
+        fill="none" stroke="url(#greenArm)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+
+<!-- Red map pin -->
+<g filter="url(#softShadow)">
+  <path d="M128 46
+           C105 46 88 63 88 85
+           C88 113 128 145 128 145
+           C128 145 168 113 168 85
+           C168 63 151 46 128 46 Z"
+        fill="#FF3830"/>
+  <circle cx="128" cy="84" r="14" fill="#0B0F0E"/>
+</g>
+</svg>

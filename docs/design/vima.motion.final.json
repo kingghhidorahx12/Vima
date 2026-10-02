@@ -1,0 +1,72 @@
+{
+  "meta": {
+    "name": "Vima Motion System v1",
+    "status": "FINAL P0",
+    "scope": "P0 beta"
+  },
+  "durationsMs": {
+    "instant": 120,
+    "fast": 160,
+    "normal": 240,
+    "surface": 300,
+    "map": 420,
+    "success": 480,
+    "searchCycle": 1900,
+    "ambient": 9000
+  },
+  "easings": {
+    "enter": "cubic-bezier(0.16, 1, 0.3, 1)",
+    "state": "cubic-bezier(0.4, 0, 0.2, 1)",
+    "exit": "cubic-bezier(0.4, 0, 1, 1)"
+  },
+  "staggerMs": 24,
+  "springPolicy": {
+    "genericSpring": false,
+    "rule": "Usar timings/easings aprobados por defecto. Spring físico solo para drag/snap si la arquitectura lo requiere; no inventar stiffness/damping/mass creativos."
+  },
+  "interactionRules": {
+    "buttonPressScale": 0.98,
+    "inputErrorShakeMaxPx": 3,
+    "screenPushTranslateXPx": 16,
+    "searchPulseScaleFrom": 0.65,
+    "searchPulseScaleTo": 1.35,
+    "searchPulseOpacityFrom": 0.45,
+    "searchPulseOpacityTo": 0,
+    "searchPulseMaxRings": 2,
+    "pinEnterTranslateYPx": -6
+  },
+  "haptics": {
+    "buttonChip": "light",
+    "toggle": "light",
+    "requestRide": "medium",
+    "driverFound": "success",
+    "driverArrived": "medium",
+    "pinCorrect": "success",
+    "pinIncorrect": "error",
+    "routeChangeApproved": "success",
+    "routeChangeRejected": "medium",
+    "tripCompleted": "success",
+    "paymentSuccess": "success",
+    "paymentFailure": "error",
+    "securityAlert": "warning"
+  },
+  "reducedMotion": {
+    "respectSystemPreference": true,
+    "navigation": "fade",
+    "disableAmbientGradient": true,
+    "disableDecorativeLoops": true,
+    "searchPulse": "static indicator or subtle opacity only",
+    "routeReveal": "fade instead of progressive draw",
+    "avoidLargeScaleTransforms": true,
+    "neverHideInformation": true
+  },
+  "principles": {
+    "interruptibleFunctionalAnimations": true,
+    "neverDelayCriticalActionsForDecoration": true,
+    "preserveContextOnOffline": true,
+    "vehiclePosition": "interpolate position and heading; never jump between updates",
+    "routeProgress": "active pending segment remains emphasized; completed segment becomes neutral",
+    "backgroundLoopsStopWhenInvisible": true,
+    "preferTransformAndOpacity": true
+  }
+}

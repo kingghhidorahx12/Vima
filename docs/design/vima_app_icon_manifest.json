@@ -1,0 +1,85 @@
+{
+  "status": "P0 approved technical export",
+  "masters": [
+    "vima_app_icon_master.svg",
+    "vima_ios_icon_master.svg",
+    "vima_android_legacy_master.svg",
+    "vima_android_adaptive_foreground_master.svg",
+    "vima_android_adaptive_background_master.svg",
+    "vima_android_monochrome_master.svg"
+  ],
+  "exports": [
+    "vima_ios_icon_1024.png",
+    "vima_android_legacy_1024.png",
+    "vima_android_adaptive_foreground_1024.png",
+    "vima_android_adaptive_background_1024.png",
+    "vima_android_monochrome_1024.png"
+  ],
+  "validation": {
+    "vima_ios_icon_1024.png": {
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        1024,
+        1024
+      ],
+      "has_transparency": false
+    },
+    "vima_android_legacy_1024.png": {
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bbox": [
+        48,
+        48,
+        976,
+        976
+      ],
+      "has_transparency": true
+    },
+    "vima_android_adaptive_foreground_1024.png": {
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bbox": [
+        213,
+        210,
+        811,
+        770
+      ],
+      "has_transparency": true
+    },
+    "vima_android_adaptive_background_1024.png": {
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        1024,
+        1024
+      ],
+      "has_transparency": false
+    },
+    "vima_android_monochrome_1024.png": {
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_bbox": [
+        213,
+        209,
+        811,
+        770
+      ],
+      "has_transparency": true
+    }
+  }
+}

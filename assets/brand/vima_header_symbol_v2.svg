@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="t d">
+<title id="t">Símbolo Vima para header</title>
+<desc id="d">V blanca y verde con pin rojo, sin fondo.</desc>
+<defs>
+  <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#00D68F"/>
+    <stop offset="100%" stop-color="#2DFFB3"/>
+  </linearGradient>
+</defs>
+<path d="M11 24 C17 31 24 41 32 50" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M53 24 C47 32 40 41 32 50" fill="none" stroke="url(#g)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M32 5 C23 5 17 12 17 20 C17 31 32 43 32 43 C32 43 47 31 47 20 C47 12 41 5 32 5 Z" fill="#FF3830"/>
+<circle cx="32" cy="19" r="5" fill="#0B0F0E"/>
+</svg>

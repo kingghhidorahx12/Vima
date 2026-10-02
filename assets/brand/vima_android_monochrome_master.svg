@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<g transform="translate(512 512) scale(0.92) translate(-512 -512)" fill="#000000" stroke="#000000">
+  <path d="M256 400 C324 480 408 596 512 724"
+        fill="none" stroke-width="136" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M768 400 C696 492 612 600 512 724"
+        fill="none" stroke-width="136" stroke-linecap="round" stroke-linejoin="round"/>
+  <path fill-rule="evenodd" d="
+        M512 184
+        C420 184 352 252 352 340
+        C352 452 512 580 512 580
+        C512 580 672 452 672 340
+        C672 252 604 184 512 184 Z
+        M568 336
+        A56 56 0 1 1 456 336
+        A56 56 0 1 1 568 336 Z"/>
+</g>
+</svg>

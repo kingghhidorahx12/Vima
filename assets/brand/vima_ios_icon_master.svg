@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0B0F0E"/>
+    <stop offset="70%" stop-color="#111816"/>
+    <stop offset="100%" stop-color="#0E221B"/>
+  </linearGradient>
+  <linearGradient id="greenArm" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#00D68F"/>
+    <stop offset="100%" stop-color="#2DFFB3"/>
+  </linearGradient>
+  <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="7"/>
+    <feOffset dy="7"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.22"/></feComponentTransfer>
+    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+
+<rect width="1024" height="1024" fill="url(#bg)"/>
+
+<g fill="none" stroke="#D9DDDC" stroke-width="8" opacity="0.065">
+  <path d="M-40 232 L296 232 L448 80 L700 80 L1064 444"/>
+  <path d="M-72 448 L196 180 L440 424 L672 192 L1096 192"/>
+  <path d="M20 820 L324 516 L548 732 L828 452 L1080 704"/>
+  <path d="M72 64 L72 372 L344 644 L344 1040"/>
+  <path d="M556 -32 L556 268 L828 540 L828 1072"/>
+  <path d="M-80 624 L224 624 L372 476 L604 476 L764 636 L1088 636"/>
+</g>
+
+
+<g filter="url(#softShadow)">
+  <path d="M256 400 C324 480 408 596 512 724"
+        fill="none" stroke="#FFFFFF" stroke-width="136" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M768 400 C696 492 612 600 512 724"
+        fill="none" stroke="url(#greenArm)" stroke-width="136" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M512 184
+           C420 184 352 252 352 340
+           C352 452 512 580 512 580
+           C512 580 672 452 672 340
+           C672 252 604 184 512 184 Z"
+        fill="#FF3830"/>
+  <circle cx="512" cy="336" r="56" fill="#0B0F0E"/>
+</g>
+
+</svg>
