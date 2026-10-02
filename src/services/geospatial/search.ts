@@ -33,7 +33,7 @@ export function createPlaceSearch(client: GeospatialClient, debounceMs: number) 
           void created.catch(() => { if (session === created) session = undefined; });
         }
         const handle = await session;
-        controller.signal.throwIfAborted();
+        if (controller.signal.aborted) throw new GeospatialError('cancelled');
         const results = await handle.autocomplete(input, controller.signal, bias);
         if (sequence !== current || controller.signal.aborted) throw new GeospatialError('cancelled');
         return results;

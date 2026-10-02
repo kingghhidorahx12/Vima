@@ -60,6 +60,33 @@ test('search cancels/ignores old responses, shares session, forwards bias and cl
   assert.ok(paths.includes('/v1/geospatial/places/sessions/test-session'));
 });
 
+test('Suggest works without AbortSignal.throwIfAborted and still cancels stale work', async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'throwIfAborted');
+  assert.ok(descriptor);
+  Reflect.deleteProperty(AbortSignal.prototype, 'throwIfAborted');
+  try {
+    assert.equal('throwIfAborted' in new AbortController().signal, false);
+    let resolveOld!: (value: unknown) => void; let oldStarted!: () => void;
+    const started = new Promise<void>(resolve => { oldStarted = resolve; });
+    const client = createGeospatialClient({ async request(input) {
+      if (input.path.endsWith('/sessions')) return input.decode({ sessionId: 'hermes-session' });
+      if (input.path.endsWith('/autocomplete') && (input.body as { input: string }).input === 'old') {
+        oldStarted(); return input.decode(await new Promise(resolve => { resolveOld = resolve; }));
+      }
+      return input.decode({ suggestions: [{ id: 'new', name: 'New', address: '' }] });
+    } }, 500);
+    const search = createPlaceSearch(client, 0);
+    const old = search.suggest('old').catch(error => error);
+    await started;
+    assert.equal((await search.suggest('new'))[0]?.id, 'new');
+    resolveOld({ suggestions: [{ id: 'old', name: 'Old', address: '' }] });
+    assert.equal((await old).code, 'cancelled');
+    const aborted = new AbortController(); aborted.abort();
+    await assert.rejects(search.suggest('cancelled', aborted.signal), { code: 'cancelled' });
+    search.close();
+  } finally { Object.defineProperty(AbortSignal.prototype, 'throwIfAborted', descriptor); }
+});
+
 test('DEV fixture opt-in, private HTTP restriction and no credentials over LAN HTTP', async () => {
   assert.equal(resolveGeoMode(false, '1', undefined), 'unconfigured');
   assert.equal(resolveGeoMode(true, undefined, 'https://vima.example'), 'live');

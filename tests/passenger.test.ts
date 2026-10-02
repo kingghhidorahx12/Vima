@@ -125,6 +125,7 @@ test('live suggestions resolve before selection; stale selection cannot overwrit
   try {
     await settle(harness);
     await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Suggestion'));
     await settle(harness);
     await harness.act(async () => press(tree, 'Suggestion, Atlacomulco'));
     assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination, null);
@@ -136,6 +137,36 @@ test('live suggestions resolve before selection; stale selection cannot overwrit
     await settle(harness);
     assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination.id, fixturePlaces[2]!.id);
     assert.equal(harness.mounted.map, 1);
+  } finally { await harness.act(async () => tree.unmount()); harness.client.clear(); fixture.controls.dispose(); }
+});
+
+test('clearing or whitespace-only search cancels Suggest, removes loading and ignores a late result', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  const old = deferred<readonly { id: string; name: string; address: string }[]>();
+  const calls: string[] = []; let closes = 0;
+  const gateway: PassengerGateway = { ...fixture.gateway, source: 'server',
+    suggestPlaces: async (query) => { calls.push(query); return query === 'old' ? old.promise : []; },
+    closePlaces() { closes++; } };
+  const harness = createHarness(); const tree: ReactTestRenderer = await harness.render(gateway);
+  const searchSpinners = () => nativeNodes(tree, 'ActivityIndicator').filter(node => node.props.accessibilityLabel !== 'Mapa');
+  try {
+    await settle(harness);
+    await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await settle(harness);
+    assert.deepEqual(calls, []); assert.equal(searchSpinners().length, 0);
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('old'));
+    await settle(harness);
+    assert.deepEqual(calls, ['old']);
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText(''));
+    await settle(harness);
+    assert.equal(searchSpinners().length, 0);
+    await harness.act(async () => old.resolve([{ id: 'old', name: 'Old result', address: 'Atlacomulco' }]));
+    await settle(harness);
+    assert.ok(!text(tree).includes('Old result'));
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('   '));
+    await settle(harness);
+    assert.deepEqual(calls, ['old']); assert.equal(searchSpinners().length, 0);
+    assert.ok(closes > 0);
   } finally { await harness.act(async () => tree.unmount()); harness.client.clear(); fixture.controls.dispose(); }
 });
 
@@ -153,6 +184,7 @@ test('destination is editable while locating; late automatic origin never overwr
     await harness.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`));
     assert.ok(text(tree).includes('Obteniendo tu ubicación...'));
     await harness.act(async () => press(tree, 'Origen'));
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Centro'));
     await settle(harness);
     await harness.act(async () => press(tree, `${fixturePlaces[2]!.name}, ${fixturePlaces[2]!.address}`));
     await harness.act(async () => location.resolve(fixturePlaces[0]!));
@@ -174,6 +206,7 @@ test('geolocation failure permits manual origin without a permission requirement
     assert.ok(text(tree).includes('No se pudo obtener tu ubicación'));
     assert.ok(!text(tree).includes('Device location unavailable'));
     await harness.act(async () => press(tree, 'Origen'));
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Plaza'));
     await settle(harness);
     await harness.act(async () => press(tree, `${fixturePlaces[0]!.name}, ${fixturePlaces[0]!.address}`));
     assert.equal(nativeNode(tree, 'PassengerMapContent').props.origin.id, fixturePlaces[0]!.id);
@@ -447,6 +480,7 @@ test('missing location requires an explicit valid origin; recoverable request fa
     await settle(harness);
     assert.ok(!text(tree).includes('Confirma tu viaje'));
     await harness.act(async () => press(tree, 'Origen'));
+    await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Plaza'));
     await settle(harness);
     await harness.act(async () => press(tree, `${fixturePlaces[0]!.name}, ${fixturePlaces[0]!.address}`));
     await settle(harness);

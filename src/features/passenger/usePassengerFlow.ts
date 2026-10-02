@@ -33,7 +33,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const origin = originChoice?.place ?? location.data ?? null;
   const places = useQuery({ queryKey: ['passenger', gateway.scope, 'places', field, search, origin?.coordinate],
     queryFn: ({ signal }) => gateway.suggestPlaces ? gateway.suggestPlaces(search, signal, origin?.coordinate) : gateway.findPlaces(search, signal),
-    enabled: field !== null, retry: false, gcTime: 0, staleTime: 0 });
+    enabled: field !== null && search.trim().length > 0, retry: false, gcTime: 0, staleTime: 0 });
   useEffect(() => () => { selection.current?.abort(); gateway.closePlaces?.(); }, [gateway]);
   const cancelSelection = () => { selection.current?.abort(); selection.current = undefined; setResolving(false); setSelectionError(undefined); };
   const originStatus: OriginStatus = originChoice?.kind ?? (location.isPending ? 'loading' : location.data ? 'automatic' : 'unavailable');
@@ -143,9 +143,11 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   };
   const error = selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? places.error;
   return { phase, connection, origin, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
-    locationAvailable: !!location.data, field, search, setSearch: (value: string) => { cancelSelection(); setFollowUpResults(undefined); setSearch(value); },
-    places: followUpResults?.query === search ? followUpResults.results : places.data ?? [], recents: recents.data ?? [],
-    loadingPlaces: places.isFetching || resolving, loadingQuote: quote.isFetching, error,
+    locationAvailable: !!location.data, field, search, setSearch: (value: string) => {
+      cancelSelection(); setFollowUpResults(undefined); if (!value.trim()) gateway.closePlaces?.(); setSearch(value);
+    },
+    places: search.trim() ? followUpResults?.query === search ? followUpResults.results : places.data ?? [] : [], recents: recents.data ?? [],
+    loadingPlaces: !!search.trim() && (places.isFetching || resolving), loadingQuote: quote.isFetching, error,
     canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending), choosePlace, submitSearch, submit, act, edit, schedule,
     openField: (target: 'origin' | 'destination') => {
       if (pending || isMatching(phase) || phase === 'assigned') return;
