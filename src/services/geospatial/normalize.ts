@@ -16,7 +16,11 @@ function number(value: unknown): number {
 export function decodeSession(value: unknown): string { return text(object(value).sessionId); }
 export function decodeSuggestion(value: unknown): PlaceSuggestion {
   const v = object(value);
-  return { id: text(v.id), name: text(v.name), address: text(v.address, true) };
+  if (v.provenance !== undefined && v.provenance !== 'provider' && v.provenance !== 'vima-local') throw new GeospatialError('invalid_result');
+  return { id: text(v.id), name: text(v.name), address: text(v.address, true),
+    ...(v.provenance === undefined ? {} : { provenance: v.provenance }),
+    ...(v.category === undefined ? {} : { category: text(v.category) }),
+    ...(v.regionId === undefined ? {} : { regionId: text(v.regionId) }) };
 }
 export function decodeSuggestions(value: unknown): readonly PlaceSuggestion[] {
   const v = object(value);
@@ -26,6 +30,11 @@ export function decodeSuggestions(value: unknown): readonly PlaceSuggestion[] {
 export function decodePlace(value: unknown): ResolvedPlace {
   try { return { ...decodeSuggestion(value), coordinate: normalizeCoordinate(object(value).coordinate) }; }
   catch { throw new GeospatialError('invalid_result'); }
+}
+export function decodeOptionalPlace(value: unknown): ResolvedPlace {
+  const v = object(value);
+  if (v.result === null) throw new GeospatialError('no_result');
+  return decodePlace(v.result);
 }
 export function decodeRoute(value: unknown): RouteResult {
   try {

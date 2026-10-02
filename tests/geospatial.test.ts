@@ -1,24 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { resolveMapProvider, optionalGoogleMapId } from '../src/map/provider.ts';
-import { normalizeCoordinate, normalizeBounds } from '../src/map/models.ts';
-import { googleCameraCommand } from '../src/map/google/camera.ts';
+import { normalizeCoordinate, normalizeBounds, fitBounds } from '../src/map/models.ts';
 import { decodeRoute, decodePlace } from '../src/services/geospatial/normalize.ts';
 import { createGeospatialClient } from '../src/services/geospatial/client.ts';
 import { GeospatialError } from '../src/services/geospatial/contracts.ts';
 import { ApiError, type ApiClient, type ApiRequest } from '../src/services/api/client.ts';
-
-test('Android selects Google when configured; release never silently rolls back without key', () => {
-  assert.equal(resolveMapProvider('android', true, true), 'google');
-  assert.equal(resolveMapProvider('android', true, false), 'google');
-  assert.equal(resolveMapProvider('android', false, true), 'maplibre');
-  assert.throws(() => resolveMapProvider('android', false, false), /required/);
-  assert.equal(resolveMapProvider('ios', false, false), 'maplibre');
-  assert.equal(optionalGoogleMapId('  '), undefined);
-  assert.equal(optionalGoogleMapId(undefined), undefined);
-  assert.equal(optionalGoogleMapId(' example-map-id '), 'example-map-id');
-});
+import { approvedLocalPlaces, mergePlaces } from '../src/services/geospatial/localPlaces.ts';
 
 test('Vima Coordinate/Bounds reject invalid data and preserve explicit dateline bounds', () => {
   assert.deepEqual(normalizeCoordinate([-99, 19]), [-99, 19]);
@@ -28,27 +16,10 @@ test('Vima Coordinate/Bounds reject invalid data and preserve explicit dateline 
   assert.throws(() => normalizeBounds({ southwest: [0, 20], northeast: [1, 10] }));
 });
 
-test('Google camera swaps coordinate axes, fits route/bounds and disables animation for Reduced Motion', () => {
-  const target = { center: [-99, 19] as const, zoom: 14, bearing: 45, padding: { bottom: 320 } };
-  const motion = { duration: 300, easing: 'ease' as const };
-  const jump = googleCameraCommand(target, true, motion);
-  assert.equal(jump.kind, 'camera');
-  if (jump.kind === 'camera') {
-    assert.equal(jump.animated, false);
-    assert.deepEqual(jump.camera, { center: { latitude: 19, longitude: -99 }, zoom: 14, heading: 45 });
-  }
-  assert.equal(googleCameraCommand(target, false, motion).animated, true);
-  assert.equal(googleCameraCommand(target, false).animated, false);
-  const fit = googleCameraCommand({ coordinates: [[-99, 19], [-98, 20]], padding: { bottom: 320 } }, true, motion);
-  assert.equal(fit.kind, 'fit');
-  if (fit.kind === 'fit') {
-    assert.equal(fit.options.animated, false);
-    assert.equal(fit.options.edgePadding.bottom, 0); // MapView owns sheet padding.
-    assert.deepEqual(fit.coordinates, [{ longitude: -99, latitude: 19 }, { longitude: -98, latitude: 20 }]);
-  }
-  const bounds = googleCameraCommand({ bounds: { southwest: [-99, 19], northeast: [-98, 20] } }, false);
-  assert.equal(bounds.kind, 'fit');
-  assert.throws(() => googleCameraCommand({ coordinates: [] }, false));
+test('MapLibre fit preserves longitude order, route extent and dateline short arc', () => {
+  assert.deepEqual(fitBounds([[-99, 19], [-98, 20], [-97, 18]]), [-99, 18, -97, 20]);
+  assert.deepEqual(fitBounds([[179, 1], [-179, 2]]), [179, 1, -179, 2]);
+  assert.throws(() => fitBounds([]));
 });
 
 const routePayload = {
@@ -77,25 +48,56 @@ test('Places session spans autocomplete calls, resolves once and cannot be reuse
   const api = apiWith(input => {
     calls.push(input);
     if (input.path.endsWith('/sessions')) return { sessionId: 'opaque-session' };
-    if (input.path.endsWith('/autocomplete')) return { suggestions: [{ id: 'p', name: 'Lugar', address: 'Dirección' }] };
+    if (input.path.endsWith('/autocomplete') || input.path.endsWith('/search')) return { suggestions: [{ id: 'p', name: 'Lugar', address: 'Dirección' }] };
     if (input.path.endsWith('/resolve')) return { id: 'p', name: 'Lugar', address: 'Dirección', coordinate: [-99, 19] };
     return routePayload;
   });
   const client = createGeospatialClient(api, 1000);
   const session = await client.startPlacesSession();
-  await session.autocomplete('lu'); await session.autocomplete('lugar');
+  await session.autocomplete('lu'); await session.autocomplete('lugar'); await session.search('lugar');
   await session.resolve('p');
   assert.throws(() => session.autocomplete('again'), /search_unavailable/);
   await assert.rejects(() => session.resolve('p'), /search_unavailable/);
   await session.close();
   const result = await client.route({ origin: [-99, 19], destination: [-98, 20], stops: [] });
   assert.equal(result.distanceMeters, 1234);
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   assert.ok(calls.every(c => c.path.startsWith('/v1/geospatial/')));
-  assert.deepEqual(calls[3]!.body, { id: 'p' });
+  assert.deepEqual(calls[4]!.body, { id: 'p' });
   const cancelled = await client.startPlacesSession();
   await cancelled.close();
   assert.equal(calls.at(-1)!.method, 'DELETE');
+});
+
+test('forward and reverse geocoding stay behind the Vima API and normalize no-result', async () => {
+  const calls: ApiRequest<unknown>[] = [];
+  const client = createGeospatialClient(apiWith(input => { calls.push(input); return { result: {
+    id: 'address-1', name: 'Dirección', address: 'Atlacomulco', coordinate: [-99.87, 19.8],
+    provenance: 'provider', raw: 'discard',
+  } }; }), 1000);
+  assert.equal((await client.geocode('Dirección')).address, 'Atlacomulco');
+  assert.deepEqual(await client.reverseGeocode([-99.87, 19.8]), {
+    id: 'address-1', name: 'Dirección', address: 'Atlacomulco', coordinate: [-99.87, 19.8], provenance: 'provider',
+  });
+  assert.deepEqual(calls.map(call => call.path), ['/v1/geospatial/geocode', '/v1/geospatial/reverse-geocode']);
+  assert.deepEqual(calls[1]!.body, { coordinate: [-99.87, 19.8] });
+  const missing = createGeospatialClient(apiWith(() => ({ result: null })), 1000);
+  await assert.rejects(missing.geocode('unknown'), { message: 'no_result' });
+  await assert.rejects(missing.reverseGeocode([0, 0]), { message: 'no_result' });
+});
+
+test('local places stay empty until validated and regional rank requires supplied calibration', () => {
+  assert.deepEqual(approvedLocalPlaces, []);
+  const provider = [{ id: 'remote', name: 'Intermunicipal', address: '', coordinate: [-100, 20] as const,
+    provenance: 'provider' as const, regionId: 'other' }];
+  const local = [{ id: 'local', name: 'Local validado', address: '', coordinate: [-99.87, 19.8] as const,
+    provenance: 'vima-local' as const, regionId: 'atlacomulco' }];
+  assert.deepEqual(mergePlaces(provider, local), [...provider, ...local]);
+  assert.deepEqual(mergePlaces(provider, local, { origin: [-99.87, 19.8], initialRegionId: 'atlacomulco',
+    nearbyRegionIds: [], distanceWeight: 1, initialRegionBoost: 1, nearbyRegionBoost: 0 }), [local[0], provider[0]]);
+  assert.deepEqual(mergePlaces([...provider, ...provider], local).length, 2);
+  assert.throws(() => mergePlaces(provider, local, { origin: [0, 0], initialRegionId: 'atlacomulco',
+    nearbyRegionIds: [], distanceWeight: -1, initialRegionBoost: 0, nearbyRegionBoost: 0 }));
 });
 
 test('geospatial transport sanitizes provider failures, timeout, cancellation and bad 2xx', async () => {
@@ -112,19 +114,20 @@ test('geospatial transport sanitizes provider failures, timeout, cancellation an
   await assert.rejects(invalid.route({ origin: [-99, 19], destination: [-98, 20], stops: [] }), { message: 'invalid_result' });
 });
 
-test('feature boundaries contain no native provider types; legacy remains and server credentials never enter mobile code', () => {
+test('feature boundaries contain no native provider types or server credentials', () => {
   const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry =>
     entry.isDirectory() ? files(dir + '/' + entry.name) : [dir + '/' + entry.name]);
   const features = files('src/features').filter(f => /\.tsx?$/.test(f)).map(f => readFileSync(f, 'utf8')).join('\n');
   assert.doesNotMatch(features, /@maplibre|from ['"]react-native-maps|google\.maps/);
   const mobile = [...files('src'), ...files('app'), 'app.config.ts'].filter(f => /\.tsx?$/.test(f)).map(f => readFileSync(f, 'utf8')).join('\n');
+  assert.doesNotMatch(mobile, /from ['"]react-native-maps|require\(['"]react-native-maps|PROVIDER_GOOGLE|GOOGLE_MAPS_ANDROID_API_KEY|EXPO_PUBLIC_GOOGLE_MAP_ID/);
+  assert.doesNotMatch(mobile, /api\.tomtom\.com|TomTom-Api-Key|TOMTOM_API_KEY/);
   assert.doesNotMatch(mobile, /GOOGLE_PLACES_API_KEY|GOOGLE_ROUTES_API_KEY|places\.googleapis\.com|routes\.googleapis\.com/);
   assert.doesNotMatch(mobile, /AIza[\w-]{30,}/);
-  assert.match(readFileSync('src/map/legacy/VimaMap.tsx', 'utf8'), /@maplibre/);
+  assert.match(readFileSync('src/map/VimaMap.tsx', 'utf8'), /@maplibre/);
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   assert.ok(pkg.dependencies['@maplibre/maplibre-react-native']);
-  assert.equal(pkg.dependencies['react-native-maps'], '1.27.2');
+  assert.equal(pkg.dependencies['react-native-maps'], undefined);
   const config = readFileSync('app.config.ts', 'utf8');
-  assert.match(config, /process\.env\.GOOGLE_MAPS_ANDROID_API_KEY/);
-  assert.doesNotMatch(config, /EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY/);
+  assert.doesNotMatch(config, /GOOGLE_MAPS|googleMaps|with-google/);
 });

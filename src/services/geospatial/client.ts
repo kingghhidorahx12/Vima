@@ -1,9 +1,9 @@
 import { ApiError, type ApiClient, type ApiRequest } from '../api/client.ts';
 import { normalizeCoordinate } from '../../map/models.ts';
 import { GeospatialError, type GeospatialErrorCode, type PlacesSession, type RouteRequest } from './contracts.ts';
-import { decodePlace, decodeRoute, decodeSession, decodeSuggestions } from './normalize.ts';
+import { decodeOptionalPlace, decodePlace, decodeRoute, decodeSession, decodeSuggestions } from './normalize.ts';
 
-/** Dormant until a Vima HTTPS backend is supplied. No Google URL or key belongs here. */
+/** Dormant until a Vima HTTPS backend is supplied. Provider credentials never enter the app. */
 export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('A positive backend timeout is required');
   async function request<T>(input: ApiRequest<T>, unavailable: GeospatialErrorCode): Promise<T> {
@@ -24,6 +24,7 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
       if (input.signal?.aborted) throw new GeospatialError('cancelled');
       if (error instanceof GeospatialError) throw error;
       if (error instanceof ApiError) {
+        if (error.status === 404) throw new GeospatialError('no_result');
         if (error.status === 408 || error.status === 504) throw new GeospatialError('timeout');
         throw new GeospatialError(unavailable);
       }
@@ -44,9 +45,14 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
           return request({ path: path + '/autocomplete', method: 'POST', body: { input },
             decode: decodeSuggestions, signal }, 'search_unavailable');
         },
+        search(input, signal) {
+          requireOpen();
+          return request({ path: path + '/search', method: 'POST', body: { input },
+            decode: decodeSuggestions, signal }, 'search_unavailable');
+        },
         async resolve(id, signal) {
           requireOpen();
-          // Details consumes a session even after an ambiguous network response. Never reuse it.
+          // Resolve closes this Vima session handle even after an ambiguous network response.
           closed = true;
           return request({ path: path + '/resolve', method: 'POST', body: { id },
             decode: decodePlace, signal }, 'search_unavailable');
@@ -57,6 +63,17 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
           await request({ path, method: 'DELETE', decode: () => undefined, signal }, 'search_unavailable');
         },
       };
+    },
+    geocode(input: string, signal?: AbortSignal) {
+      if (!input.trim()) throw new GeospatialError('invalid_result');
+      return request({ path: '/v1/geospatial/geocode', method: 'POST', body: { input },
+        decode: decodeOptionalPlace, signal }, 'geocoding_unavailable');
+    },
+    reverseGeocode(coordinate: readonly [number, number], signal?: AbortSignal) {
+      let point;
+      try { point = normalizeCoordinate(coordinate); } catch { throw new GeospatialError('invalid_result'); }
+      return request({ path: '/v1/geospatial/reverse-geocode', method: 'POST', body: { coordinate: point },
+        decode: decodeOptionalPlace, signal }, 'geocoding_unavailable');
     },
     route(input: RouteRequest, signal?: AbortSignal) {
       let body: RouteRequest;
