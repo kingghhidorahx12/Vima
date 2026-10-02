@@ -22,23 +22,23 @@ Montar `PassengerRideShell` o `DriverRideShell` una vez en la ruta del viaje. Pa
 
 Se conserva el contrato de bajo nivel `RideSheetInteraction`. Su función `settle` debe ser worklet; el factory utiliza el snap más cercano, sin umbral de velocidad/distancia inventado. Los límites de activación/fallo del gesto son opcionales, sin números visuales arbitrarios: pueden aportarse al resolver la convivencia con controles/scroll de una pantalla aprobada. Un simple tap no cancela ni cambia el snap. No hay handle dibujado: sus dimensiones exactas no se proporcionaron. Sin geometría el componente sigue siendo un contenedor estático; no calcula una altura productiva por su cuenta.
 
-## Mapa y movimiento (contrato histórico MapLibre)
+## Mapa y movimiento
 
-La migración vigente está en [GOOGLE_GEOSPATIAL.md](GOOGLE_GEOSPATIAL.md): CameraTarget y apariencia Vima, Google Android, Places/Routes sólo backend y legacy transitorio. El siguiente texto documenta el adaptador MapLibre retenido; sus tipos paint/layout/sprites no son el contrato nuevo de las features.
+La integración vigente está en [TOMTOM_GEOSPATIAL.md](TOMTOM_GEOSPATIAL.md): MapLibre móvil con modelos Vima neutrales, style TomTom Orbis pendiente y web-services exclusivamente detrás del backend Vima. Los tipos paint/layout/sprites de MapLibre no son el contrato de las features.
 
-`VimaMap` usa la URL pública. `Camera` usa `jumpTo` si Reduced Motion está activo o falta configuración; con configuración aprobada usa `setStop`. No se seleccionó proveedor ni viewport de producto.
+`VimaMap` usa la URL pública. `Camera` usa `setStop` con duración cero si Reduced Motion está activo o falta motion aprobado; con motion aprobado usa su duración. No se seleccionó viewport de producto.
 
 `mapColors` resuelve origen verde, destino rojo, completado gris, comunicación azul y espera ámbar. `locationColor` exige contexto azul/verde; `routeColor` exige tono activo carbón/verde profundo. No se selecciona contexto por heurística.
 
-`RouteLayer` exige `state`, `activeTone`, `line-width` y `line-opacity` (incluidas expresiones por zoom cuando se aprueben). Dibuja la geometría autoritativa durante 420/state; con Reduced Motion conserva la geometría completa y hace fade. `reveal=false` muestra la ruta inmediatamente. Cambiar sólo propiedades o identidad JS no reinicia el reveal; sí cambiar la geometría. El segmento completado transiciona a gris con el token map. El adaptador de backend debe suministrar los segmentos reales activo/completado; no se deducen con datos ficticios. La propuesta de cambio de ruta no sustituye la ruta vigente hasta confirmación.
+`RouteLayer` exige `state`, `activeTone`, width y opacity Vima; los valores por zoom siguen pendientes. Dibuja la geometría autoritativa durante 420/state; con Reduced Motion conserva la geometría completa y hace fade. `reveal=false` muestra la ruta inmediatamente. Cambiar sólo propiedades o identidad JS no reinicia el reveal; sí cambiar la geometría. El segmento completado transiciona a gris con el token map. El adaptador de backend debe suministrar los segmentos reales activo/completado; no se deducen con datos ficticios. La propuesta de cambio de ruta no sustituye la ruta vigente hasta confirmación.
 
-Las animaciones de ruta actualizan propiedades/geometría de la fuente GeoJSON nativa desde worklets; no hay `setState` por frame. `VehicleLayer` rota el símbolo con el heading interpolado, alineado al mapa. Vehículo/destinos requieren sprites aprobados (estilo o `Images`); el destino requiere un sprite SDF tintable para aplicar el rojo semántico. No se seleccionaron iconos ni se generaron vehículos ficticios.
+Las animaciones de ruta actualizan propiedades/geometría de la fuente GeoJSON nativa desde worklets; no hay `setState` por frame. `VehicleLayer` usa el círculo aprobado para el estado actual y transporta heading interpolado en GeoJSON; un símbolo de vehículo orientado requiere asset aprobado. Los pines de origen/destino conservan su artwork Vima actual.
 
 El transporte escribe `VehicleSample` en un `SharedValue` estable. `VehicleLayer` consume ese valor sin un `setState` por muestra/frame. Interpolación y serialización GeoJSON corren en worklets y actualizan la fuente nativa mediante `useAnimatedProps`. La salida visual se limita a 12 Hz, dentro del rango técnico de 10–15 Hz solicitado. La cadencia no es un timing de producto.
 
 `createVehicleMotion(shouldSnap)` conecta el token map=420/state al contrato `VehicleMotionConfig`; el criterio `shouldSnap` sigue siendo obligatorio porque no hay umbral de gran salto aprobado. Las funciones deben ser worklets. Sin configuración, con Reduced Motion o con `reconnected`, aplica snap según el contrato técnico previo. `VehicleSample` exige posición, heading finito [0,360) y secuencia autoritativa; no se inventa una orientación norte cuando falta heading. La posición cruza el antimeridiano por el trayecto corto y el heading cruza 360/0 por el arco corto. Una muestra nueva continúa desde la pose visual actual.
 
-Marcar la primera muestra tras reconexión con `reconnected: true`; usar secuencias crecientes para descartar muestras fuera de orden. Crear una nueva fuente de muestras al cambiar la identidad del vehículo. La cámara conserva su contrato explícito y `jumpTo` con Reduced Motion: la API MapLibre sólo expone linear/ease/fly, por lo que no se equiparan arbitrariamente a las curvas Bézier del handoff.
+Marcar la primera muestra tras reconexión con `reconnected: true`; usar secuencias crecientes para descartar muestras fuera de orden. Crear una nueva fuente de muestras al cambiar la identidad del vehículo. La cámara conserva su contrato explícito y duración cero con Reduced Motion: la API MapLibre sólo expone linear/ease/fly, por lo que no se equiparan arbitrariamente a las curvas Bézier del handoff.
 
 ## Autoridad y persistencia
 

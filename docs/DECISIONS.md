@@ -9,7 +9,7 @@ Este documento registra las decisiones proporcionadas en la solicitud y reflejad
 | Hermes / New Architecture | Defaults nativos de SDK 57/RN 0.86; no se añaden los campos legados jsEngine/newArchEnabled retirados del esquema. Se comprueba su configuración generada con prebuild. |
 | Expo Router como única navegación | `expo-router/entry`, `app/_layout.tsx`, rutas dentro de `app/`. |
 | Development Builds desde el inicio | `expo-dev-client`, scripts nativos y perfiles EAS development. |
-| Google Maps SDK objetivo Android | react-native-maps 1.27.2 elegido por Expo 57, PROVIDER_GOOGLE, key de build y Map ID opcional. MapLibre 11.4 se conserva temporalmente para rollback/paridad e iOS; no se retira antes de signoff Android físico. |
+| MapLibre renderer móvil Android/iOS | MapLibre React Native 11.4 vuelve a ser activo; TomTom Orbis Map Display/Assets suministrará el style compatible cuando se apruebe su configuración. La migración Google permanece sólo en su rama histórica. |
 | Reanimated 4.5.x + Worklets | Versiones seleccionadas por Expo; transformación mediante `babel-preset-expo`. |
 | Gesture Handler ~2.32 | Root view y base gestual propia del sheet. |
 | TanStack Query remoto / Zustand sólo UI | QueryClient, trip queries/comandos/reconciliación; store de interacción efímera. |
@@ -20,11 +20,12 @@ Este documento registra las decisiones proporcionadas en la solicitud y reflejad
 | Sistema visual propio, sin UI kit | Tokens importados directamente del JSON aprobado, tema claro e Inter 400/500/600/700. Sin NativeWind, Paper ni Tamagui. |
 | VimaRideSheet propio | Gesture Handler + Reanimated; offsets 24/52/88% delimitan drag y cada estado define sus `allowedOffsets` finales. Los estados P0 actuales son single-snap y siempre regresan a su `targetOffset` con `motionTimings.sheetSnap`; sólo un estado que declare varios offsets puede asentarse en varios. Radio 28, entrada 300 ms, cierre 240 ms y drag 1:1. Sin bottom-sheet externo ni spring genérico. |
 | Shells persistentes / fases internas | PassengerRideShell y DriverRideShell comparten RideShell sin key por fase. |
-| Modelos Vima agnósticos | Coordinate/Bounds/CameraTarget/GeoJSON internos. Google usa Polyline/Marker; MapLibre conserva sus sources/layers. Vehículo sin render React por frame. |
+| Modelos Vima agnósticos | Coordinate/Bounds/CameraTarget/GeoJSON y apariencias internos. MapLibre traduce a sources/layers/markers dentro de `src/map/`. Vehículo sin render React por frame. |
 | Vehicle motion 10–15 Hz / snap configurable | Worklets con salida a 12 Hz y criterio de salto inyectado; sin umbral arbitrario. |
 | Reduced Motion central para UI y mapa | Provider del SO/preferencia local; navegación y ruta por fade, sin draw/scales/loops decorativos, vehículo/cámara con snap según el contrato técnico previo. |
-| Configuración Google por entorno; MapLibre transitorio | GOOGLE_MAPS_ANDROID_API_KEY sólo build, Map ID público opcional. Android configurado usa Google; DEV sin key advierte y usa MapLibre; release Android sin key falla explícitamente. Style Google Cloud pendiente. MapTiler Cloud Flex/Streets Pastel deja de ser objetivo productivo; Positron y la URL legacy sólo se conservan para rollback/iOS. |
-| Places API (New) y Routes API exclusivamente backend | Credenciales separadas/restringidas sólo en servidor, DRIVE/TRAFFIC_AWARE, sesiones autocomplete y respuestas normalizadas. Sin backend en este repo: contratos/adapters móviles preparados, endpoints y conexión live pendientes; no llamadas móviles a Google Places/Routes. |
+| Configuración style TomTom por entorno | `EXPO_PUBLIC_MAP_STYLE_URL` es la entrada única al style compatible de Orbis Assets/Map Display. URL/key/style finales pendientes. DEV sin URL usa OpenFreeMap Positron sólo para revisión; release sin URL falla explícitamente. |
+| Servicios TomTom exclusivamente backend | Places Search v3, Geocoding v2, Reverse Geocoding v2 y Routing v3 con tráfico live. La app usa sólo el contrato HTTPS Vima normalizado. Sin backend en este repo: adaptador móvil preparado; endpoints live, autenticación servidor y credenciales pendientes. |
+| Ranking regional y Vima Local Places | Favorecer cercanía al origen/usuario, Atlacomulco y región inicial, expandir a municipios cercanos sin excluir trayectos intermunicipales, y mezclar proveedor con lugares locales validados. Pesos/radios/POI y lista regional exacta aún no aprobados: política tipada sin default productivo y catálogo vacío. |
 | Visual System v1 y Motion System v1 como fuentes de verdad P0 | Los JSON de `docs/design/` suministran tokens exactos; el handoff Markdown define semántica, comportamiento y límites. No se reinterpretan mockups como reglas funcionales. |
 | Semántica de mapa aprobada | Origen verde, destino rojo, ruta activa carbón/verde profundo según contexto y completada gris; posición y heading interpolados. |
 | Límites del handoff | No definir tema oscuro exacto, assets maestros, estilo final del mapa, grosores/opacidades por zoom, iconografía/stroke ni dimensiones aún no fijadas. |
@@ -47,4 +48,4 @@ Fuentes aprobadas incorporadas: [handoff final v1](design/VIMA_VISUAL_MOTION_HAN
 
 Fuentes técnicas contrastadas con el código instalado: [SDK 57](https://expo.dev/changelog/sdk-57), [Router](https://docs.expo.dev/router/installation/), [Reanimated en SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/reanimated/), [MapLibre Expo](https://maplibre.org/maplibre-react-native/docs/setup/expo/) y [API v11](https://maplibre.org/maplibre-react-native/docs/setup/migrations/v11/).
 
-Migración vigente: [Google geoespacial Android P0](GOOGLE_GEOSPATIAL.md), con configuración, contratos backend, verificaciones y límites de paridad. La decisión Google sustituye la dirección MapTiler productiva previa sin eliminar todavía la implementación MapLibre.
+Integración vigente: [TomTom geoespacial P0](TOMTOM_GEOSPATIAL.md), con MapLibre activo, contratos backend y límites de verificación. El trabajo neutral creado durante la rama Google se conserva; esa rama no se reescribió.

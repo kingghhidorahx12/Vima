@@ -1,20 +1,20 @@
 # Vima P0
 
-Bootstrap nativo en la raíz del repositorio. Expo SDK 57, React Native 0.86, TypeScript strict, Hermes, New Architecture y Expo Router. Requiere Development Build. Google Maps es el objetivo Android; MapLibre se conserva temporalmente para paridad/iOS.
+Bootstrap nativo en la raíz del repositorio. Expo SDK 57, React Native 0.86, TypeScript strict, Hermes, New Architecture y Expo Router. Requiere Development Build. MapLibre es el renderer móvil; TomTom Orbis es la plataforma geoespacial P0 pendiente de backend/style live.
 
 ## Desarrollo
 
 1. Instalar Node compatible con `package.json` y ejecutar `npm ci`.
-2. Copiar `.env.example` a `.env.local` (ignorado). Configurar GOOGLE_MAPS_ANDROID_API_KEY restringida al package/SHA-1 del APK y, opcionalmente, EXPO_PUBLIC_GOOGLE_MAP_ID. Ver [configuración Google](docs/GOOGLE_GEOSPATIAL.md); nunca versionar keys.
+2. Copiar `.env.example` a `.env.local` (ignorado). Configurar `EXPO_PUBLIC_MAP_STYLE_URL` sólo al disponer del style Orbis aprobado. Ver [contrato TomTom](docs/TOMTOM_GEOSPATIAL.md); las credenciales web-service pertenecen exclusivamente al backend.
 3. Con el toolchain de Android configurado: `npm run android`. En macOS con Xcode/CocoaPods: `npm run ios`.
 4. Alternativamente, generar el APK Android en EAS siguiendo los pasos siguientes. Para simulador iOS, usar `development-simulator`.
-5. Instalar un Development Build nuevo con react-native-maps y ejecutar `npm start`. La key debe estar disponible también al resolver el config del Metro local. Los módulos nativos no se incorporan por recarga JS.
+5. Instalar un Development Build nuevo tras retirar el módulo nativo Google y ejecutar `npm start`. Los módulos nativos no se incorporan por recarga JS.
 
 La entrada de desarrollo abre `/dev/passenger`: Inicio → Confirmar ubicaciones → Confirma tu viaje → Buscando un conductor → Búsqueda prolongada / Conductor asignado. Los controles de escenarios están separados en el menú del Development Client, bajo **Vima · controles de prueba**; no ocupan la pantalla de producto. Las instrucciones están en [PASSENGER_P0.md](docs/PASSENGER_P0.md). La entrada productiva sigue pendiente de gateway/configuración reales y excluye estos fixtures.
 
 `/dev/bootstrap` conserva las comprobaciones técnicas anteriores de Router/providers/Inter/MapLibre/sheet. Ambas rutas están protegidas por `__DEV__` y no representan datos ni servicios reales.
 
-Android usa Google cuando la key está configurada. DEV sin key advierte y usa MapLibre con OpenFreeMap Positron (o la URL legacy configurada); release Android sin key falla explícitamente. Google estándar funciona sin Map ID; el style Vima definitivo sigue pendiente. Places/Routes live requieren backend y permanecen desconectados.
+Android/iOS usan MapLibre. DEV sin style URL usa OpenFreeMap Positron; release sin URL falla explícitamente. El style Orbis Vima definitivo sigue pendiente. Search/Geocoding/Reverse/Routing live requieren backend y permanecen desconectados.
 
 Para ocultar el engrane flotante **Tools** en el Development Build, abrir el menú de desarrollo de Expo (agitar el teléfono) y desactivar **Tools button**. Los controles de fixtures siguen accesibles en ese menú mediante **Vima · controles de prueba**; el cambio es una preferencia del Development Client y no altera la UI de Vima.
 
@@ -47,7 +47,7 @@ Cuando termine, abrir el enlace del APK en el teléfono Android e instalarlo. En
 - `docs/design/`: handoff final y JSON aprobados, fuentes de verdad P0 sin modificaciones.
 - `src/design/`: tokens derivados del JSON, Inter/tema claro, primitives y `VimaRideSheet`.
 - `src/motion/`: Motion System v1, Reduced Motion central, helpers y catálogo de haptics semánticos.
-- `src/map/`: modelos Vima, Google Android y adaptadores MapLibre transitorios.
+- `src/map/`: modelos Vima y renderer MapLibre activo.
 - `src/features/`: dominios P0; shells de pasajero/conductor persistentes.
 - `src/services/`: API, storage y realtime sin backend simulado.
 
