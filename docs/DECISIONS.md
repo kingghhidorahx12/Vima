@@ -24,14 +24,14 @@ Este documento registra las decisiones proporcionadas en la solicitud y reflejad
 | Vehicle motion 10–15 Hz / snap configurable | Worklets con salida a 12 Hz y criterio de salto inyectado; sin umbral arbitrario. |
 | Reduced Motion central para UI y mapa | Provider del SO/preferencia local; navegación y ruta por fade, sin draw/scales/loops decorativos, vehículo/cámara con snap según el contrato técnico previo. |
 | Configuración style TomTom por entorno | `EXPO_PUBLIC_MAP_STYLE_URL` es la entrada única al style compatible de Orbis Assets/Map Display. URL/key/style finales pendientes. DEV sin URL usa OpenFreeMap Positron sólo para revisión; release sin URL falla explícitamente. |
-| Servicios TomTom exclusivamente backend | Places Search v3, Geocoding v2, Reverse Geocoding v2 y Routing v3 con tráfico live. La app usa sólo el contrato HTTPS Vima normalizado. Sin backend en este repo: adaptador móvil preparado; endpoints live, autenticación servidor y credenciales pendientes. |
-| Ranking regional y Vima Local Places | Favorecer cercanía al origen/usuario, Atlacomulco y región inicial, expandir a municipios cercanos sin excluir trayectos intermunicipales, y mezclar proveedor con lugares locales validados. Pesos/radios/POI y lista regional exacta aún no aprobados: política tipada sin default productivo y catálogo vacío. |
+| Servicios TomTom exclusivamente backend | Places Search v3, Geocoding v2, Reverse Geocoding v2 y Routing v3 con tráfico live. La app usa sólo el contrato HTTPS Vima normalizado. Gateway local P0 Node+TypeScript sin framework: adapters reales, contratos normalizados, validación/rate limit/TTL/timeout y logs sanitizados. Credencial y verificación live pendientes; auth productiva fuera de alcance. |
+| Ranking regional y Vima Local Places | Favorecer cercanía al origen/usuario, Atlacomulco y región inicial, expandir a municipios cercanos sin excluir trayectos intermunicipales, y mezclar proveedor con lugares locales validados. Buckets explicables que priorizan relevancia textual antes de región, preservando orden provider: Atlacomulco y Jocotitlán, San Felipe del Progreso, El Oro, Acambay, Ixtlahuaca, Temascalcingo. Catálogo servidor pequeño con fuentes públicas, independiente de fixtures; sin pesos ni radio restrictivo. |
 | Visual System v1 y Motion System v1 como fuentes de verdad P0 | Los JSON de `docs/design/` suministran tokens exactos; el handoff Markdown define semántica, comportamiento y límites. No se reinterpretan mockups como reglas funcionales. |
 | Semántica de mapa aprobada | Origen verde, destino rojo, ruta activa carbón/verde profundo según contexto y completada gris; posición y heading interpolados. |
 | Límites del handoff | No definir tema oscuro exacto, assets maestros, estilo final del mapa, grosores/opacidades por zoom, iconografía/stroke ni dimensiones aún no fijadas. |
 | Primer bloque de pasajero dentro del shell persistente | Inicio, confirmación, búsqueda/expansión/prolongada y asignación son estados internos, sin una ruta por fase. Una sola categoría principal, sin selector adicional. |
 | Asignación automática autoritativa | Pasajero ve ETA/conductor/PIN/vehículo; no acepta conductor ni inicia viaje. Reasignación y offline conservan contexto. |
-| Fixtures explícitos sólo para desarrollo | Adaptador aislado en `src/dev/passenger`, controles en DevMenu, guard `__DEV__` y comprobación del bundle release. Sin debug en viewport, oferta ficticia ni fixtures en servicios productivos. |
+| Fixtures explícitos sólo para desarrollo | Adaptador aislado en `src/dev/passenger`, controles en DevMenu, guard `__DEV__` más EXPO_PUBLIC_VIMA_FIXTURES=1 y comprobación del bundle release. Live mediante EXPO_PUBLIC_VIMA_API_BASE_URL, sin fallback silencioso. Sin debug en viewport, oferta ficticia ni fixtures en servicios productivos. |
 | Assets/referencias aprobados (histórico) | Header v2 y sus SVG quedan como referencia archivada; la identidad final aprobada posterior los sustituye en runtime. No reconstruir/recolorear ni usar texto runtime. Vehículo/iconografía de producto aún pendientes. |
 | Identidad final aprobada sustituye branding provisional | Header usa `vima_header_lockup_final.png`; app icon iOS/Android y adaptive foreground usan el nuevo artwork aprobado exportado uniformemente a 1024×1024; splash usa `vima_splash_lockup_final.png` sobre fondo blanco. Los PNG fuente quedan intactos. Los antiguos assets P0 de header/icon no se usan en configuración ni UI; se omite monochrome porque no se entregó variante aprobada para la nueva identidad. Se conservan `owner`, EAS projectId, identificadores y plugin/permisos expo-location. |
 | Inicio muestra Origen y Destino | Ambos editables desde el principio; Destino sigue siendo primario. Se reutiliza selección existente. |
@@ -49,3 +49,13 @@ Fuentes aprobadas incorporadas: [handoff final v1](design/VIMA_VISUAL_MOTION_HAN
 Fuentes técnicas contrastadas con el código instalado: [SDK 57](https://expo.dev/changelog/sdk-57), [Router](https://docs.expo.dev/router/installation/), [Reanimated en SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/reanimated/), [MapLibre Expo](https://maplibre.org/maplibre-react-native/docs/setup/expo/) y [API v11](https://maplibre.org/maplibre-react-native/docs/setup/migrations/v11/).
 
 Integración vigente: [TomTom geoespacial P0](TOMTOM_GEOSPATIAL.md), con MapLibre activo, contratos backend y límites de verificación. El trabajo neutral creado durante la rama Google se conserva; esa rama no se reescribió.
+
+## Alcance aprobado de integración live P0
+
+Node/fetch/HTTP estándar, key servidor separada del proceso Expo, sesiones y rate limit en memoria
+con defaults operacionales DEV configurables. Sin auth/cloud/matching/pagos. La geoespacialidad
+produce vista previa de ruta: precio/pago opcionales hasta cotización autoritativa, CTA de solicitud
+deshabilitado sin ambos. No hay recientes personales falsos. Se conserva composición y flujo fixture.
+
+Splash Android crece de160 a183dp por medición alpha y círculo seguro, sin editar artwork;
+[derivación y límites](SPLASH_ANDROID_P0.md). No se aprueba launch surface nueva.

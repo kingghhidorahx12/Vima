@@ -1,74 +1,77 @@
 # Estado real del proyecto
 
-Fecha: 2026-10-01. Repositorio `kingghhidorahx12/Vima`.
-Rama: `codex/tomtom-geospatial-android-p0`, creada desde el HEAD de
-`codex/google-geospatial-android-p0`. La rama Google se conserva intacta como historia técnica;
-no se hizo reset, rebase ni merge a main.
-
-## DECIDIDO
-
-- MapLibre React Native es de nuevo el renderer móvil Android/iOS. TomTom Orbis Map Display/Assets
-  es la dirección de cartografía, con style final aún sin suministrar.
-- Places Search v3, Geocoding v2, Reverse Geocoding v2 y Routing v3 con tráfico live son servicios
-  del futuro backend Vima. La app nunca llama directamente a web-services que exijan credenciales de servidor.
-- Modelos Vima neutrales entre feature y mapa/backend. Ranking regional centrado en Atlacomulco,
-  cercanía y expansión intermunicipal, con Vima Local Places sólo tras validación de datos.
-- P0 visual/funcional, Visual/Motion v1, ubicación expo-location, sheet, matching, branding y
-  aislamiento de fixtures conservados.
+Actualizado 2026-10-02 en codex/tomtom-live-atlacomulco-p0, a partir de
+codex/tomtom-geospatial-android-p0 (855be2b), sin modificar esa rama.
 
 ## IMPLEMENTADO
 
-- `VimaMap`, `Camera`, `MapMarker`, `RouteLayer`, `DestinationLayer` y `VehicleLayer` activos sobre
-  MapLibre. Una sola instancia de mapa por shell; ruta GeoJSON y vehicleMotion por worklets sin
-  render React por frame. Fit de ruta completa con padding del sheet y arco corto al cruzar el
-  antimeridiano; cámara inmediata con Reduced Motion. Marcadores y colores Vima conservados.
-- `EXPO_PUBLIC_MAP_STYLE_URL` sigue siendo la entrada única. En DEV sin valor se muestra Positron
-  para revisión; fuera de DEV se exige URL HTTPS explícita. No hay style TomTom productivo incluido.
-- Eliminados renderer/bridge/config/scripts específicos Google, Map ID y dependencia
-  `react-native-maps`. MapLibre 11.4 permanece. Sin SDK nativo TomTom.
-- Cliente móvil Vima con sesión de autocomplete/search/lookup, geocoding/reverse y rutas; respuestas
-  estrictamente normalizadas, validación de geometría/coordenadas, timeout, cancelación y errores
-  semánticos. No hay backend en el repo y este cliente no se conecta aún al PassengerGateway live.
-- `VimaLocalPlace` y `mergePlaces` separados de fixtures DEV. Catálogo productivo vacío. Ranking
-  sólo al recibir política explícita con pesos; resultados de otros municipios no se filtran.
-- Contrato de endpoints y adaptación prevista a TomTom en [TOMTOM_GEOSPATIAL.md](TOMTOM_GEOSPATIAL.md).
+- Gateway geoespacial Node+TS local ejecutable, sin framework/dependencia nueva. Healthcheck,
+  validación estricta, timeout/abort, rate limit, sesiones UUID con TTL/cleanup y logs sanitizados.
+  Config operacional DEV centralizada; sin auth, matching, pagos, base de datos o despliegue cloud.
+- Adapters TomTom Places Search v3 Suggest/Discover/Details, Geocoding v2, Reverse v2 y Routing v3
+  car + traffic live, campos mínimos y normalización a contratos Vima. Key sólo en proceso servidor.
+- Móvil mediante EXPO_PUBLIC_VIMA_API_BASE_URL: autocomplete con debounce/bias, resolución de
+  selección, reverse de GPS y ruta real en el mismo shell/MapLibre. Respuestas tardías ignoradas.
+  Reverse fallido no invalida coordenada GPS ni sobrescribe origen manual.
+- Vista previa geoespacial sin precio/pago inventados; Solicitar viaje deshabilitado en live.
+  Sin recientes personales fabricados. Matching completo sigue en fixture DEV explícito.
+  No se añadió UI para seleccionar coordenadas tocando mapa; endpoint reverse preparado.
+- Ranking puro por relevancia textual y buckets regionales, sin pesos/radios arbitrarios.
+  Atlacomulco + Jocotitlán, San Felipe del Progreso, El Oro, Acambay, Ixtlahuaca y Temascalcingo.
+  Catálogo servidor de dos VimaLocalPlace verificados y separado de fixtures; dedupe/aliases.
+- Fixtures visibles ahora usan Plaza, Parque y CU UAEM Atlacomulco con coordenadas públicas
+  atribuidas. Activación exclusivamente DEV con EXPO_PUBLIC_VIMA_FIXTURES=1, sin fallback live.
+- Ground truth reproducible (Plaza, Terminal, CU UAEM) y npm run geo:smoke. Documentados nombres,
+  referencias, PASS/alias y provenance. Sin datos congelados desde Google/TomTom.
+- Splash Android imageWidth183dp (antes160), máximo entero medido con margen1dp dentro de
+  círculo seguro192dp. Artwork intacto, sin redesign. iOS280 conservado.
 
-## VERIFICADO LOCALMENTE
+## VERIFICADO UNIT / INTEGRATION Y TOOLCHAIN
 
-- TypeScript y lint OK; **47/47 tests** OK, incluidos Passenger P0 y MapLibre con dobles
-  nativos: instancia persistente, fit/padding/Reduced Motion, markers, ruta, vehículo,
-  modelos neutrales y frontera backend. **13 worklet transforms** OK.
-- Expo Doctor **21/21**, `expo install --check` OK; Expo config resuelto conserva owner,
-  projectId/package y plugin MapLibre, sin configuración Maps SDK. Android prebuild OK, sin
-  metadata Maps SDK. Exports Hermes release Android/iOS OK; aislamiento de fixtures en ambos OK.
-- Búsqueda estática en fuentes, configuración y manifest Android sin imports/config/keys Google
-  productivos; `.env` real, carpetas nativas, bundles y cachés siguen ignorados por git.
-- Los dobles y exports **no certifican** tiles Orbis, sprites/glyphs, rendimiento Fabric ni
-  comportamiento en Android físico.
+- 62/62 tests (47 originales +15), TypeScript, lint, 13 worklet transforms.
+- Gateway HTTP real local con upstream simulado: validación, tamaño, sesiones/TTL, límites,
+  errores/timeout/cancelación, Search/Details/Geocode/Reverse/Route, campos de tráfico y logs.
+- Ranking/dedupe, cliente LAN DEV, selección asíncrona obsoleta, límites de precio/solicitud,
+  continuidad del shell y flujo fixture. Unit tests sin Internet ni credencial real.
+- Expo Doctor21/21. Config Expo resuelto conserva owner, EAS projectId e identificadores;
+  nuevo valor splash183 confirmado. Prebuild Android OK; recursos mdpi–xxxhdpi dentro del círculo
+  seguro y manifest debug permite cleartext sólo desarrollo.
+- Hermes release Android/iOS correctos; fixtures excluidos de release e incluidos en DEV explícito.
+  Bundles Android/iOS DEV y release sin key/header/origen TomTom ni módulo servidor.
+- npm run check:splash: radio alpha94.612dp +1dp <=96dp. No equivale a signoff físico.
+- Sin nueva dependencia nativa. El cambio de splash requiere reconstruir Development Build.
+  No se ejecutó EAS Build ni se instaló toolchain Android/JDK.
+
+## VERIFICADO TOMTOM LIVE
+
+**No verificado**. geo:smoke retorna SKIP explícito: falta TOMTOM_API_KEY en el entorno servidor.
+Adapters y pruebas offline no certifican permisos de cuenta, cobertura POI, latencia ni tráfico.
+No se han guardado respuestas live ni se presenta ningún resultado simulado como éxito real.
+
+## VERIFICADO ANDROID FÍSICO
+
+**No verificado en esta ronda**. Falta probar desde Android en la misma LAN: conexión al gateway,
+permiso/GPS/reverse, búsquedas ground truth, selección/ruta/cámara/markers, teclado, cancelación,
+Reduced Motion y splash nuevo. Desactivar Tools button del Development Client para evaluar
+capturas de producto; no se intenta eliminar ese control mediante código.
 
 ## PENDIENTE
 
-- Backend Vima: implementar endpoints/auth/rate limiting/normalización de Places Search v3,
-  Geocoding v2, Reverse v2 y Routing v3 live; suministrar credenciales TomTom **sólo servidor**.
-  Integrar la respuesta real al PassengerGateway y su autoridad de solicitud/cotización.
-- Style Orbis Assets/Map Display aprobado, URL HTTPS usable por MapLibre, política de key pública
-  si procede y comprobación física de tiles/sprites/atribución. El fallback DEV no es signoff.
-- Pesos de ranking/radios, identificadores y alcance de municipios cercanos, y lugares locales
-  validados. No se usan lugares de fixtures como catálogo productivo.
-- Nuevo Development Build Android después de retirar `react-native-maps`; esta tarea no ejecuta
-  EAS Build. Validación física de cámara/padding/markers/ruta/vehículo/gestos/ubicación,
-  Reduced Motion, teclado y P0 completo aún pendiente. Si no hay JDK local, export/prebuild no
-  equivalen a ejecutar el APK.
-- Asset de vehículo orientado y reglas de grosor/opacidad por zoom; regla tras pan manual y
-  composición terminal de 15 min siguen pendientes, sin inventar parámetros.
+- Credencial servidor con acceso a cuatro web services, smoke live y revisión de direcciones/
+  acceso vial de POI. Puntos estáticos son representativos de áreas, no entradas de recogida.
+- Configurar URL LAN/HTTPS Vima en móvil y acceso al puerto del equipo; fixtures apagados para live.
+- Style Orbis productivo aprobado y credencial pública apropiada si procede. Basemap DEV vigente
+  sin cambios: OpenFreeMap Positron sólo fallback de desarrollo; release requiere style explícito.
+  No mezclar la key server-only con EXPO_PUBLIC_MAP_STYLE_URL ni improvisar proxy de tiles.
+- Nuevo Development Build por splash; también necesario si el APK previo conserva react-native-maps
+  de la rama anterior. Revalidar Android físico. No hay APK generado por esta tarea.
+- Backend autoritativo de cotización/matching/auth/pagos fuera de alcance; release entry sigue
+  sin habilitarse. No se entregó infraestructura productiva.
+- Asset vehículo orientado, estilo de ruta por zoom, comportamiento tras pan manual y composición
+  terminal15min siguen pendientes. Visual/Motion System, navegación y matching conservados.
 
-## P0 conservado
+## Referencias
 
-Inicio → selección/edición → Confirma tu viaje → matching normal/prolongado/asignado dentro del
-mismo PassengerRideShell y VimaRideSheet. Header/logo final, icono y splash aprobados; sheet
-radio 28/margen 20, allowedOffsets/snap por estado y teclado. Origen loading/automático/manual/
-error con elección manual protegida. Matching prolongado desde 120 s, límite configurable de
-15 min, cancelación autoritativa para Editar/Programar y asignación concurrente prevalente.
-TanStack Query para autoridad remota, Zustand UI, SecureStore/SQLite separados, Inter,
-Visual/Motion v1 y haptics centrales. Fixtures sólo en `src/dev/passenger/` y ruta DEV.
-EAS continúa en `@kingghidorahx12/vima`, developmentClient:true y APK interno.
+[Gateway y Android LAN](../gateway/README.md), [contratos/adapters](TOMTOM_GEOSPATIAL.md),
+[ground truth y fuentes](ATLACOMULCO_GROUND_TRUTH.md), [cálculo splash](SPLASH_ANDROID_P0.md).
+EAS sigue @kingghidorahx12/vima, developmentClient:true y APK interno.

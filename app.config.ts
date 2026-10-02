@@ -35,7 +35,7 @@ const config: ExpoConfig = {
       imageWidth: 280,
       resizeMode: 'contain',
       backgroundColor: '#FFFFFF',
-      android: { imageWidth: 160 },
+      android: { imageWidth: 183 }, // Alpha geometry inside Android's 192dp safe circle; npm run check:splash.
     }],
     ['expo-location', { isAndroidBackgroundLocationEnabled: false, isAndroidForegroundServiceEnabled: false,
       isIosBackgroundLocationEnabled: false }],
