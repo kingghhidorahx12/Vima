@@ -11,7 +11,8 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
   return {
     scope: 'vima-geospatial-live', source: 'server', locate,
     recentPlaces: async () => [],
-    suggestPlaces: search.suggest, resolvePlace: search.resolve, closePlaces: search.close,
+    suggestPlaces: search.suggest, searchPlaces: search.search, followPlaceAction: search.followUp,
+    resolvePlace: search.resolve, closePlaces: search.close,
     async findPlaces(query, signal) {
       const result = await client.geocode(query, signal);
       return result ? [result] : [];

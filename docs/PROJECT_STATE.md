@@ -8,7 +8,8 @@ codex/tomtom-geospatial-android-p0 (855be2b), sin modificar esa rama.
 - Gateway geoespacial Node+TS local ejecutable, sin framework/dependencia nueva. Healthcheck,
   validación estricta, timeout/abort, rate limit, sesiones UUID con TTL/cleanup y logs sanitizados.
   Config operacional DEV centralizada; sin auth, matching, pagos, base de datos o despliegue cloud.
-- Adapters TomTom Places Search v3 Suggest/Discover/Details, Geocoding v2, Reverse v2 y Routing v3
+- Adapters TomTom Places Search v3 con journeys Suggest → Details, Discover → Details y
+  Suggest discoverAction → Discover → Details; Geocoding v2, Reverse v2 y Routing v3
   car + traffic live, campos mínimos y normalización a contratos Vima. Key sólo en proceso servidor.
 - Móvil mediante EXPO_PUBLIC_VIMA_API_BASE_URL: autocomplete con debounce/bias, resolución de
   selección, reverse de GPS y ruta real en el mismo shell/MapLibre. Respuestas tardías ignoradas.
@@ -21,7 +22,7 @@ codex/tomtom-geospatial-android-p0 (855be2b), sin modificar esa rama.
   Catálogo servidor de dos VimaLocalPlace verificados y separado de fixtures; dedupe/aliases.
 - Fixtures visibles ahora usan Plaza, Parque y CU UAEM Atlacomulco con coordenadas públicas
   atribuidas. Activación exclusivamente DEV con EXPO_PUBLIC_VIMA_FIXTURES=1, sin fallback live.
-- Ground truth reproducible (Plaza, Terminal, CU UAEM) y npm run geo:smoke. Documentados nombres,
+- Ground truth reproducible (Plaza y Terminal vía Discover, CU UAEM vía Suggest) y npm run geo:smoke. Documentados nombres,
   referencias, PASS/alias y provenance. Sin datos congelados desde Google/TomTom.
 - Splash Android imageWidth183dp (antes160), máximo entero medido con margen1dp dentro de
   círculo seguro192dp. Artwork intacto, sin redesign. iOS280 conservado.
@@ -44,8 +45,10 @@ codex/tomtom-geospatial-android-p0 (855be2b), sin modificar esa rama.
 
 ## VERIFICADO TOMTOM LIVE
 
-**No verificado**. geo:smoke retorna SKIP explícito: falta TOMTOM_API_KEY en el entorno servidor.
-Adapters y pruebas offline no certifican permisos de cuenta, cobertura POI, latencia ni tráfico.
+**Parcial según evidencia live aportada por el usuario**: Plaza, Terminal, geocoding, reverse y
+routing con tráfico pasaron. Suggest devolvió un POI de CU UAEM con seguimiento Details; el
+smoke antiguo falló al imponer Discover intermedio. El journey corregido aún no se ha
+revalidado live en este proceso porque falta TOMTOM_API_KEY; `geo:smoke` retorna SKIP.
 No se han guardado respuestas live ni se presenta ningún resultado simulado como éxito real.
 
 ## VERIFICADO ANDROID FÍSICO

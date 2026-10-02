@@ -3,14 +3,14 @@ import { fitBounds, type Coordinate } from '../src/map/models.ts';
 import { GeospatialError, type GeospatialErrorCode, type PlaceSuggestion, type ResolvedPlace, type RouteRequest } from '../src/services/geospatial/contracts.ts';
 import { decodePlace, decodeRoute } from '../src/services/geospatial/normalize.ts';
 import type { GatewayConfig } from './config.ts';
-import { record } from './validation.ts';
-import type { PlaceReference } from './state.ts';
+import { allowFields, record } from './validation.ts';
+import type { DiscoverReference, PlaceReference, ProviderReference } from './state.ts';
 import { regionForText } from '../src/services/geospatial/regionalRanking.ts';
 
 const origin = 'https://api.tomtom.com';
 const placeTypes = { poi: 'pois', address: 'addresses', street: 'streets', intersection: 'intersections', area: 'areas' } as const;
 export interface UpstreamContext { signal: AbortSignal; sessionId?: string; status?: number }
-export interface ProviderChoice { suggestion: PlaceSuggestion; reference: PlaceReference }
+export interface ProviderChoice { suggestion: PlaceSuggestion; reference: ProviderReference }
 export interface ProviderShape {
   kind: 'object' | 'array' | 'other';
   type: 'poi' | 'address' | 'street' | 'intersection' | 'area' | 'other';
@@ -47,21 +47,73 @@ export function normalizeProviderPlace(value: unknown): ResolvedPlace {
   const municipality = v.address && typeof v.address === 'object' ? text(record(v.address).municipality) : '';
   return decodePlace({ id: text(v.id), name: text(v.title), address,
     coordinate: record(v.position).coordinates, provenance: 'provider',
-    category: text(v.type) || 'place', regionId: regionForText(municipality || address) });
+    regionId: regionForText(municipality || address) });
+}
+const locationTypes = Object.keys(placeTypes) as (keyof typeof placeTypes)[];
+const areaTypes = ['country', 'countrySubdivision', 'countrySecondarySubdivision', 'countryTertiarySubdivision',
+  'municipality', 'municipalitySubdivision', 'municipalitySecondarySubdivision', 'postalCode', 'neighborhood'] as const;
+function detailsReference(value: Record<string, unknown>, type: keyof typeof placeTypes, id: string): PlaceReference {
+  const more = value.more;
+  if (more !== undefined) {
+    const follow = record(more);
+    if (follow.operation !== 'details' || !Array.isArray(follow.pathParameters)) throw new GeospatialError('invalid_result');
+    const params = new Map<string, string>();
+    for (const parameter of follow.pathParameters) {
+      const item = record(parameter);
+      if ((item.parameter !== 'type' && item.parameter !== 'id') || typeof item.argument !== 'string' || params.has(item.parameter))
+        throw new GeospatialError('invalid_result');
+      params.set(item.parameter, item.argument);
+    }
+    if (params.size !== 2 || params.get('type') !== placeTypes[type] || params.get('id') !== id)
+      throw new GeospatialError('invalid_result');
+  }
+  return { kind: 'details', type: placeTypes[type], id };
+}
+function discoverReference(value: Record<string, unknown>): DiscoverReference {
+  const more = record(value.more);
+  if (more.operation !== 'discover') throw new GeospatialError('invalid_result');
+  const body = allowFields(more.requestBody, ['query', 'filters']);
+  const filters = body.filters === undefined ? {} : allowFields(body.filters,
+    ['types', 'poiTypes', 'areaTypes', 'countryCodesIso2']);
+  const types = filters.types;
+  const poiTypes = filters.poiTypes;
+  const selectedAreaTypes = filters.areaTypes;
+  if (filters.countryCodesIso2 !== undefined && (!Array.isArray(filters.countryCodesIso2) ||
+    !filters.countryCodesIso2.includes('MX'))) throw new GeospatialError('invalid_result');
+  if ((typeof body.query !== 'string' || !body.query.trim()) && !Object.keys(filters).length)
+    throw new GeospatialError('invalid_result');
+  if (body.query !== undefined && (typeof body.query !== 'string' || body.query.length > 256)) throw new GeospatialError('invalid_result');
+  if (types !== undefined && (!Array.isArray(types) || !types.length || !types.every(type => locationTypes.includes(type))))
+    throw new GeospatialError('invalid_result');
+  if (poiTypes !== undefined && (!Array.isArray(poiTypes) || !poiTypes.length || poiTypes.length > 20 ||
+    !poiTypes.every(type => typeof type === 'string' && /^[a-z0-9_]{1,64}$/.test(type)))) throw new GeospatialError('invalid_result');
+  if (selectedAreaTypes !== undefined && (!Array.isArray(selectedAreaTypes) || !selectedAreaTypes.length ||
+    !selectedAreaTypes.every(type => areaTypes.includes(type)))) throw new GeospatialError('invalid_result');
+  return { kind: 'discover', ...(body.query === undefined ? {} : { query: body.query as string }),
+    ...(types === undefined ? {} : { types: types as DiscoverReference['types'] }),
+    ...(poiTypes === undefined ? {} : { poiTypes: poiTypes as string[] }),
+    ...(selectedAreaTypes === undefined ? {} : { areaTypes: selectedAreaTypes as string[] }) };
 }
 export function normalizeProviderSearch(value: unknown): ProviderChoice[] {
   const results = record(value).results;
+  // Orbis Discover can return an empty response object when there are no matches.
+  if (results === undefined && Object.keys(record(value)).length === 0) return [];
   if (!Array.isArray(results)) throw new GeospatialError('invalid_result');
-  return results.flatMap(result => {
+  return results.flatMap((result): ProviderChoice[] => {
     const v = record(result);
-    const type = placeTypes[v.type as keyof typeof placeTypes];
-    // Discover actions are categories, not selectable destinations with a coordinate.
-    if (!type) return [];
+    if (v.type === 'discoverAction') {
+      const name = text(v.title);
+      if (!name) throw new GeospatialError('invalid_result');
+      return [{ suggestion: { id: randomUUID(), name, address: '', kind: 'action' as const, provenance: 'provider' as const },
+        reference: discoverReference(v) }];
+    }
+    const type = v.type as keyof typeof placeTypes;
+    if (!locationTypes.includes(type)) return [];
     const id = text(v.id); const name = text(v.title);
     if (!id || !name) throw new GeospatialError('invalid_result');
     const address = subtitles(v.subtitles) || addressLabel(v.address);
-    return [{ suggestion: { id: randomUUID(), name, address, category: text(v.type), provenance: 'provider' as const,
-      regionId: regionForText(address) }, reference: { type, id } }];
+    return [{ suggestion: { id: randomUUID(), name, address, provenance: 'provider' as const,
+      regionId: regionForText(address) }, reference: detailsReference(v, type, id) }];
   });
 }
 export function normalizeProviderRoute(value: unknown) {
@@ -135,7 +187,7 @@ export function createTomTomAdapter(key: string | undefined, config: GatewayConf
   return {
     async search(input: string, bias: Coordinate | undefined, autocomplete: boolean, context: UpstreamContext) {
       const body = { query: input, maxResults: config.maxResults,
-        filters: { countryCodesIso2: ['MX'], types: ['poi', 'address', 'street', 'intersection', 'area'] },
+        filters: { countryCodesIso2: ['MX'], types: autocomplete ? [...locationTypes, 'discoverAction'] : locationTypes },
         ...(bias ? { origin: { type: 'point', coordinates: bias }, preferences: { geometry: { type: 'point', coordinates: bias } } } : {}) };
       const response = await request('/maps/orbis/places/' + (autocomplete ? 'suggest' : 'discover'), 3,
         'results(id,type,title,subtitles,more)', context, 'search_unavailable', body);
@@ -146,8 +198,19 @@ export function createTomTomAdapter(key: string | undefined, config: GatewayConf
       }
       return normalizeProviderSearch(response);
     },
+    async followDiscover(reference: DiscoverReference, bias: Coordinate | undefined, context: UpstreamContext) {
+      if (reference.kind !== 'discover') throw new GeospatialError('invalid_result');
+      const body = { ...(reference.query === undefined ? {} : { query: reference.query }), maxResults: config.maxResults,
+        filters: { countryCodesIso2: ['MX'], ...(reference.types ? { types: reference.types } : {}),
+          ...(reference.poiTypes ? { poiTypes: reference.poiTypes } : {}),
+          ...(reference.areaTypes ? { areaTypes: reference.areaTypes } : {}) },
+        ...(bias ? { origin: { type: 'point', coordinates: bias }, preferences: { geometry: { type: 'point', coordinates: bias } } } : {}) };
+      const response = await request('/maps/orbis/places/discover', 3, 'results(id,type,title,subtitles,more)',
+        context, 'search_unavailable', body);
+      return normalizeProviderSearch(response);
+    },
     async resolve(reference: PlaceReference, context: UpstreamContext) {
-      if (!Object.values(placeTypes).includes(reference.type)) throw new GeospatialError('invalid_result');
+      if (reference.kind !== 'details' || !Object.values(placeTypes).includes(reference.type)) throw new GeospatialError('invalid_result');
       const response = await request(`/maps/orbis/places/details/${reference.type}/${encodeURIComponent(reference.id)}`,
         3, 'id,type,title,subtitles,position,address', context, 'search_unavailable');
       diagnostic?.({ operation: 'details', results: [providerShape(response)] });

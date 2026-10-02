@@ -2,10 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { GeospatialError, type ResolvedPlace } from '../src/services/geospatial/contracts.ts';
 import type { GatewayConfig } from './config.ts';
 
-export interface PlaceReference { type: 'addresses' | 'streets' | 'intersections' | 'pois' | 'areas'; id: string }
+export interface PlaceReference { kind: 'details'; type: 'addresses' | 'streets' | 'intersections' | 'pois' | 'areas'; id: string }
+export interface DiscoverReference { kind: 'discover'; query?: string; types?: readonly ('poi' | 'address' | 'street' | 'intersection' | 'area')[];
+  poiTypes?: readonly string[]; areaTypes?: readonly string[] }
+export type ProviderReference = PlaceReference | DiscoverReference;
 export interface SearchSession {
   id: string; createdAt: number; lastActivity: number;
-  choices: Map<string, PlaceReference | ResolvedPlace>;
+  choices: Map<string, ProviderReference | ResolvedPlace>;
 }
 export function createGatewayState(config: GatewayConfig, now = Date.now) {
   const sessions = new Map<string, SearchSession>();

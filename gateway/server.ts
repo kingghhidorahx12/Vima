@@ -48,7 +48,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       if (request.method === 'GET' && path === '/health') {
         endpoint = 'health'; reply(200, { status: 'ok', configured: options.configured === true }); return;
       }
-      const sessionMatch = /^\/v1\/geospatial\/places\/sessions\/([a-f0-9-]{36})(?:\/(autocomplete|search|resolve))?$/.exec(path);
+      const sessionMatch = /^\/v1\/geospatial\/places\/sessions\/([a-f0-9-]{36})(?:\/(autocomplete|search|resolve|follow-up))?$/.exec(path);
       if (request.method === 'POST' && path === '/v1/geospatial/places/sessions') {
         endpoint = 'places.session.create'; allowFields(await readBody(request, config.maxBodyBytes), []);
         const session = state.create(); reply(201, { sessionId: session.id }); return;
@@ -62,25 +62,37 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
         if (request.method !== 'POST' || !action) { reply(405, { error: { code: 'invalid_result' } }); return; }
         const session = state.get(id); context.sessionId = session.id;
         const input = await readBody(request, config.maxBodyBytes);
+        const sendSuggestions = (provider: Awaited<ReturnType<TomTomAdapter['search']>>, inputText: string, includeLocal: boolean) => {
+          const ranked = rankRegionalPlaces(provider.map(value => value.suggestion), includeLocal ? options.localPlaces ?? [] : [], inputText)
+            .slice(0, config.maxResults);
+          for (const result of ranked) {
+            const ref = provider.find(value => value.suggestion.id === result.id)?.reference;
+            if (ref) session.choices.set(result.id, ref);
+            else if ('coordinate' in result) session.choices.set(result.id, result);
+          }
+          while (session.choices.size > config.maxResults * 3) session.choices.delete(session.choices.keys().next().value!);
+          count = ranked.length; reply(200, { suggestions: ranked.map(decodeSuggestion) });
+        };
         if (action === 'resolve') {
           const body = allowFields(input, ['id']); const selection = query(body.id, config);
           const choice = session.choices.get(selection);
           if (!choice) throw new GeospatialError('no_result');
-          state.close(id);
-          const place = 'coordinate' in choice ? decodePlace(choice) : await adapter.resolve(choice, context);
+          if (!('coordinate' in choice) && choice.kind !== 'details') throw new GeospatialError('invalid_result');
+          let place;
+          try { place = 'coordinate' in choice ? decodePlace(choice) : await adapter.resolve(choice, context); }
+          finally { state.close(id); }
           count = 1; reply(200, place); return;
+        }
+        if (action === 'follow-up') {
+          const body = allowFields(input, ['id', 'bias']); const selection = query(body.id, config);
+          const choice = session.choices.get(selection);
+          if (!choice || 'coordinate' in choice || choice.kind !== 'discover') throw new GeospatialError('no_result');
+          const provider = await adapter.followDiscover(choice, optionalBias(body.bias), context);
+          sendSuggestions(provider, choice.query ?? '', false); return;
         }
         const body = allowFields(input, ['input', 'bias']); const inputText = query(body.input, config);
         const provider = await adapter.search(inputText, optionalBias(body.bias), action === 'autocomplete', context);
-        const ranked = rankRegionalPlaces(provider.map(value => value.suggestion), options.localPlaces ?? [], inputText).slice(0, config.maxResults);
-        // Bounded, session-only handles. No query history or raw payloads are retained.
-        for (const result of ranked) {
-          const ref = provider.find(value => value.suggestion.id === result.id)?.reference;
-          if (ref) session.choices.set(result.id, ref);
-          else if ('coordinate' in result) session.choices.set(result.id, result);
-        }
-        while (session.choices.size > config.maxResults * 3) session.choices.delete(session.choices.keys().next().value!);
-        count = ranked.length; reply(200, { suggestions: ranked.map(decodeSuggestion) }); return;
+        sendSuggestions(provider, inputText, true); return;
       }
       if (request.method !== 'POST') { reply(404, { error: { code: 'no_result' } }); return; }
       const input = await readBody(request, config.maxBodyBytes);

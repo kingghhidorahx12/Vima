@@ -11,6 +11,7 @@ import { allowFields, query, routeRequest } from '../gateway/validation.ts';
 import { createApiClient } from '../src/services/api/client.ts';
 import { createGeospatialClient } from '../src/services/geospatial/client.ts';
 import { localPlaces } from '../gateway/places.ts';
+import { groundTruth, groundTruthMatch } from '../gateway/groundTruth.ts';
 
 const config = gatewayConfig({});
 const position = [-99.88795, 19.79021];
@@ -53,7 +54,9 @@ test('real adapter paths/versions/body bias normalize Search, Details, Geocode, 
   });
   const ctx = { ...context(), sessionId: randomUUID() };
   const suggestions = await adapter.search('Plaza', position as [number, number], true, ctx);
+  assert.equal(suggestions[0]!.reference.kind, 'details');
   assert.equal(suggestions[0]!.suggestion.provenance, 'provider');
+  assert.equal(suggestions[0]!.suggestion.category, undefined);
   assert.notEqual(suggestions[0]!.suggestion.id, providerPlace.id);
   assert.equal('coordinate' in suggestions[0]!.suggestion, false);
   const first = calls[0]!; const body = JSON.parse(String(first.options!.body));
@@ -64,8 +67,9 @@ test('real adapter paths/versions/body bias normalize Search, Details, Geocode, 
   assert.equal(new Headers(first.options!.headers).get('Session-Id'), ctx.sessionId);
   await adapter.search('Plaza', undefined, false, ctx);
   assert.equal('preferences' in JSON.parse(String(calls[1]!.options!.body)), false);
-  const place = await adapter.resolve(suggestions[0]!.reference, ctx);
+  const place = await adapter.resolve(suggestions[0]!.reference as import('../gateway/state.ts').PlaceReference, ctx);
   assert.deepEqual(place.coordinate, position); assert.equal(place.regionId, 'atlacomulco');
+  assert.equal(place.category, undefined);
   assert.equal('unused' in place, false);
   const geocode = await adapter.geocode('address', position as [number, number], context());
   const reverse = await adapter.reverse(position as [number, number], context());
@@ -83,19 +87,118 @@ test('real adapter paths/versions/body bias normalize Search, Details, Geocode, 
 
 test('normalization rejects malformed geometry/traffic and omits nonselectable search actions', () => {
   assert.deepEqual(normalizeProviderSearch({ results: [{ type: 'category', title: 'category' }] }), []);
+  assert.deepEqual(normalizeProviderSearch({ results: [] }), []);
+  assert.deepEqual(normalizeProviderSearch({}), []);
   assert.throws(() => normalizeProviderSearch({ results: 'invalid' }), /invalid_result/);
+  assert.throws(() => normalizeProviderSearch({ unexpected: true }), /invalid_result/);
+});
+
+test('Suggest location resolves through Details in the same session without Discover, independent of local coverage', async () => {
+  const calls: { url: string; session: string | null }[] = [];
+  const uaem = { ...providerPlace, id: 'provider-uaem', title: 'Centro Universitario UAEM Atlacomulco',
+    subtitles: ['Carretera Toluca–Atlacomulco km 60, Atlacomulco'],
+    more: { operation: 'details', pathParameters: [{ parameter: 'type', argument: 'pois' },
+      { parameter: 'id', argument: 'provider-uaem' }] } };
+  const adapter = createTomTomAdapter('dummy-key', config, async (url, options) => {
+    calls.push({ url: String(url), session: new Headers(options?.headers).get('Session-Id') });
+    return Response.json(String(url).includes('/details/') ? uaem : String(url).endsWith('/suggest')
+      ? { results: [uaem] } : {});
+  });
+  const server = createGateway(config, adapter, { localPlaces });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const client = createGeospatialClient(createApiClient(`http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    async () => null, { development: true }), 2000);
+  try {
+    const session = await client.startPlacesSession();
+    const found = await session.autocomplete(groundTruth[2].query);
+    const provider = found.find(place => place.provenance === 'provider' && groundTruthMatch(place, groundTruth[2]));
+    assert.ok(provider); assert.notEqual(provider.id, uaem.id);
+    const resolved = await session.resolve(provider.id);
+    assert.ok(groundTruthMatch(resolved, groundTruth[2]));
+    assert.deepEqual(resolved.coordinate, position);
+    assert.deepEqual(calls.map(call => new URL(call.url).pathname.split('/').at(-1)), ['suggest', 'provider-uaem']);
+    assert.ok(calls[0]!.session); assert.equal(calls[0]!.session, calls[1]!.session);
+    const onlyLocal = createTomTomAdapter('dummy-key', config, async () => Response.json({ results: [] }));
+    const localServer = createGateway(config, onlyLocal, { localPlaces });
+    localServer.listen(0, '127.0.0.1'); await once(localServer, 'listening');
+    try {
+      const localClient = createGeospatialClient(createApiClient(`http://127.0.0.1:${(localServer.address() as AddressInfo).port}`,
+        async () => null, { development: true }), 2000);
+      const localSession = await localClient.startPlacesSession();
+      const local = await localSession.autocomplete(groundTruth[2].query);
+      assert.equal(local.some(place => place.provenance === 'provider' && groundTruthMatch(place, groundTruth[2])), false);
+      await localSession.close();
+    } finally { localServer.closeAllConnections(); await new Promise<void>(resolve => localServer.close(() => resolve())); }
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test('Suggest discover action follows bounded Discover and Details with one Session-Id and fixed TomTom origin', async () => {
+  const calls: { url: string; options?: RequestInit }[] = [];
+  const action = { type: 'discoverAction', title: 'Universidades', more: { operation: 'discover',
+    url: 'https://attacker.example/steal', requestBody: { filters: { types: ['poi'], poiTypes: ['university'] } } } };
+  const place = { ...providerPlace, more: { operation: 'details', pathParameters: [
+    { parameter: 'type', argument: 'pois' }, { parameter: 'id', argument: providerPlace.id }] } };
+  const adapter = createTomTomAdapter('dummy-key', config, async (url, options) => {
+    calls.push({ url: String(url), options });
+    return Response.json(String(url).endsWith('/suggest') ? { results: [action] } :
+      String(url).endsWith('/discover') ? { results: [place] } : place);
+  });
+  const ctx = { ...context(), sessionId: randomUUID() };
+  const actions = await adapter.search('universidades', undefined, true, ctx);
+  assert.equal(actions[0]!.suggestion.kind, 'action');
+  assert.equal(actions[0]!.reference.kind, 'discover');
+  const results = await adapter.followDiscover(actions[0]!.reference as import('../gateway/state.ts').DiscoverReference, undefined, ctx);
+  assert.equal(results[0]!.suggestion.name, 'Plaza Atlacomulco');
+  await adapter.resolve(results[0]!.reference as import('../gateway/state.ts').PlaceReference, ctx);
+  assert.deepEqual(calls.map(call => new URL(call.url).pathname.split('/').at(-1)), ['suggest', 'discover', providerPlace.id]);
+  assert.ok(calls.every(call => new URL(call.url).origin === 'https://api.tomtom.com'));
+  assert.ok(calls.every(call => new Headers(call.options?.headers).get('Session-Id') === ctx.sessionId));
+  assert.deepEqual(JSON.parse(String(calls[1]!.options!.body)).filters,
+    { countryCodesIso2: ['MX'], types: ['poi'], poiTypes: ['university'] });
+  assert.throws(() => normalizeProviderSearch({ results: [{ ...place, more: { operation: 'details', pathParameters: [
+    { parameter: 'type', argument: 'addresses' }, { parameter: 'id', argument: providerPlace.id }] } }] }), /invalid_result/);
+});
+
+test('HTTP follow-up keeps the session open and never resolves an action as a place', async () => {
+  const calls: string[] = [];
+  const adapter = createTomTomAdapter('dummy-key', config, async url => {
+    calls.push(String(url));
+    if (String(url).endsWith('/suggest')) return Response.json({ results: [{ type: 'discoverAction', title: 'Universidades',
+      more: { operation: 'discover', requestBody: { filters: { poiTypes: ['university'] } } } }] });
+    if (String(url).endsWith('/discover')) return Response.json({ results: [providerPlace] });
+    return Response.json(providerPlace);
+  });
+  const server = createGateway(config, adapter);
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const client = createGeospatialClient(createApiClient(`http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    async () => null, { development: true }), 2000);
+  try {
+    const session = await client.startPlacesSession();
+    const [action] = await session.autocomplete('universidades');
+    assert.equal(action?.kind, 'action');
+    await assert.rejects(session.resolve(action!.id), /invalid_result/);
+    // A new Vima session is needed after a failed resolution attempt, as on mobile.
+    const next = await client.startPlacesSession();
+    const [again] = await next.autocomplete('universidades');
+    const [result] = await next.followUp(again!.id);
+    assert.equal(result?.name, 'Plaza Atlacomulco');
+    assert.equal((await next.resolve(result!.id)).name, 'Plaza Atlacomulco');
+    assert.deepEqual(calls.map(url => new URL(url).pathname.split('/').at(-1)),
+      ['suggest', 'suggest', 'discover', providerPlace.id]);
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
 
 test('provider diagnostics report only bounded structure before a malformed Details result is rejected', async () => {
   const events: ProviderDiagnostic[] = [];
   const upstream = { id: 'raw-provider-id', type: 'area', title: 'Centro Universitario UAEM Atlacomulco',
     address: { municipality: 'Atlacomulco', street: 'private-address' }, position: { type: 'Point', coordinates: position },
-    more: { operation: 'details', pathParameters: [{ parameter: 'id', argument: 'raw-provider-id' }] } };
+    more: { operation: 'details', pathParameters: [{ parameter: 'type', argument: 'areas' },
+      { parameter: 'id', argument: 'raw-provider-id' }] } };
   const adapter = createTomTomAdapter('dummy-key', config, async url => Response.json(String(url).includes('details')
     ? { ...upstream, position: undefined } : { results: [upstream] }), event => events.push(event));
   const choices = await adapter.search('Centro Universitario UAEM Atlacomulco', undefined, false, context());
-  assert.equal(choices[0]!.reference.type, 'areas');
-  await assert.rejects(adapter.resolve(choices[0]!.reference, context()), /invalid_result/);
+  assert.equal(choices[0]!.reference.kind, 'details');
+  await assert.rejects(adapter.resolve(choices[0]!.reference as import('../gateway/state.ts').PlaceReference, context()), /invalid_result/);
   assert.deepEqual(events.map(event => event.operation), ['search', 'details']);
   assert.deepEqual(events[1]!.results[0], {
     kind: 'object', type: 'area', hasId: true, hasTitle: true, hasPosition: false,
@@ -113,7 +216,7 @@ test('a documented area Details response with a valid Point and no address remai
     id: 'area-id', type: 'area', title: 'Centro Universitario Atlacomulco',
     position: { type: 'Point', coordinates: position },
   }));
-  const place = await adapter.resolve({ type: 'areas', id: 'area-id' }, context());
+  const place = await adapter.resolve({ kind: 'details', type: 'areas', id: 'area-id' }, context());
   assert.equal(place.name, 'Centro Universitario Atlacomulco');
   assert.equal(place.address, '');
   assert.deepEqual(place.coordinate, position);

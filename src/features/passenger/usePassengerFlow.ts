@@ -20,6 +20,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const [tripId, setTripId] = useState<string>();
   const [field, setField] = useState<'origin' | 'destination' | null>(null);
   const [search, setSearch] = useState('');
+  const [followUpResults, setFollowUpResults] = useState<{ query: string; results: readonly PlaceSuggestion[] }>();
   const requestId = useRef<string | null>(null);
   const locked = useRef(false);
   const selection = useRef<AbortController | undefined>(undefined);
@@ -71,8 +72,25 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     cancelSelection();
     const controller = new AbortController(); selection.current = controller; setResolving(true);
     try {
+      if ('kind' in value && value.kind === 'action') {
+        if (!gateway.followPlaceAction) throw new Error('search_unavailable');
+        const results = await gateway.followPlaceAction(value.id, controller.signal, origin?.coordinate);
+        if (!controller.signal.aborted) setFollowUpResults({ query: search, results });
+        return;
+      }
       const resolved = await gateway.resolvePlace(value.id, controller.signal);
       if (!controller.signal.aborted) applyPlace(resolved, target);
+    } catch (error) {
+      if (!controller.signal.aborted) setSelectionError(error instanceof Error ? error : new Error('search_unavailable'));
+    } finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
+  };
+  const submitSearch = async () => {
+    if (!gateway.searchPlaces || !search.trim() || pending) return;
+    cancelSelection();
+    const controller = new AbortController(); selection.current = controller; setResolving(true);
+    try {
+      const results = await gateway.searchPlaces(search, controller.signal, origin?.coordinate);
+      if (!controller.signal.aborted) setFollowUpResults({ query: search, results });
     } catch (error) {
       if (!controller.signal.aborted) setSelectionError(error instanceof Error ? error : new Error('search_unavailable'));
     } finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
@@ -125,12 +143,13 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   };
   const error = selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? places.error;
   return { phase, connection, origin, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
-    locationAvailable: !!location.data, field, search, setSearch: (value: string) => { cancelSelection(); setSearch(value); }, places: places.data ?? [], recents: recents.data ?? [],
+    locationAvailable: !!location.data, field, search, setSearch: (value: string) => { cancelSelection(); setFollowUpResults(undefined); setSearch(value); },
+    places: followUpResults?.query === search ? followUpResults.results : places.data ?? [], recents: recents.data ?? [],
     loadingPlaces: places.isFetching || resolving, loadingQuote: quote.isFetching, error,
-    canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending), choosePlace, submit, act, edit, schedule,
+    canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending), choosePlace, submitSearch, submit, act, edit, schedule,
     openField: (target: 'origin' | 'destination') => {
       if (pending || isMatching(phase) || phase === 'assigned') return;
-      cancelSelection(); gateway.closePlaces?.(); setField(target); setSearch('');
+      cancelSelection(); gateway.closePlaces?.(); setFollowUpResults(undefined); setField(target); setSearch('');
     },
     closeField: () => { cancelSelection(); gateway.closePlaces?.(); setField(null); },
     retry: () => { cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });

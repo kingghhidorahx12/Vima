@@ -116,7 +116,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       {flow.field ? <>
         <View style={styles.searchField}><VimaGlyph name="search" color={t.colors.gray} />
           <TextInput ref={input} autoFocus onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección" value={flow.search}
-            onChangeText={flow.setSearch} style={styles.searchInput} placeholderTextColor={t.colors.gray} /></View>
+            onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }} returnKeyType="search"
+            style={styles.searchInput} placeholderTextColor={t.colors.gray} /></View>
         {flow.loadingPlaces ? <ActivityIndicator color={t.colors.greenDark} /> : null}
         {flow.places.map((place) => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}
       </> : reviewing ? <>

@@ -49,5 +49,16 @@ export function createPlaceSearch(client: GeospatialClient, debounceMs: number) 
       if (!current) throw new GeospatialError('no_result');
       return (await current).resolve(id, signal);
     },
+    async search(input: string, signal?: AbortSignal, bias?: Coordinate) {
+      if (!input.trim()) return [];
+      active?.abort(); sequence++;
+      if (!session) session = client.startPlacesSession();
+      return (await session).search(input, signal, bias);
+    },
+    async followUp(id: string, signal?: AbortSignal, bias?: Coordinate) {
+      active?.abort(); sequence++;
+      if (!session) throw new GeospatialError('no_result');
+      return (await session).followUp(id, signal, bias);
+    },
   };
 }

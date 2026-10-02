@@ -3,6 +3,7 @@ import type { RouteFeature } from '../../map/routeGeometry.ts';
 
 export interface PlaceSuggestion {
   readonly id: string; readonly name: string; readonly address: string;
+  readonly kind?: 'action';
   readonly provenance?: 'provider' | 'vima-local'; readonly category?: string;
   readonly regionId?: string;
 }
@@ -27,6 +28,7 @@ export class GeospatialError extends Error {
 export interface PlacesSession {
   autocomplete(input: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
   search(input: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
+  followUp(id: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
   resolve(id: string, signal?: AbortSignal): Promise<ResolvedPlace>;
   close(signal?: AbortSignal): Promise<void>;
 }

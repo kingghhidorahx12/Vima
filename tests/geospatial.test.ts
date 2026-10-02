@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { normalizeCoordinate, normalizeBounds, fitBounds } from '../src/map/models.ts';
 import { decodeRoute, decodePlace } from '../src/services/geospatial/normalize.ts';
 import { createGeospatialClient } from '../src/services/geospatial/client.ts';
+import { createPlaceSearch } from '../src/services/geospatial/search.ts';
 import { GeospatialError } from '../src/services/geospatial/contracts.ts';
 import { ApiError, type ApiClient, type ApiRequest } from '../src/services/api/client.ts';
 import { approvedLocalPlaces, mergePlaces } from '../src/services/geospatial/localPlaces.ts';
@@ -67,6 +68,29 @@ test('Places session spans autocomplete calls, resolves once and cannot be reuse
   const cancelled = await client.startPlacesSession();
   await cancelled.close();
   assert.equal(calls.at(-1)!.method, 'DELETE');
+});
+
+test('mobile search selects Suggest directly, while explicit submit and action follow-up use Discover in one Vima session', async () => {
+  const paths: string[] = [];
+  const client = createGeospatialClient(apiWith(input => {
+    paths.push(input.path);
+    if (input.path.endsWith('/sessions')) return { sessionId: 'opaque-session' };
+    if (input.path.endsWith('/autocomplete')) return { suggestions: [{ id: 'action', name: 'Universidades', address: '', kind: 'action' },
+      { id: 'uaem', name: 'Centro Universitario UAEM Atlacomulco', address: 'Atlacomulco', provenance: 'provider' }] };
+    if (input.path.endsWith('/follow-up') || input.path.endsWith('/search')) return { suggestions: [
+      { id: 'place', name: 'Lugar', address: 'Atlacomulco', provenance: 'provider' }] };
+    if (input.path.endsWith('/resolve')) return { id: 'uaem', name: 'Centro Universitario UAEM Atlacomulco',
+      address: 'Atlacomulco', coordinate: [-99.84, 19.76] };
+    return {};
+  }), 1000);
+  const search = createPlaceSearch(client, 0);
+  const suggested = await search.suggest('UAEM');
+  assert.equal(suggested[0]!.kind, 'action');
+  assert.equal((await search.followUp(suggested[0]!.id))[0]!.name, 'Lugar');
+  assert.equal((await search.search('texto completo'))[0]!.name, 'Lugar');
+  const selected = await search.resolve(suggested[1]!.id);
+  assert.equal(selected.name, 'Centro Universitario UAEM Atlacomulco');
+  assert.deepEqual(paths.map(path => path.split('/').at(-1)), ['sessions', 'autocomplete', 'follow-up', 'search', 'resolve']);
 });
 
 test('forward and reverse geocoding stay behind the Vima API and normalize no-result', async () => {

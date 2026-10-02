@@ -1,7 +1,7 @@
 # TomTom geoespacial P0
 
 Gateway Node+TS ejecutable, adapters reales y conexión móvil configurable implementados.
-Verificado offline con unit/integration; **TomTom live pendiente de TOMTOM_API_KEY**.
+Verificado offline con unit/integration; revalidación live del flujo corregido pendiente de TOMTOM_API_KEY.
 [Ejecución/LAN/smoke](../gateway/README.md), [ground truth/provenance](ATLACOMULCO_GROUND_TRUTH.md).
 
 ## Fronteras
@@ -23,6 +23,7 @@ un backend productivo autenticado queda fuera de esta iteración.
 | POST /v1/geospatial/places/sessions | vacío | {sessionId} |
 | POST .../sessions/{id}/autocomplete | {input,bias?} | {suggestions:PlaceSuggestion[]} |
 | POST .../sessions/{id}/search | {input,bias?} | {suggestions:PlaceSuggestion[]} |
+| POST .../sessions/{id}/follow-up | {id,bias?} | {suggestions:PlaceSuggestion[]} |
 | POST .../sessions/{id}/resolve | {id} | ResolvedPlace |
 | DELETE .../sessions/{id} | vacío | {} |
 | POST /v1/geospatial/geocode | {input,bias?} | {result:ResolvedPlace\|null} |
@@ -31,7 +32,8 @@ un backend productivo autenticado queda fuera de esta iteración.
 | GET /health | sin parámetros | {status,configured} |
 
 Bias opcional es una extensión compatible [lng,lat]. PlaceSuggestion conserva id, name,
-address, provenance/category/regionId opcionales; ResolvedPlace añade coordinate.
+address, provenance/category/regionId opcionales. `kind: action` distingue una acción de
+descubrimiento de un destino seleccionable; nunca lleva `more` ni payload TomTom. ResolvedPlace añade coordinate.
 Municipalidad se representa en address y regionId cuando pertenece a la región conocida,
 sin payloads administrativos raw. RouteResult conserva geometry, bounds, distanceMeters,
 durationSeconds y trafficDurationSeconds.
@@ -56,7 +58,9 @@ duración live. RouteLayer consume GeoJSON Vima. Pruebas offline no certifican c
 ## Sesiones, errores y cliente
 
 UUID v4, createdAt/lastActivity, TTL operacional DEV configurable, cleanup/memoria acotados.
-Search/Details comparten Session-Id; resolver o salir/cambiar campo cierra sesión. Debounce250ms
+Suggest → Details, Discover → Details y Suggest discoverAction → Discover → Details comparten
+Session-Id. La selección de un POI sugerido no exige Discover intermedio. Resolver o salir/cambiar
+campo cierra sesión. Debounce250ms
 y timeout15s centralizados; requests obsoletos cancelados/ignorados. Resolución tardía invalidada
 al cambiar query o desmontar pantalla. GPS permanece válido aunque reverse falle; no sustituye
 origen manual. Reverse queda disponible para coordenadas manuales: **no se añade UI de selección

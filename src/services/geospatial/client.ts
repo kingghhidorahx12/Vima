@@ -53,6 +53,11 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
           return request({ path: path + '/search', method: 'POST', body: { input, ...(bias ? { bias } : {}) },
             decode: decodeSuggestions, signal }, 'search_unavailable');
         },
+        followUp(id, signal, bias) {
+          requireOpen();
+          return request({ path: path + '/follow-up', method: 'POST', body: { id, ...(bias ? { bias } : {}) },
+            decode: decodeSuggestions, signal }, 'search_unavailable');
+        },
         async resolve(id, signal) {
           requireOpen();
           // Resolve closes this Vima session handle even after an ambiguous network response.

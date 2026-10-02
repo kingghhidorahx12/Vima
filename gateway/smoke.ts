@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { gatewayConfig } from './config.ts';
 import { createGateway } from './server.ts';
@@ -34,16 +35,16 @@ async function main() {
       const session = await client.startPlacesSession();
       let operationFailed = false;
       try {
-        stage = 'autocomplete';
-        await session.autocomplete(entry.query, undefined, localPlaces[0]!.coordinate);
-        stage = 'search';
-        const results = await session.search(entry.query, undefined, localPlaces[0]!.coordinate);
+        stage = entry.journey === 'suggest' ? 'autocomplete' : 'search';
+        const results = entry.journey === 'suggest'
+          ? await session.autocomplete(entry.query, undefined, localPlaces[0]!.coordinate)
+          : await session.search(entry.query, undefined, localPlaces[0]!.coordinate);
         // A local supplement must never make a provider ground-truth test pass.
         stage = 'provider match';
         const match = results.find(place => place.provenance === 'provider' && groundTruthMatch(place, entry));
         if (!match) throw new GeospatialError('no_result');
         if (entry.query === uaemQuery) console.log(`TRACE ${entry.query} provider match: ${JSON.stringify({
-          type: match.category ?? 'other', hasId: !!match.id, hasAddress: !!match.address })}`);
+          kind: match.kind ?? 'place', hasId: !!match.id, hasAddress: !!match.address })}`);
         stage = 'resolve/details';
         const place = await session.resolve(match.id);
         stage = 'final normalization';
@@ -57,6 +58,13 @@ async function main() {
       }, () => stage);
     }
     activeCase = undefined;
+    await check('Discover vacío', async () => {
+      const session = await client.startPlacesSession();
+      try {
+        const results = await session.search(`vima-no-place-${randomUUID()}`, undefined, localPlaces[0]!.coordinate);
+        if (results.some(place => place.provenance === 'provider')) throw new GeospatialError('invalid_result');
+      } finally { await session.close(); }
+    });
     await check('Geocoding dirección Atlacomulco', async () => {
       const place = await client.geocode(groundTruth[0].reference, undefined, localPlaces[0]!.coordinate);
       if (place.regionId !== 'atlacomulco') throw new Error('Locality mismatch');

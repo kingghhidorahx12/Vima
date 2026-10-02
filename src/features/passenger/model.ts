@@ -50,6 +50,8 @@ export interface PassengerGateway extends TripGateway, RealtimeTransport {
   recentPlaces(signal?: AbortSignal): Promise<readonly Place[]>;
   findPlaces(query: string, signal?: AbortSignal): Promise<readonly Place[]>;
   suggestPlaces?(query: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
+  searchPlaces?(query: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
+  followPlaceAction?(id: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
   resolvePlace?(id: string, signal?: AbortSignal): Promise<Place>;
   closePlaces?(): void;
   quote(draft: RideDraft, signal?: AbortSignal): Promise<RideQuote>;
