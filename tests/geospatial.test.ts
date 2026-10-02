@@ -145,7 +145,9 @@ test('feature boundaries contain no native provider types or server credentials'
   assert.doesNotMatch(features, /@maplibre|from ['"]react-native-maps|google\.maps/);
   const mobile = [...files('src'), ...files('app'), 'app.config.ts'].filter(f => /\.tsx?$/.test(f)).map(f => readFileSync(f, 'utf8')).join('\n');
   assert.doesNotMatch(mobile, /from ['"]react-native-maps|require\(['"]react-native-maps|PROVIDER_GOOGLE|GOOGLE_MAPS_ANDROID_API_KEY|EXPO_PUBLIC_GOOGLE_MAP_ID/);
-  assert.doesNotMatch(mobile, /api\.tomtom\.com|TomTom-Api-Key|TOMTOM_API_KEY/);
+  assert.doesNotMatch(mobile, /\bTOMTOM_API_KEY\b|api\.tomtom\.com\/maps\/orbis\/(places|routing)/);
+  assert.match(readFileSync('src/map/VimaMap.tsx', 'utf8'), /TomTom-Api-Key/);
+  assert.match(readFileSync('src/map/VimaMap.tsx', 'utf8'), /api\\\.tomtom\\\.com\\\/maps\\\/orbis/);
   assert.doesNotMatch(mobile, /GOOGLE_PLACES_API_KEY|GOOGLE_ROUTES_API_KEY|places\.googleapis\.com|routes\.googleapis\.com/);
   assert.doesNotMatch(mobile, /AIza[\w-]{30,}/);
   assert.match(readFileSync('src/map/VimaMap.tsx', 'utf8'), /@maplibre/);

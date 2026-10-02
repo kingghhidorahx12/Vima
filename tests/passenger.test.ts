@@ -476,7 +476,8 @@ test('rendered passenger flow preserves the actual shell/map instance across mat
     };
     assertSingleSheetSnap();
     assert.ok(text(tree).includes('¿A dónde vas?'));
-    const lockup = tree.root.findAll((node) => String(node.type) === 'Image' && node.props.accessibilityLabel === 'Vima');
+    const lockup = tree.root.findAll((node) => String(node.type) === 'Image' &&
+      String(node.props.source).endsWith('vima_header_lockup_final.png'));
     assert.equal(lockup.length, 1);
     assert.match(String(lockup[0]!.props.source), /vima_header_lockup_final\.png$/);
     assert.equal(lockup[0]!.props.style.height, 28);
@@ -528,6 +529,36 @@ test('rendered passenger flow preserves the actual shell/map instance across mat
   } finally {
     await harness.act(async () => tree.unmount());
     harness.client.clear(); fixture.controls.dispose();
+  }
+});
+
+test('compact map layers start off and persist user toggles locally', async () => {
+  const previous = process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY;
+  process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY = 'display-test-only';
+  const fixture = createPassengerFixtureGateway(clock);
+  const harness = createHarness();
+  const tree: ReactTestRenderer = await harness.render(fixture.gateway);
+  try {
+    await settle(harness);
+    const viewport = tree.root.findAll((node) => String(node.type) === 'View' &&
+      typeof node.props.onLayout === 'function' && node.props.style?.flex === 1)[0]!;
+    await harness.act(async () => viewport.props.onLayout({ nativeEvent: { layout: { height: 1000 } } }));
+    await harness.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+    await harness.act(async () => press(tree, 'Capas del mapa'));
+    const toggle = (label: string) => tree.root.findAll((node) => node.props.accessibilityRole === 'switch' &&
+      node.props.accessibilityLabel === label)[0]!;
+    assert.equal(toggle('Tráfico').props.accessibilityState.checked, false);
+    assert.equal(toggle('Incidentes').props.accessibilityState.checked, false);
+    await harness.act(async () => press(tree, 'Tráfico'));
+    assert.equal(toggle('Tráfico').props.accessibilityState.checked, true);
+    assert.deepEqual(JSON.parse(harness.kv.get('vima.map-layers.v1')), { traffic: true, incidents: false });
+    await harness.act(async () => press(tree, 'Incidentes'));
+    assert.deepEqual(JSON.parse(harness.kv.get('vima.map-layers.v1')), { traffic: true, incidents: true });
+  } finally {
+    await harness.act(async () => tree.unmount());
+    harness.client.clear(); fixture.controls.dispose();
+    if (previous === undefined) delete process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY;
+    else process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY = previous;
   }
 });
 

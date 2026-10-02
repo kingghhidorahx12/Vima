@@ -24,11 +24,11 @@ Este documento registra las decisiones proporcionadas en la solicitud y reflejad
 | Vehicle motion 10–15 Hz / snap configurable | Worklets con salida a 12 Hz y criterio de salto inyectado; sin umbral arbitrario. |
 | Reduced Motion central para UI y mapa | Provider del SO/preferencia local; navegación y ruta por fade, sin draw/scales/loops decorativos, vehículo/cámara con snap según el contrato técnico previo. |
 | Configuración style TomTom por entorno | `EXPO_PUBLIC_MAP_STYLE_URL` es la entrada única al style compatible de Orbis Assets/Map Display. URL/key/style finales pendientes. DEV sin URL usa OpenFreeMap Positron sólo para revisión; release sin URL falla explícitamente. |
-| Servicios TomTom exclusivamente backend | Places Search v3, Geocoding v2, Reverse Geocoding v2 y Routing v3 con tráfico live. La app usa sólo el contrato HTTPS Vima normalizado. Gateway local P0 Node+TypeScript sin framework: adapters reales, contratos normalizados, validación/rate limit/TTL/timeout y logs sanitizados. Credencial y verificación live pendientes; auth productiva fuera de alcance. |
+| Places/Geocoding/Routing TomTom exclusivamente backend | Places Search v3, Geocoding v2, Reverse Geocoding v2 y Routing v3 con tráfico live. La app usa sólo el contrato HTTPS Vima normalizado para esas operaciones. Gateway local P0 Node+TypeScript sin framework: adapters reales, contratos normalizados, validación/rate limit/TTL/timeout y logs sanitizados. Credencial y verificación live pendientes; auth productiva fuera de alcance. |
 | Ranking regional y Vima Local Places | Favorecer cercanía al origen/usuario, Atlacomulco y región inicial, expandir a municipios cercanos sin excluir trayectos intermunicipales, y mezclar proveedor con lugares locales validados. Buckets explicables que priorizan relevancia textual antes de región, preservando orden provider: Atlacomulco y Jocotitlán, San Felipe del Progreso, El Oro, Acambay, Ixtlahuaca, Temascalcingo. Catálogo servidor pequeño con fuentes públicas, independiente de fixtures; sin pesos ni radio restrictivo. |
 | Visual System v1 y Motion System v1 como fuentes de verdad P0 | Los JSON de `docs/design/` suministran tokens exactos; el handoff Markdown define semántica, comportamiento y límites. No se reinterpretan mockups como reglas funcionales. |
 | Semántica de mapa aprobada | Origen verde, destino rojo, ruta activa carbón/verde profundo según contexto y completada gris; posición y heading interpolados. |
-| Límites del handoff | No definir tema oscuro exacto, assets maestros, estilo final del mapa, grosores/opacidades por zoom, iconografía/stroke ni dimensiones aún no fijadas. |
+| Límites del handoff | No definir tema oscuro exacto, estilo final del mapa, grosores/opacidades por zoom, iconografía/stroke ni dimensiones aún no fijadas. La identidad master posterior sí está aprobada e integrada. |
 | Primer bloque de pasajero dentro del shell persistente | Inicio, confirmación, búsqueda/expansión/prolongada y asignación son estados internos, sin una ruta por fase. Una sola categoría principal, sin selector adicional. |
 | Asignación automática autoritativa | Pasajero ve ETA/conductor/PIN/vehículo; no acepta conductor ni inicia viaje. Reasignación y offline conservan contexto. |
 | Fixtures explícitos sólo para desarrollo | Adaptador aislado en `src/dev/passenger`, controles en DevMenu, guard `__DEV__` más EXPO_PUBLIC_VIMA_FIXTURES=1 y comprobación del bundle release. Live mediante EXPO_PUBLIC_VIMA_API_BASE_URL, sin fallback silencioso. Sin debug en viewport, oferta ficticia ni fixtures en servicios productivos. |
@@ -58,4 +58,21 @@ produce vista previa de ruta: precio/pago opcionales hasta cotización autoritat
 deshabilitado sin ambos. No hay recientes personales falsos. Se conserva composición y flujo fixture.
 
 Splash Android crece de160 a183dp por medición alpha y círculo seguro, sin editar artwork;
-[derivación y límites](SPLASH_ANDROID_P0.md). No se aprueba launch surface nueva.
+[derivación y límites](SPLASH_ANDROID_P0.md). La decisión posterior incorpora una
+`VimaLaunchSurface` propiedad de la app entre el splash nativo y el mapa listo.
+
+## Búsqueda local y mapa P0 aprobados
+
+| Decisión aprobada | Implementación |
+| --- | --- |
+| Search vacía: Favoritos → Recientes → Populares en tu zona → Vima Local destacados | No se solicita una lista genérica TomTom antes de escribir. |
+| Durante escritura, una lista mezclada local primero | Favoritos, Recientes, Vima Local y cache aparecen inmediatamente; Suggest actualiza tras 200 ms, sin badges de proveedor ni vaciado entre caracteres. |
+| Ranking regional y geografía explícita | Coincidencia de entidad/tipo primero; consultas ambiguas sesgadas hacia Atlacomulco, municipio escrito respetado y candidatos lejanos disponibles. |
+| Identidad canónica y dedupe de sucursales | ProviderRef/mapping explícito o alias explícito con verificación espacial; similitud de nombre + proximidad no bastan. |
+| Recientes privados | Últimos 16 destinos realmente confirmados; no almacenar queries ni resultados vistos. |
+| Popularidad colectiva contextual | Sólo `place_selected`, `destination_confirmed`, `trip_completed`; nunca `search_performed`. `trip_completed` no se emite sin backend de viaje. |
+| Aportes de lugar | Nombre y punto obligatorios; `pending` utilizable por su creador, sin elevarse a catálogo público verificado. |
+| Cámara Search | Search lock impide refit por altura del sheet; ruta/destino/vehículo anteriores se ocultan sólo en presentación. Recenter sigue siendo intención explícita. |
+| Controles compactos | Recenter independiente y Capas con Tráfico e Incidentes. No tercer toggle de Siniestros. |
+| Credenciales separadas | `TOMTOM_API_KEY` sólo gateway; `EXPO_PUBLIC_TOMTOM_DISPLAY_KEY` móvil para Orbis Map Display/Traffic cuando esté configurada. Style productivo aún pendiente. |
+| Movimiento y lanzamiento | Pins/ruta usan tiempos aprobados, Reduced Motion elimina motion espacial/loops, launch surface usa asset aprobado y sale al quedar listo el mapa sin retraso decorativo. |

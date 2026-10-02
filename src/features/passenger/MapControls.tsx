@@ -15,7 +15,7 @@ export function MapControls({ available, canRecenter, layers, open, onRecenter, 
       {!available ? <VimaText variant="caption" style={styles.unavailable}>Capas no disponibles</VimaText> : null}
       {(['traffic', 'incidents'] as const).map((layer) => <Pressable key={layer} accessibilityRole="switch"
         accessibilityLabel={layer === 'traffic' ? 'Tráfico' : 'Incidentes'}
-        accessibilityState={{ checked: layers[layer], disabled: !available }} disabled={!available}
+        accessibilityState={{ checked: available && layers[layer], disabled: !available }} disabled={!available}
         onPress={() => tap(() => onToggle(layer))} style={styles.menuRow}>
         <VimaText variant="bodySmall" style={styles.menuLabel}>{layer === 'traffic' ? 'Tráfico' : 'Incidentes'}</VimaText>
         <View style={[styles.switch, layers[layer] && available && styles.switchOn]}>

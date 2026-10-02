@@ -172,8 +172,11 @@ test('mobile source boundary excludes server provider credential, URLs and impor
   const files = fs.readdirSync('src', { recursive: true, encoding: 'utf8' }).filter(file => /\.tsx?$/.test(file));
   for (const path of files) {
     const text = fs.readFileSync(`src/${path}`, 'utf8');
-    assert.doesNotMatch(text, /TOMTOM_API_KEY|api\.tomtom\.com|from ['"][^'"]*gateway\/tomtom/);
+    assert.doesNotMatch(text, /\bTOMTOM_API_KEY\b|api\.tomtom\.com\/maps\/orbis\/(places|routing)|from ['"][^'"]*gateway\/tomtom/);
   }
+  const display = fs.readFileSync('src/map/traffic.ts', 'utf8');
+  assert.match(display, /api\.tomtom\.com\/maps\/orbis\/traffic\//);
+  assert.doesNotMatch(display, /key=\$|TOMTOM_API_KEY/);
   const route = fs.readFileSync('app/dev/passenger.tsx', 'utf8');
   assert.match(route, /__DEV__ && process\.env\.EXPO_PUBLIC_VIMA_FIXTURES === '1'/);
 });
