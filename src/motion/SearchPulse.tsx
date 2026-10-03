@@ -6,6 +6,7 @@ import { VimaGlyph } from '../design/components/VimaGlyph';
 import { useMotionPolicy } from './ReducedMotion';
 import { motionEasings } from './timing';
 import { motionTokens as m } from './tokens';
+import { surfaceColors } from '../design/presentation';
 
 /** Two rings maximum; visibility and OS preference stop the loop immediately. */
 export function SearchPulse({ visible, expanded }: { visible: boolean; expanded: boolean }) {
@@ -38,7 +39,7 @@ export function SearchPulse({ visible, expanded }: { visible: boolean; expanded:
     <View style={styles.rings}>
       <Animated.View style={[styles.ring, first]} />
       <Animated.View style={[styles.ring, second]} />
-      <View style={styles.vehicle}><VimaGlyph name="car" /></View>
+      <View style={styles.vehicle}><VimaGlyph name="car" color={t.colors.greenDark} /></View>
     </View>
   </View>;
 }
@@ -53,7 +54,8 @@ const size = t.components.iconSizesPx[2]! * 4;
 const styles = StyleSheet.create({
   area: { alignItems: 'center', justifyContent: 'center', padding: t.spacing.scalePx[2] },
   rings: { width: size, height: size, alignItems: 'center', justifyContent: 'center' },
-  ring: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
-  vehicle: { width: size / 2, height: size / 2, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
-    alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: t.colors.greenDark },
+  ring: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, backgroundColor: surfaceColors.brandWash,
+    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.greenDark },
+  vehicle: { width: size / 2, height: size / 2, borderRadius: t.radii.pillPx, backgroundColor: surfaceColors.brandWash,
+    alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border },
 });

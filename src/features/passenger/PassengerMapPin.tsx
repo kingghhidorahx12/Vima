@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
   locationHalo: { position: 'absolute', width: t.spacing.scalePx[8], height: t.spacing.scalePx[8], borderRadius: t.radii.pillPx,
     borderWidth: t.borders.standardWidthPx, borderColor: t.colors.accentBlue, alignItems: 'center', justifyContent: 'center' },
   locationRing: { width: t.spacing.scalePx[6], height: t.spacing.scalePx[6], borderRadius: t.radii.pillPx,
-    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.accentBlue, alignItems: 'center', justifyContent: 'center' },
+    backgroundColor: t.colors.accentBlueGlow, alignItems: 'center', justifyContent: 'center' },
   locationDot: { opacity: 1, width: t.components.iconSizesPx[0], height: t.components.iconSizesPx[0], borderRadius: t.radii.pillPx,
-    backgroundColor: t.colors.accentBlue, borderWidth: t.borders.standardWidthPx, borderColor: t.colors.white },
+    backgroundColor: t.colors.accentBlue, borderWidth: t.borders.standardWidthPx * 2, borderColor: t.colors.white },
 });

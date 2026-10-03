@@ -34,5 +34,5 @@ export function textStyle(choice: TypographyChoice): TextStyle {
   }
   const family = interFamilies[weight as keyof typeof interFamilies];
   if (!family) throw new Error('Inter font file missing for approved weight.');
-  return { fontFamily: family, fontSize: size };
+  return { fontFamily: family, fontSize: size, lineHeight: Math.round(size * 1.35) };
 }

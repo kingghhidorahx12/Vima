@@ -34,6 +34,6 @@ export function PlaceThumbnail({ place, resolveMedia }: { place: PlaceSuggestion
 
 const styles = StyleSheet.create({
   container: { width: t.spacing.scalePx[8], height: t.spacing.scalePx[8], alignItems: 'center', justifyContent: 'center',
-    borderRadius: t.radii.smallPx, backgroundColor: t.colors.background, overflow: 'hidden' },
+    borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background, overflow: 'hidden' },
   image: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
 });

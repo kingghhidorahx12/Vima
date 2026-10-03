@@ -22,10 +22,10 @@ export function VimaLaunchSurface({ ready, active = true }: { ready: boolean; ac
   useEffect(() => {
     cancelAnimation(scale); scale.set(1);
     if (!ready && !reducedMotion && running) scale.set(withSequence(
-      fadeTo(1.02, { ...mapPersonality.pulse, duration: mapPersonality.pulse.duration / 2 }), fadeTo(1, { ...mapPersonality.pulse, duration: mapPersonality.pulse.duration / 2 })));
+      fadeTo(1.01, { ...mapPersonality.pulse, duration: mapPersonality.pulse.duration / 2 }), fadeTo(1, { ...mapPersonality.pulse, duration: mapPersonality.pulse.duration / 2 })));
     return () => cancelAnimation(scale);
   }, [ready, reducedMotion, running, scale]);
-  const surfaceStyle = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: reducedMotion ? 0 : -(1 - opacity.get()) * t.spacing.scalePx[3]! }] }));
+  const surfaceStyle = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: reducedMotion ? 0 : -(1 - opacity.get()) * t.spacing.scalePx[1]! }] }));
   const brandStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
   return <Animated.View pointerEvents={ready ? 'none' : 'auto'} accessibilityElementsHidden={ready}
     style={[styles.surface, surfaceStyle]}>

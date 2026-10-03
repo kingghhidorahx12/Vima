@@ -313,6 +313,12 @@ test('alternatives appear at 120 seconds, search continues, and shell/map never 
     assert.ok(text(tree).includes('Aún buscamos un conductor'));
     await harness.act(async () => fixture.controls.advance('assigned')); await settle(harness);
     assert.ok(text(tree).includes('Tu conductor va en camino'));
+    assert.ok(text(tree).includes('4826'));
+    assert.ok(text(tree).includes('ABC-123'));
+    assert.equal(tree.root.findAll(n => n.props.accessibilityLabel === 'Imagen del vehículo no disponible').length, 1);
+    for (const label of ['Llamar', 'Seguridad']) {
+      assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => n.props.accessibilityLabel === label).length, 1);
+    }
     assert.equal(harness.mounted.map, 1); assert.equal(harness.mounted.sheet, 1);
   } finally {
     await harness.act(async () => tree.unmount()); harness.client.clear(); fixture.controls.dispose();

@@ -308,10 +308,10 @@ test('launch starts exit as soon as ready and reduced motion only crossfades', a
   for (const reduced of [false, true]) {
     const h = createMapHarness({ reduced }); const { VimaLaunchSurface } = h.load('src/motion/VimaLaunchSurface.tsx');
     const tree: ReactTestRenderer = await h.render(React.createElement(VimaLaunchSurface, { ready: false }));
-    assert.equal(h.calls.some((c: unknown[]) => c[0] === 'timing' && c[1] === 1.02), !reduced);
+    assert.equal(h.calls.some((c: unknown[]) => c[0] === 'timing' && c[1] === 1.01), !reduced);
     await h.act(async () => tree.update(React.createElement(VimaLaunchSurface, { ready: true })));
     assert.equal(tree.root.findAllByType('View' as never)[0]!.props.pointerEvents, 'none');
-    assert.ok(h.calls.some((c: unknown[]) => c[0] === 'timing' && c[1] === 0 && (c[2] as { duration: number }).duration === (reduced ? 160 : 720)));
+    assert.ok(h.calls.some((c: unknown[]) => c[0] === 'timing' && c[1] === 0 && (c[2] as { duration: number }).duration === (reduced ? 160 : 480)));
     assert.ok(!h.calls.some((c: unknown[]) => c[0] === 'repeat' || c[0] === 'delay'));
     await h.act(async () => tree.unmount());
   }

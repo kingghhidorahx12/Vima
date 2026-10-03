@@ -10,6 +10,8 @@ import { rideSheetGeometry, type SheetSnap } from '../../design/components/rideS
 import { VimaText } from '../../design/primitives';
 import { textStyle } from '../../design/typography';
 import { visualTokens as t } from '../../design/tokens';
+import { passengerSurfaces as surfaces, surfaceColors } from '../../design/presentation';
+import { elevationStyle } from '../../design/themes/light';
 import { semanticHaptics } from '../../motion/haptics';
 import { fadeTo } from '../../motion/helpers';
 import { SearchPulse } from '../../motion/SearchPulse';
@@ -133,7 +135,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     : assignment ? `Llegará en ${assignment.etaMinutes} min` : flow.phase === 'home' && !reviewing ? '¿A dónde vas?' : '';
   const header = <View onTouchStart={dismissKeyboard} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)} style={styles.sheetHeader}>
     <View style={styles.handle} />
-    {sheetTitle ? <VimaText variant={flow.phase === 'home' ? 'h3' : 'bodyMedium'} style={styles.center}
+    {sheetTitle ? <VimaText variant={flow.phase === 'home' || assignment ? 'h3' : 'bodyMedium'} style={[styles.center, !!assignment && styles.eta]}
       accessibilityRole="header">{sheetTitle}</VimaText> : null}
   </View>;
   const blocked = flow.pending || flow.connection !== 'online';
@@ -193,10 +195,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const quotePrice = flow.quote?.pricing?.status === 'priced' ? { amount: flow.quote.pricing.quote.price.totalMinor / 100, currency: 'MXN' } : flow.quote?.price;
   const money = (amount: number, currency: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   const content = <Animated.View style={[styles.fill, animatedContent]}>
-    {flow.connection !== 'online' ? <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>Sin conexión · Intentando reconectar</VimaText> : null}
-    {flow.quoteExpired ? <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>La cotización venció. Revisa y confirma la nueva cotización.</VimaText> : null}
+    {flow.connection !== 'online' ? <StatusNotice>Sin conexión · Intentando reconectar</StatusNotice> : null}
+    {flow.quoteExpired ? <StatusNotice>La cotización venció. Revisa y confirma la nueva cotización.</StatusNotice> : null}
     {flow.error ? <Pressable onPress={flow.retry} accessibilityRole="button" accessibilityLabel={flow.error.message}>
-      <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>{flow.error.message} ↻</VimaText>
+      <StatusNotice retry>{flow.error.message}</StatusNotice>
     </Pressable> : null}
     <ScrollView ref={scroll} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets
       onTouchStart={() => { dismissKeyboard(); setIncident(null); }} onScrollBeginDrag={dismissKeyboard}
@@ -206,7 +208,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
       {flow.field && pickingMap ? <>
         <VimaText variant="bodySmall" style={styles.center}>Toca el mapa para elegir la ubicación</VimaText>
-        <VimaButton gradient label={searchAction === 'map' ? 'Confirmar ubicación' : 'Continuar'}
+        <VimaButton label={searchAction === 'map' ? 'Confirmar ubicación' : 'Continuar'}
           disabled={!selectedCoordinate} onPress={() => { if (searchAction === 'map') confirmMapSelection();
             else setSearchAction('contribute-form'); }} />
         <TextAction label="Cancelar" onPress={() => { setSearchAction('results'); setSelectedCoordinate(null); }} />
@@ -218,12 +220,13 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <TextInput accessibilityLabel="Referencia" value={contributionReference} onChangeText={setContributionReference}
           style={styles.contributionInput} maxLength={240} />
         <VimaText variant="caption" style={styles.muted}>Este lugar quedará pendiente de validación pública.</VimaText>
-        <VimaButton gradient label="Guardar" disabled={!contributionName.trim() || flow.pending}
+        <VimaButton label="Guardar" disabled={!contributionName.trim() || flow.pending}
           onPress={() => { void submitContribution(); }} />
       </> : flow.field && searchAction === 'contribute-done' ? <>
+        <View style={styles.successIcon}><VimaGlyph name="check" color={t.colors.greenDark} /></View>
         <VimaText variant="h3" style={styles.center}>Lugar agregado</VimaText>
         <VimaText variant="bodySmall" style={styles.center}>Ya puedes usar este lugar como destino.</VimaText>
-        <VimaButton gradient label="Usar ahora" disabled={!contributedPlace} onPress={() => { if (contributedPlace) choosePlace(contributedPlace); }} />
+        <VimaButton label="Usar ahora" disabled={!contributedPlace} onPress={() => { if (contributedPlace) choosePlace(contributedPlace); }} />
         <VimaButton secondary label="Agregar otro lugar" onPress={() => {
           setContributedPlace(null); setSelectedCoordinate(null); setContributionName(''); setContributionReference('');
           setSearchAction('contribute-map');
@@ -240,11 +243,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             <View style={styles.skeletonLine} /><View style={styles.skeletonLineShort} />
           </View> : null}
           {flow.settledQuery && !flow.places.length && !flow.error ? <>
+            <View style={styles.emptyIcon}><VimaGlyph name="search" color={t.colors.accentBluePressed} /></View>
             <VimaText variant="h3" style={styles.center}>No encontramos resultados</VimaText>
             <VimaButton secondary label="Elegir en el mapa" onPress={() => {
               setSelectedCoordinate(null); setSearchAction('map');
             }} />
-            <VimaButton gradient label="Agregar lugar" onPress={() => {
+            <VimaButton label="Agregar lugar" onPress={() => {
               setSelectedCoordinate(null); setContributionName(flow.search.trim()); setContributionReference('');
               setSearchAction('contribute-map');
             }} />
@@ -272,7 +276,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             void (flow.favorites.some(favorite => (favorite.canonicalId ?? favorite.id) === id)
               ? flow.removeFavorite(id) : flow.saveFavorite(place));
           }} /> : null}
-        <VimaButton gradient label="Confirmar ubicaciones"
+        <VimaButton label="Confirmar ubicaciones"
           disabled={!validDraft(flow.origin, flow.destination)} onPress={() => {
             setReviewedDraft(draftKey);
             setRouteFitRequestId(++routeFitSerial.current);
@@ -281,7 +285,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           }} />
       </> : flow.phase === 'home' ? <>
         <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
-        <Pressable onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vas?" style={styles.homeSearch}>
+        <Pressable onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vas?"
+          style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed]}>
           <SmallPin color={t.colors.red} />
           <VimaText variant="bodySmall" style={styles.muted}>Buscar un lugar o dirección</VimaText>
         </Pressable>
@@ -309,29 +314,33 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             <Metric icon="payment" value={quotePrice ? money(quotePrice.amount, quotePrice.currency) : 'Precio no disponible'}
               label={quotePrice ? 'Precio estimado' : 'Sin tarifa'} emphasis={!!quotePrice} />
           </View>
-          <View style={styles.paymentRow}><VimaGlyph name="payment" color={t.colors.graphite} />
-            <VimaText variant="bodySmall" style={styles.fill}>{flow.quote.paymentMethod ?? 'Método de pago no configurado'}</VimaText>
-            {flow.quote.paymentMethod ? <VimaGlyph name="chevron" color={t.colors.gray} /> : null}</View>
+          <View style={styles.paymentRow}><View style={styles.paymentIcon}><VimaGlyph name="payment" color={t.colors.graphite} /></View>
+            <VimaText variant="bodySmall" style={[styles.fill, !flow.quote.paymentMethod && styles.muted]}>{flow.quote.paymentMethod ?? 'Método de pago no configurado'}</VimaText>
+          </View>
         </> : null}
-        <VimaButton gradient label="Solicitar viaje" onPress={() => { void flow.submit(); }} haptic="requestRide"
+        <VimaButton label="Solicitar viaje" onPress={() => { void flow.submit(); }} haptic="requestRide"
           loading={flow.phase === 'requesting'} disabled={!flow.canSubmit} />
       </> : assignment ? <>
         <View style={styles.driverCard}>
-          <View style={styles.row}><VimaText variant="h3" style={styles.fill}>{assignment.driver.name}</VimaText>
-            <VimaText variant="bodyMedium">★ {assignment.driver.rating}</VimaText></View>
-          <View style={styles.pin}><VimaText variant="caption">PIN</VimaText>
+          <View style={styles.row}>
+            <View style={styles.avatar}><VimaGlyph name="profile" color={t.colors.greenDark} /></View>
+            <View style={styles.fill}><VimaText variant="bodyMedium">{assignment.driver.name}</VimaText>
+              <View style={styles.rating}><VimaGlyph name="star" color={t.colors.amber} /><VimaText variant="bodySmall">{assignment.driver.rating}</VimaText></View>
+            </View>
+          </View>
+          <View style={styles.pin}><VimaText variant="caption" style={styles.muted}>PIN</VimaText>
             <VimaText variant="h1" selectable accessibilityLabel={`PIN ${assignment.pin.split('').join(' ')}`}>{assignment.pin}</VimaText></View>
           <View style={styles.vehicle}>
             {boundaries.vehicleImage ? <Image source={boundaries.vehicleImage} style={styles.vehicleImage} resizeMode="contain" />
-              : <View style={styles.vehicleImage} accessibilityLabel="Imagen del vehículo no disponible" />}
+              : <View style={styles.vehicleImage} accessible accessibilityLabel="Imagen del vehículo no disponible"><VimaGlyph name="car" color={t.colors.graphite} /></View>}
             <View style={styles.fill}><VimaText variant="bodyMedium">{assignment.vehicle.name}</VimaText>
-              <VimaText variant="bodySmall">{assignment.vehicle.color}</VimaText>
-              <VimaText variant="bodyMedium" selectable>{assignment.vehicle.plate}</VimaText></View>
+              <VimaText variant="bodySmall" style={styles.muted}>{assignment.vehicle.color}</VimaText>
+              <VimaText variant="h3" selectable>{assignment.vehicle.plate}</VimaText></View>
           </View>
         </View>
-        <View style={styles.row}><VimaButton style={styles.fill} secondary communication label="Llamar" onPress={() => boundaries.call(assignment)} disabled={blocked} />
-          <VimaButton style={styles.fill} secondary label="Seguridad" onPress={() => boundaries.safety(assignment)} /></View>
-        <TextAction label="Cancelar viaje" onPress={() => { void flow.act('cancel'); }} disabled={blocked} />
+        <View style={styles.row}><VimaButton style={styles.fill} secondary communication icon="phone" label="Llamar" onPress={() => boundaries.call(assignment)} disabled={blocked} />
+          <VimaButton style={styles.fill} secondary icon="shield" label="Seguridad" onPress={() => boundaries.safety(assignment)} /></View>
+        <TextAction danger label="Cancelar viaje" onPress={() => { void flow.act('cancel'); }} disabled={blocked} />
       </> : matching ? <>
         <View onLayout={(event) => { pulseHeight.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height;
           setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
@@ -359,19 +368,20 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   return <SafeAreaView edges={inset ? undefined : []} style={styles.fill}>
     <View onTouchStart={dismissKeyboard} style={styles.top}>
       {flow.phase === 'home' && !flow.field && !reviewing ? <>
-        <View style={styles.headerSide}><VimaGlyph name="menu" /></View>
+        <View style={[styles.headerSide, styles.headerControl]}><VimaGlyph name="menu" /></View>
         <View pointerEvents="none" style={styles.headerLockupSlot}>
           <Image source={require('../../../assets/brand/vima_header_lockup_final.png')} style={styles.headerLockup}
             resizeMode="contain" accessibilityLabel="Vima" />
         </View>
-        <View style={styles.headerSide}><VimaGlyph name="profile" /></View>
+        <View style={[styles.headerSide, styles.headerControl]}><VimaGlyph name="profile" /></View>
       </>
-        : <>{matching ? <View style={styles.headerSide}><VimaGlyph name="menu" /></View>
+        : <>{matching ? <View style={[styles.headerSide, styles.headerControl]}><VimaGlyph name="menu" /></View>
           : <Pressable accessibilityRole="button" accessibilityLabel="Volver" disabled={flow.phase === 'requesting' || !!assignment}
-            onPress={goBack} style={styles.headerSide}><VimaGlyph name="back" /></Pressable>}
-          <VimaText variant={assignment ? 'h2' : 'h3'} style={styles.headerTitle} accessibilityRole="header">
+            onPress={goBack} style={({ pressed }) => [styles.headerSide, styles.headerControl,
+              (flow.phase === 'requesting' || !!assignment) && styles.controlUnavailable, pressed && surfaces.pressed]}><VimaGlyph name="back" /></Pressable>}
+          <VimaText variant={assignment || matching ? 'bodyMedium' : 'h3'} style={styles.headerTitle} accessibilityRole="header">
             {assignment ? 'Tu conductor va en camino' : matching ? 'Buscando un conductor' : reviewing ? '' : flow.field ? '' : 'Confirma tu viaje'}
-          </VimaText><View style={styles.headerSide}>{matching ? <VimaGlyph name="profile" /> : null}</View></>}
+          </VimaText><View style={[styles.headerSide, matching && styles.headerControl]}>{matching ? <VimaGlyph name="profile" /> : null}</View></>}
     </View>
     <View style={styles.fill} onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
       <PassengerRideShell trip={flow.trip}
@@ -400,7 +410,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       </View> : null}
       {incident && (interaction?.targetOffset ?? height) > 100 ? <IncidentCard details={incident}
         maxHeight={Math.min(200, (interaction?.targetOffset ?? height) - 24)} onClose={() => setIncident(null)} /> : null}
-      {mapFailed ? <VimaText variant="caption" style={styles.mapStatus}>Mapa · !</VimaText> : null}
+      {mapFailed ? <View style={styles.mapStatus}><VimaGlyph name="warning" color={t.colors.amber} />
+        <VimaText variant="caption">No se pudo cargar el mapa</VimaText></View> : null}
     </View>
     <VimaLaunchSurface active={focused} ready={mapReady || mapFailed} />
   </SafeAreaView>;
@@ -409,6 +420,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
 function SmallPin({ color }: { color: string }) {
   return <View accessible={false} style={styles.pinBox}><View style={[styles.pinShape, { backgroundColor: color }]} /><View style={styles.pinCore} /></View>;
 }
+function StatusNotice({ children, retry = false }: { children: string; retry?: boolean }) {
+  return <View style={styles.notice}><VimaGlyph name={retry ? 'refresh' : 'info'} color={t.colors.accentBluePressed} />
+    <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.fill}>{children}</VimaText></View>;
+}
 function MatchingProgress() {
   return <View accessible={false} style={styles.progress}>
     <View style={styles.progressActive} /><View style={styles.progressDot} /><View style={styles.progressRest} />
@@ -416,7 +431,8 @@ function MatchingProgress() {
   </View>;
 }
 function OriginField({ place, status, onPress }: { place: Place | null; status: OriginStatus; onPress: () => void }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={onPress} style={styles.originField}>
+  return <Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={onPress}
+    style={({ pressed }) => [styles.originField, pressed && surfaces.pressed]}>
     <View style={styles.originDot} />
     <View style={styles.fill}>
       <VimaText variant="caption" style={styles.muted}>Origen</VimaText>
@@ -428,7 +444,8 @@ function OriginField({ place, status, onPress }: { place: Place | null; status: 
   </Pressable>;
 }
 function AddressField({ label, place, color, onPress, disabled }: { label: string; place?: Place | null; color: string; onPress?: () => void; disabled?: boolean }) {
-  return <Pressable onPress={onPress} disabled={disabled} accessibilityRole={onPress ? 'button' : 'text'} accessibilityLabel={`${label} ${place?.name ?? ''}`} style={styles.address}>
+  return <Pressable onPress={onPress} disabled={disabled} accessibilityRole={onPress ? 'button' : 'text'} accessibilityLabel={`${label} ${place?.name ?? ''}`}
+    style={({ pressed }) => [styles.address, pressed && !disabled && surfaces.pressed]}>
     <SmallPin color={color} />
     <View style={styles.fill}><VimaText variant="caption" style={styles.addressLabel}>{label}</VimaText>
       <VimaText variant="bodySmall" style={!place && styles.muted} numberOfLines={1}>{place?.name ?? label}</VimaText>
@@ -436,7 +453,8 @@ function AddressField({ label, place, color, onPress, disabled }: { label: strin
   </Pressable>;
 }
 function PlaceRow({ place, onPress, resolveMedia }: { place: PlaceSuggestion; onPress: () => void; resolveMedia?: PassengerGateway['resolvePlaceMedia'] }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress} style={styles.recent}>
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress}
+    style={({ pressed }) => [styles.recent, pressed && surfaces.pressed]}>
     <PlaceThumbnail place={place} resolveMedia={resolveMedia} />
     <View style={styles.fill}><VimaText variant="bodyMedium">{place.name}</VimaText>
       <VimaText variant="bodySmall" style={styles.muted} numberOfLines={1}>{place.address}</VimaText></View>
@@ -444,18 +462,19 @@ function PlaceRow({ place, onPress, resolveMedia }: { place: PlaceSuggestion; on
   </Pressable>;
 }
 function QuickPlace({ label, icon, onPress }: { label: string; icon: VimaGlyphName; onPress?: () => void }) {
-  const content = <><VimaGlyph name={icon} /><VimaText variant="caption">{label}</VimaText></>;
-  return onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.quickPlace}>{content}</Pressable>
+  const content = <><VimaGlyph name={icon} color={t.colors.greenDark} /><VimaText variant="caption">{label}</VimaText></>;
+  return onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
+    style={({ pressed }) => [styles.quickPlace, pressed && surfaces.pressed]}>{content}</Pressable>
     : <View accessible accessibilityLabel={label} style={styles.quickPlace}>{content}</View>;
 }
 function Metric({ icon, value, label, emphasis = false }: { icon: VimaGlyphName; value: string; label: string; emphasis?: boolean }) {
-  return <View style={styles.metric}><VimaGlyph name={icon} /><VimaText variant="bodyMedium" style={emphasis && styles.priceValue} numberOfLines={2}>{value}</VimaText>
+  return <View style={[styles.metric, emphasis && styles.metricEmphasis]}><VimaGlyph name={icon} color={emphasis ? t.colors.greenDark : t.colors.graphite} /><VimaText variant="bodyMedium" style={[styles.center, emphasis && styles.priceValue]}>{value}</VimaText>
     <VimaText variant="caption" style={styles.muted}>{label}</VimaText></View>;
 }
-function TextAction({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
+function TextAction({ label, onPress, disabled, danger = false }: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
   return <Pressable disabled={disabled} accessibilityRole="button" accessibilityState={{ disabled }}
-    onPress={() => { void semanticHaptics('buttonChip'); onPress(); }} style={styles.textAction}>
-    <VimaText variant="bodySmall" style={[styles.center, disabled && styles.muted]}>{label}</VimaText></Pressable>;
+    onPress={() => { void semanticHaptics('buttonChip'); onPress(); }} style={({ pressed }) => [styles.textAction, pressed && !disabled && surfaces.pressed]}>
+    <VimaText variant="bodySmall" style={[styles.center, styles.link, danger && styles.dangerText, disabled && styles.muted]}>{label}</VimaText></Pressable>;
 }
 
 const [xs, sm, md, lg, base] = t.spacing.scalePx as [number, number, number, number, number];
@@ -467,49 +486,54 @@ const styles = StyleSheet.create({
   headerLockupSlot: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   // Uniform scaling of the v2 master's visible bounds (672 × 200 raster derivative).
   headerLockup: { width: 672 * 28 / 200, height: 28 },
-  headerSide: { width: t.components.iconSizesPx[2], justifyContent: 'center' },
+  headerSide: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  headerControl: { borderRadius: t.radii.pillPx, backgroundColor: t.colors.background },
+  controlUnavailable: { opacity: 0.4 },
   headerTitle: { flex: 1, textAlign: 'center', color: t.colors.carbon },
-  sheet: { overflow: 'hidden', elevation: 4 },
+  sheet: { overflow: 'hidden' },
   sheetHeader: { paddingHorizontal: base, alignItems: 'center', paddingTop: sm, paddingBottom: md, gap: sm },
   handle: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[0], borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   content: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingBottom: base, gap: md },
-  originField: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md },
+  originField: { ...surfaces.field, minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md,
+    paddingHorizontal: md, paddingVertical: sm },
   originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
   row: { flexDirection: 'row', alignItems: 'center', gap: md },
-  homeSearch: { height: t.components.inputPrimary.heightPx, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
+  homeSearch: { ...surfaces.card, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.pillPx,
     flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md,
-    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.grayLight },
+    ...elevationStyle('level1', t.colors.carbon) },
   quickRow: { flexDirection: 'row', gap: sm },
-  quickPlace: { flex: 1, height: t.components.buttonPrimary.heightPx + t.spacing.scalePx[2]!, alignItems: 'center', justifyContent: 'center',
-    gap: xs, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.white, borderWidth: t.borders.standardWidthPx, borderColor: t.colors.background },
+  quickPlace: { ...surfaces.card, flex: 1, minHeight: t.components.buttonPrimary.heightPx + t.spacing.scalePx[2]!, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: sm, gap: sm, backgroundColor: t.colors.background },
   recentHeader: { flexDirection: 'row', alignItems: 'center', marginTop: xs },
-  recent: { minHeight: t.components.buttonPrimary.heightPx + sm, flexDirection: 'row', alignItems: 'center', gap: md,
-    paddingVertical: sm, borderBottomWidth: t.borders.standardWidthPx, borderBottomColor: t.colors.background },
+  recent: { ...surfaces.card, minHeight: t.components.buttonPrimary.heightPx + sm, flexDirection: 'row', alignItems: 'center', gap: md,
+    paddingVertical: sm, paddingHorizontal: md },
   recentIcon: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[7], alignItems: 'center', justifyContent: 'center',
     borderRadius: t.radii.smallPx, backgroundColor: t.colors.background },
   pinBox: { width: t.components.iconSizesPx[1], height: t.components.iconSizesPx[1], alignItems: 'center', justifyContent: 'center' },
   pinShape: { width: t.components.iconSizesPx[0], height: t.components.iconSizesPx[0], borderRadius: t.radii.pillPx,
     borderBottomRightRadius: t.radii.smallPx / 2, transform: [{ rotate: '45deg' }] },
   pinCore: { position: 'absolute', width: xs, height: xs, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white, top: sm, left: sm },
-  addressGroup: { backgroundColor: t.colors.white, borderRadius: t.radii.cardPx },
-  confirmAddressGroup: { marginHorizontal: md },
-  address: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md, paddingVertical: sm },
-  addressRule: { marginLeft: t.components.iconSizesPx[1]! + md, height: t.borders.standardWidthPx, backgroundColor: t.colors.background },
+  addressGroup: { ...surfaces.field, borderRadius: t.radii.cardPx, overflow: 'hidden' },
+  confirmAddressGroup: { marginHorizontal: 0 },
+  address: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md, paddingVertical: md, paddingHorizontal: md },
+  addressRule: { marginLeft: t.components.iconSizesPx[1]! + md * 2, marginRight: md, height: t.borders.standardWidthPx, backgroundColor: surfaceColors.border },
   addressLabel: { color: t.colors.graphite },
-  metrics: { flexDirection: 'row', alignItems: 'center', borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
-    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.grayLight, paddingVertical: md },
-  metric: { flex: 1, alignItems: 'center', gap: xs, paddingHorizontal: xs },
-  priceValue: { color: t.colors.greenDark },
+  metrics: { flexDirection: 'row', alignItems: 'stretch', gap: xs },
+  metric: { ...surfaces.field, flex: 1, justifyContent: 'center', alignItems: 'center', gap: xs, paddingHorizontal: xs, paddingVertical: md },
+  metricEmphasis: { borderColor: t.colors.greenDark, backgroundColor: surfaceColors.brandWash },
+  priceValue: { ...textStyle({ variant: 'h3' }), color: t.colors.greenDark },
   paymentRow: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md,
-    paddingHorizontal: md, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background },
-  searchFocused: { borderColor: t.colors.accentBlue, boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 0, spreadDistance: 2, color: t.colors.accentBlueGlow }] },
-  searchField: { borderWidth: t.borders.standardWidthPx, borderColor: t.borders.standardColor, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
+    paddingHorizontal: md, paddingVertical: sm, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background },
+  paymentIcon: { width: 32, height: 32, borderRadius: t.radii.smallPx, backgroundColor: t.colors.white, alignItems: 'center', justifyContent: 'center' },
+  searchFocused: surfaces.focus,
+  searchField: { ...surfaces.card, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.pillPx,
     paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm },
   searchInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, height: t.components.inputPrimary.heightPx, color: t.colors.carbon },
-  contributionInput: { ...textStyle({ variant: 'body', weight: 400 }), height: t.components.inputPrimary.heightPx,
-    borderRadius: t.radii.fieldPx, borderWidth: t.borders.standardWidthPx, borderColor: t.colors.grayLight,
+  contributionInput: { ...surfaces.field, ...textStyle({ variant: 'body', weight: 400 }), height: t.components.inputPrimary.heightPx,
     paddingHorizontal: md, color: t.colors.carbon },
-  searchSkeleton: { height: t.components.buttonPrimary.heightPx, justifyContent: 'center', gap: sm, paddingHorizontal: md },
+  searchSkeleton: { ...surfaces.field, height: t.components.buttonPrimary.heightPx, justifyContent: 'center', gap: sm, paddingHorizontal: md },
+  emptyIcon: { width: 64, height: 64, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: t.radii.pillPx, backgroundColor: t.colors.accentBlueSoft, marginTop: lg },
+  successIcon: { width: 64, height: 64, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: t.radii.pillPx, backgroundColor: surfaceColors.brandWash, marginTop: lg },
   skeletonLine: { width: '62%', height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   skeletonLineShort: { width: '40%', height: xs, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   matchingActions: { flexDirection: 'row', alignItems: 'center', gap: sm },
@@ -521,10 +545,18 @@ const styles = StyleSheet.create({
   progressRest: { flex: 1, height: t.borders.standardWidthPx * 2, backgroundColor: t.colors.grayLight },
   progressIdle: { width: t.spacing.scalePx[2], height: t.spacing.scalePx[2], borderRadius: t.radii.pillPx,
     backgroundColor: t.colors.grayLight, marginLeft: md },
-  textAction: { paddingVertical: sm }, notice: { backgroundColor: t.colors.background, paddingHorizontal: base, paddingVertical: sm },
-  driverCard: { gap: lg, padding: lg, borderRadius: t.radii.cardPx, backgroundColor: t.colors.background },
-  pin: { alignItems: 'center', paddingVertical: sm, gap: xs }, vehicle: { flexDirection: 'row', alignItems: 'center', gap: lg },
-  vehicleImage: { flex: 1, aspectRatio: 1, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.grayLight, justifyContent: 'center', padding: sm },
-  mapStatus: { position: 'absolute', top: lg, alignSelf: 'center', backgroundColor: t.colors.white, padding: sm, borderRadius: t.radii.pillPx },
+  textAction: { minHeight: 44, paddingVertical: sm, paddingHorizontal: xs, justifyContent: 'center', borderRadius: t.radii.smallPx },
+  link: { color: t.colors.accentBluePressed }, dangerText: { color: t.colors.red },
+  notice: { marginHorizontal: base, marginBottom: sm, flexDirection: 'row', alignItems: 'center', gap: sm,
+    backgroundColor: t.colors.accentBlueSoft, paddingHorizontal: md, paddingVertical: md, borderRadius: t.radii.fieldPx },
+  driverCard: { ...surfaces.card, gap: md, padding: md },
+  avatar: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: t.radii.pillPx, backgroundColor: surfaceColors.brandWash },
+  rating: { flexDirection: 'row', alignItems: 'center', gap: xs },
+  eta: { color: t.colors.greenDark },
+  pin: { alignItems: 'center', paddingVertical: sm, gap: xs, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background },
+  vehicle: { flexDirection: 'row', alignItems: 'center', gap: md },
+  vehicleImage: { width: 88, height: 72, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background, alignItems: 'center', justifyContent: 'center', padding: sm },
+  mapStatus: { ...surfaces.floating, position: 'absolute', top: lg, alignSelf: 'center', padding: md,
+    flexDirection: 'row', alignItems: 'center', gap: sm, borderRadius: t.radii.pillPx },
   mapControls: { position: 'absolute', right: t.spacing.mobileHorizontalMarginPx },
 });

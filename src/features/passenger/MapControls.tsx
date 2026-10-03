@@ -5,6 +5,7 @@ import { fadeTo } from '../../motion/helpers';
 import { mapPersonality } from '../../motion/mapPersonality';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { elevationStyle } from '../../design/themes/light';
+import { passengerSurfaces as surfaces, surfaceColors } from '../../design/presentation';
 import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph';
 import { VimaText } from '../../design/primitives';
 import { visualTokens as t } from '../../design/tokens';
@@ -93,16 +94,14 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.5 },
   stack: { alignItems: 'flex-end', gap: t.spacing.scalePx[1] },
   button: { width: 48, height: 48, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
-    alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: t.colors.grayLight,
+    alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border,
     ...elevationStyle('level1', t.colors.carbon) },
   toast: { minWidth: 170, paddingHorizontal: t.spacing.scalePx[2], paddingVertical: t.spacing.scalePx[1],
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.accentBlueSoft, borderWidth: t.borders.standardWidthPx,
     borderColor: t.colors.white, ...elevationStyle('level1', t.colors.carbon), flexDirection: 'row', gap: t.spacing.scalePx[1], alignItems: 'center' },
-  menu: { minWidth: 170, padding: t.spacing.scalePx[2], borderRadius: t.radii.cardPx,
-    backgroundColor: t.colors.white, borderWidth: t.borders.standardWidthPx, borderColor: t.colors.grayLight,
-    ...elevationStyle('level2', t.colors.carbon) },
+  menu: { ...surfaces.floating, minWidth: 170, padding: t.spacing.scalePx[2] },
   menuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[2] },
-  menuDivider: { borderTopWidth: t.borders.standardWidthPx, borderTopColor: t.colors.grayLight },
+  menuDivider: { borderTopWidth: t.borders.standardWidthPx, borderTopColor: surfaceColors.border },
   rowPressed: { backgroundColor: t.colors.accentBlueSoft },
   menuLabel: { flex: 1 }, unavailable: { color: t.colors.gray },
   switch: { width: 36, height: 22, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight,
