@@ -94,3 +94,15 @@ Splash Android crece de160 a183dp por medición alpha y círculo seguro, sin edi
 | Cotización inmutable | TTL 300 s configurable, store P0 en memoria, operationId idempotente y distinto de requestId. |
 | Renovación visible | Sin polling/refetch por reconexión mientras válida; expiración renueva y exige revisión nuevamente. |
 | Gates separados | Pricing no habilita pago ni request/matching live inexistente. |
+
+## Fit confirmado y media opcional P0 — decisiones aprobadas 2026-10-02
+
+| Decisión | Aplicación |
+| --- | --- |
+| Fit completo sólo tras confirmar ubicaciones | Encuadrar origen, geometría total y destino con padding del viewport útil, sheet y controles; Search no emite fit. Reduced Motion conserva la acción sin animación prolongada. |
+| Ruta legible sobre Traffic | Casing claro con colores del Visual System debajo del trazo Vima; Traffic conserva sus capas y semántica. |
+| Miniaturas como enriquecimiento opcional | Prioridad: media Vima propia/licenciada, fuente externa futura permitida, icono Vima por categoría. Search, ranking, dedupe y selección no dependen de imágenes. |
+| Identidad de imagen estable | `canonicalPlaceId` identifica el lugar; `PlaceImageRef` identifica el asset o referencia externa. URL efímera nunca es identidad ni se guarda en Favoritos/Recientes. |
+| Catálogo de media controlado | Binarios y manifiesto con provenance viven fuera del repo mediante `VIMA_PLACE_MEDIA_DIR`; sólo imágenes aprobadas de Local Places verificados se publican. Aportes `pending` no reciben foto pública ni upload en P0. |
+| Fotos proveedor fuera de P0 | No integrar TomTom POI Photos ni Google Places Photos; `source: external` sólo deja abierto un contrato futuro sujeto a derechos y metadata por proveedor. |
+| Español visible P0 | Categorías de incidentes reales traducidas; desconocidas muestran `Incidente vial`, sin enums ni fallback inglés visible. |

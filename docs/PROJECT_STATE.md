@@ -1,7 +1,7 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-02 en `codex/motion-pricing-p0`, desde `8d5ec80` y las correcciones
-locales preservadas en `7c45b36`. No se modificaron ramas históricas ni main.
+Actualizado 2026-10-02 en `codex/premium-media-pricing-p0`, creada desde el HEAD publicado
+de `codex/motion-pricing-p0`. No se modificaron ramas históricas ni main.
 
 ## IMPLEMENTADO
 
@@ -81,11 +81,47 @@ locales preservadas en `7c45b36`. No se modificaron ramas históricas ni main.
 - Gates pricing/payment/request separados. Tener precio no activa matching live ni
   asigna Efectivo. Sin tarifas sintéticas en producción. Ver [Pricing P0](PRICING_P0.md).
 
+### Acabado premium y media opcional P0 — 2026-10-02
+
+- `Confirmar ubicaciones` emite una intención única de encuadrar origen, geometría completa
+  y destino cuando llega una ruta válida y se mide el sheet. El fit usa el padding real del
+  viewport del mapa, incluida la altura del sheet y el espacio de controles; no se dispara
+  por escribir en Search. Reduced Motion mueve la cámara sin animación.
+- RouteLayer añade un casing blanco debajo de la ruta Vima para separarla visualmente del
+  tráfico verde; su trazo base y flujo aprobado permanecen. Recenter confirma sólo al acabar
+  el movimiento nativo; el toast no bloquea toques y desaparece automáticamente en ~1 s.
+  Controles y superficies usan bordes/profundidad sutiles de los tokens existentes.
+- La tarjeta de incidentes traduce las categorías reales conocidas del tile Orbis y usa
+  `Incidente vial` para valores desconocidos. Solicita `es-ES` a TomTom; si upstream devuelve
+  una descripción en inglés no reconocible, se omite. Sólo presenta severidad disponible;
+  el tile no trae una calle legible. La UI P0 nueva queda en español.
+- `PlaceImageRef` lleva una referencia estable separada de `canonicalPlaceId`.
+  `PlaceThumbnail` ocupa 48 px fijos en resultados, Favoritos, Recientes, Populares y Vima
+  Local, con icono de categoría siempre disponible y `expo-image` para media válida, caché
+  memory-disk, clave por asset/versión y reciclaje por lugar. Search/ranking no esperan imagen.
+- El gateway puede cargar un manifiesto revisado desde `VIMA_PLACE_MEDIA_DIR` fuera del repo
+  y servir sólo WebP `thumb.webp` asociado a un Local Place verificado mediante
+  `GET /v1/media/place-images/:assetId/thumbnail`. Rechaza IDs/rutas inválidas, enlaces
+  simbólicos, archivos ausentes/corruptos y versiones no coincidentes. El manifiesto guarda
+  propietario, fuente, licencia, fecha, versión y atribución opcional. No hay upload ni
+  fotos TomTom/Google. Ver [Media P0](PLACE_MEDIA_P0.md).
+- Pricing P0 preexistente se conserva: quote autoritativa y gates independientes. La UI
+  presenta el precio disponible con más jerarquía, o `Precio no disponible` sin guion
+  sustituto; pago no configurado tiene presentación neutra. Sin config comercial sigue
+  habiendo ruta/distancia/duración y no se habilita la solicitud live.
+
 ## VERIFICADO AUTOMÁTICAMENTE
 
 - Tests unitarios/integración de geoespacial, ranking, dedupe, persistencia, contribuciones,
   señales, cámara Search/Recenter, clipping estructural, capas, Reduced Motion y launch surface.
-- Validación vigente de motion/pricing: `npm test` 111/111 y `npm run test:gateway` 23/23;
+- Esta ronda premium/media: `npm test` 121/121, `npm run test:gateway` 28/28,
+  TypeScript y lint OK; `check:worklets`, `check:fixture-isolation`, `check:splash`,
+  Expo Doctor 21/21 y exportación Hermes Android/iOS con aislamiento release OK.
+  El primer Doctor y el primer Hermes export chocaron con restricciones de red/ejecutable
+  del sandbox; los reintentos autorizados pasaron. `TOMTOM_API_KEY` no está disponible,
+  por lo que el smoke live no se ejecutó. Tests de componentes y WebP usan dobles/fixture;
+  la fidelidad visual y decodificación de fotos reales requieren Android físico.
+- Validación anterior de motion/pricing: `npm test` 111/111 y `npm run test:gateway` 23/23;
   TypeScript y lint OK. Worklets transformados en 17 archivos; Expo Doctor 21/21,
   aislamiento de fixtures y pricing/servidor, check:splash y exportación Hermes
   Android/iOS OK. Expo config resuelto conserva owner, EAS projectId e identificadores.
@@ -94,9 +130,9 @@ locales preservadas en `7c45b36`. No se modificaron ramas históricas ni main.
   El export usa un temporal relativo exclusivo del proceso para que Hermes no incruste
   la ruta del perfil del desarrollador. Los tests de componentes usan
   dobles nativos; no certifican render de tiles/Fabric en un teléfono.
-- Este bloque sólo cambia TypeScript/JS, scripts, docs y `.env.example`: no agrega dependencia/plugin
-  nativo ni cambia splash. Un Development Build que ya incorpore la base `1570e7a` puede
-  cargarlo con Metro; un APK anterior al ajuste nativo de splash 183 dp sí requiere reconstrucción.
+- Esta ronda añade `expo-image` y su plugin, por lo que el Development Build anterior debe
+  reconstruirse para comprobar miniaturas. No se generó otro APK. El resto del bloque es
+  código/estilos y no modifica splash.
 
 ## VERIFICADO TOMTOM LIVE
 
@@ -119,6 +155,18 @@ locales preservadas en `7c45b36`. No se modificaron ramas históricas ni main.
 - Render/colores/categorías de tiles Orbis Traffic/Incidents requieren clave y cobertura live;
   tests de código no equivalen a signoff visual. Desactivar `Tools button` del Development
   Client al tomar capturas.
+- Verificar en el nuevo Development Build el fit de la ruta completa con sheet y controles,
+  contraste ruta/Traffic ON y OFF, toast ~1 s, controles y tarjetas en español, pulso/flujo
+  con Reduced Motion y thumbnails reales cuando existan imágenes aprobadas. Los tests usan
+  dobles nativos y no equivalen a validación visual/física.
+
+## PENDIENTE ASSETS MEDIA
+
+- No hay archivos fotográficos propios/licenciados suministrados ni entradas publicables del
+  manifiesto. Los dos Local Places verificados (Plaza Atlacomulco y CU UAEM Atlacomulco),
+  junto con los resultados proveedor, siguen mostrando icono de categoría. Terminal,
+  mercados, hospitales y demás sólo tendrán foto tras alta/licencia y verificación propias;
+  no se inventan nuevos Local Places para media.
 
 ## PENDIENTE CREDENCIAL DISPLAY / STYLE
 

@@ -113,7 +113,10 @@ un reinicio reinicia esa dedupe aunque conserva agregados, limitación P0 explí
 Dos capas vectoriales nativas MapLibre, OFF por defecto y persistidas localmente. Tráfico usa
 `Traffic flow` y `relative_speed`/`road_closure`; Incidentes usa `Traffic incident flow` y
 `Traffic incident points`, con `icon_category_0` para distinguir casos dentro de un único
-control. No se implementa Incident Details. URLs y source-layers se cotejaron con
+control. El tap presenta sólo categoría, descripción y magnitud disponibles en el tile;
+no se implementa la API Incident Details ni se fabrica una calle. El request de tiles
+de incidentes solicita `es-ES`; si TomTom usa fallback inglés, la descripción no
+traducible se omite y queda la categoría española. URLs y source-layers se cotejaron con
 [Vector Flow Tiles Orbis v2](https://docs.tomtom.com/traffic-api/documentation/tomtom-orbis-maps/v2/traffic-flow/vector-flow-tiles)
 y [Vector Incident Tiles Orbis v2](https://docs.tomtom.com/traffic-api/documentation/tomtom-orbis-maps/v2/traffic-incidents/vector-incident-tiles)
 el 2026-10-02. Ambas APIs documentan el header `TomTom-Api-Key` para autenticación. El style
