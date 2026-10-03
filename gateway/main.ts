@@ -3,11 +3,13 @@ import { createTomTomAdapter } from './tomtom.ts';
 import { createGateway } from './server.ts';
 import { localPlaces } from './places.ts';
 import { loadPricingConfig } from './pricing/config.ts';
+import { loadPlaceMediaCatalog } from './placeMedia.ts';
 
 const config = gatewayConfig();
 const key = process.env.TOMTOM_API_KEY;
 const server = createGateway(config, createTomTomAdapter(key, config), {
   pricing: await loadPricingConfig(process.env.VIMA_PRICING_CONFIG_PATH),
+  media: await loadPlaceMediaCatalog(process.env.VIMA_PLACE_MEDIA_DIR, localPlaces),
   configured: Boolean(key?.trim()), localPlaces,
   logger: entry => process.stdout.write(JSON.stringify(entry) + '\n'),
 });

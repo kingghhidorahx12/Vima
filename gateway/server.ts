@@ -13,6 +13,7 @@ import { createPopularityRepository } from './popularity.ts';
 import { createQuoteService } from './pricing/service.ts';
 import { PricingError } from './pricing/contracts.ts';
 import type { PricingConfiguration } from './pricing/config.ts';
+import { emptyPlaceMediaCatalog, type PlaceMediaCatalog } from './placeMedia.ts';
 
 export interface GatewayLog { requestId: string; endpoint: string; durationMs: number; upstreamStatus?: number; count: number; error?: GeospatialErrorCode }
 async function readBody(request: IncomingMessage, maximum: number): Promise<unknown> {
@@ -28,13 +29,18 @@ async function readBody(request: IncomingMessage, maximum: number): Promise<unkn
 }
 export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, options: {
   now?: () => number; logger?: (entry: GatewayLog) => void; localPlaces?: readonly VimaLocalPlace[]; configured?: boolean;
-  pricing?: PricingConfiguration;
+  pricing?: PricingConfiguration; media?: PlaceMediaCatalog;
 } = {}) {
   const now = options.now ?? Date.now;
   const state = createGatewayState(config, now);
   const contributions = createContributionRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const popularity = createPopularityRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const quotes = createQuoteService(adapter, config, options.pricing ?? { status: 'pricing_not_configured' }, now);
+  const media = options.media ?? emptyPlaceMediaCatalog();
+  const attachImage = <T extends { id: string; canonicalId?: string; provenance?: string }>(place: T): T => {
+    const image = place.provenance === 'vima-local' ? media.imageFor(place.canonicalId ?? place.id) : undefined;
+    return image ? { ...place, image } : place;
+  };
   const cleanup = setInterval(() => { state.cleanup(); quotes.store.cleanup(); }, config.cleanupMs); cleanup.unref();
   const server = createServer({ maxHeaderSize: config.maxBodyBytes, requestTimeout: config.upstreamTimeoutMs * 2 }, async (request, response) => {
     const requestId = randomUUID(); const started = now(); const controller = new AbortController();
@@ -62,7 +68,21 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
         if (url.pathname !== '/v1/geospatial/discovery' || [...url.searchParams.keys()].length !== 1 ||
           !url.searchParams.has('regionId')) throw new GeospatialError('invalid_result');
         const result = await popularity.discovery(url.searchParams.get('regionId')!);
-        count = result.popular.length + result.featured.length; reply(200, result, true); return;
+        count = result.popular.length + result.featured.length;
+        reply(200, { popular: result.popular.map(attachImage), featured: result.featured.map(attachImage) }, true); return;
+      }
+      const mediaMatch = /^\/v1\/media\/place-images\/([a-z0-9][a-z0-9-]{0,79})\/thumbnail(?:\?v=([1-9]\d{0,15}))?$/.exec(path);
+      if (request.method === 'GET' && mediaMatch) {
+        endpoint = 'place-media.thumbnail';
+        const version = mediaMatch[2] ? Number(mediaMatch[2]) : undefined;
+        if (version !== undefined && !Number.isSafeInteger(version)) throw new GeospatialError('invalid_result');
+        const bytes = await media.thumbnail(mediaMatch[1]!, version);
+        if (!bytes) { category = 'no_result'; reply(404, { error: { code: category } }); return; }
+        count = 1;
+        response.writeHead(200, { 'Content-Type': 'image/webp', 'Content-Length': bytes.length,
+          'Cache-Control': mediaMatch[2] ? 'public, max-age=86400, immutable' : 'public, max-age=60',
+          'X-Request-Id': requestId, 'X-Content-Type-Options': 'nosniff' });
+        response.end(bytes); return;
       }
       if (path.includes('?')) throw new GeospatialError('invalid_result');
       if (request.method === 'POST' && path === '/v1/passenger/quotes') {
@@ -111,7 +131,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
             else if ('status' in result && result.coordinate) session.choices.set(result.id, result);
           }
           while (session.choices.size > config.maxResults * 3) session.choices.delete(session.choices.keys().next().value!);
-          count = ranked.length; reply(200, { suggestions: ranked.map(decodeSuggestion) });
+          count = ranked.length; reply(200, { suggestions: ranked.map(place => decodeSuggestion(attachImage(place))) });
         };
         if (action === 'resolve') {
           const body = allowFields(input, ['id']); const selection = query(body.id, config);
@@ -122,7 +142,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
           try { place = 'coordinate' in choice ? decodePlace(choice) :
             { ...await adapter.resolve(choice, context), canonicalId: providerCanonicalId(choice.type, choice.id) }; }
           finally { state.close(id); }
-          count = 1; reply(200, place); return;
+          count = 1; reply(200, attachImage(place)); return;
         }
         if (action === 'follow-up') {
           const body = allowFields(input, ['id', 'bias']); const selection = query(body.id, config);
