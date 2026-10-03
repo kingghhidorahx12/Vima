@@ -121,8 +121,18 @@ productivo, grosores por zoom y render físico siguen pendientes.
 
 ## Límite Passenger
 
-La misma pantalla/shell/mapa usa sugerencias → Details → routing real. RideQuote admite price y
-paymentMethod ausentes para vista previa; canRequest exige ambos. No se finge cotización, pago,
-matching. Los recientes existen sólo tras confirmación real del destino. Solicitar viaje queda
+La misma pantalla/shell/mapa usa sugerencias → Details → cotización con Routing real.
+RideQuote conserva preview cuando pricing no está disponible. Los gates pricingReady,
+paymentReady y tripRequestAvailable son independientes; no se finge pago ni matching.
+Los recientes existen sólo tras confirmación real del destino. Solicitar viaje queda
 deshabilitado en live P0. Fixtures explícitos DEV mantienen flujo completo. Release conserva su entry
 no habilitado: se valida Android con Development Client, no se publica un producto incompleto.
+
+## Cotizaciones P0
+
+`POST /v1/passenger/quotes` es ahora el único camino de PassengerLiveGateway para obtener
+ruta y precio. Compone el adapter Routing existente sin modificar sus endpoints TomTom.
+El endpoint geoespacial `/routes` permanece para consumidores geoespaciales y smoke.
+Detalles de configuración externa, estados priced/unpriced, TTL y autoridad en
+[PRICING_P0.md](PRICING_P0.md). No hay payment/request/matching live ni tarifas comerciales
+por defecto. El detalle ligero de incidentes usa atributos de tiles; no añade Incident Details API.

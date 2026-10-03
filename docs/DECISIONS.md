@@ -76,3 +76,21 @@ Splash Android crece de160 a183dp por medición alpha y círculo seguro, sin edi
 | Controles compactos | Recenter independiente y Capas con Tráfico e Incidentes. No tercer toggle de Siniestros. |
 | Credenciales separadas | `TOMTOM_API_KEY` sólo gateway; `EXPO_PUBLIC_TOMTOM_DISPLAY_KEY` móvil para Orbis Map Display/Traffic cuando esté configurada. Style productivo aún pendiente. |
 | Movimiento y lanzamiento | Pins/ruta usan tiempos aprobados, Reduced Motion elimina motion espacial/loops, launch surface usa asset aprobado y sale al quedar listo el mapa sin retraso decorativo. |
+
+## Motion y pricing P0 — decisiones aprobadas 2026-10-02
+
+| Decisión | Aplicación |
+| --- | --- |
+| Ubicación: core siempre visible y pulso externo | Opacidad del núcleo 1; sólo anillo animado, sin loop en Reduced Motion/background. |
+| Ruta viva | Reveal inicial y señal discreta repetida sobre base estable; ruta completa estática en Reduced Motion. |
+| Launch controlado por la app | Asset aprobado, pulso breve y salida al quedar listo el mapa; sin espera mínima ni cambio al native splash 183 dp. |
+| Autoridad de pricing | Gateway Vima; el móvil envía draft y operationId, nunca precio/métricas/perfil como autoridad. |
+| Fórmula sin surge | max(minimum, base + distance × kmRate + duration × minuteRate) + extras explícitos. |
+| Minor units y rounding final | Enteros seguros; aritmética racional exacta y half_up, incremento técnico 1 centavo por defecto. |
+| URBANO / REGIONAL | Todos los puntos en misma región o itinerario intermunicipal; región no clasificable falla cerrada. |
+| Overrides | Corredor específico precede REGIONAL; dirección explícita; tercer municipio usa REGIONAL; ambigüedad rechazada. |
+| Peajes/extras | Sólo configuración explícita, después del mínimo; nunca inferidos de ruta/TomTom/nombre. |
+| Config comercial externa | VIMA_PRICING_CONFIG_PATH server-only, versionada; sin tarifas comerciales hardcodeadas ni fallback. |
+| Cotización inmutable | TTL 300 s configurable, store P0 en memoria, operationId idempotente y distinto de requestId. |
+| Renovación visible | Sin polling/refetch por reconexión mientras válida; expiración renueva y exige revisión nuevamente. |
+| Gates separados | Pricing no habilita pago ni request/matching live inexistente. |

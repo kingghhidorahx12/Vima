@@ -1,7 +1,7 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-02 en `codex/local-search-map-motion-p0`, creada desde
-`codex/tomtom-live-atlacomulco-p0` (`1570e7a`). No se modificó la rama base.
+Actualizado 2026-10-02 en `codex/motion-pricing-p0`, desde `8d5ec80` y las correcciones
+locales preservadas en `7c45b36`. No se modificaron ramas históricas ni main.
 
 ## IMPLEMENTADO
 
@@ -54,22 +54,47 @@ Actualizado 2026-10-02 en `codex/local-search-map-motion-p0`, creada desde
   adjunta sólo a solicitudes `api.tomtom.com/maps/orbis/` mediante header nativo.
 - Pins con entrada mediante transform/opacity, pulso sutil de ubicación y ruta GeoJSON con
   revelado progresivo; Reduced Motion elimina movimiento espacial/loop y muestra la ruta
-  completa con fade breve. `VimaLaunchSurface` usa el app icon aprobado sobre carbón y sale
-  cuando el mapa queda listo, sin espera artificial. Native splash Android 183 dp permanece.
+  completa con fade breve. `VimaLaunchSurface` usa el lockup de splash aprobado sobre blanco
+  (mismo fondo que native splash), pulso uniforme de 720 ms y salida fade/slide de 720 ms
+  iniciada al estar listo el mapa. Reduced Motion: crossfade 160 ms. Native splash 183 dp intacto.
 - Basemap DEV OpenFreeMap Positron sigue siendo sólo fallback cuando falta el style configurado;
   producción continúa exigiendo `EXPO_PUBLIC_MAP_STYLE_URL` explícita.
+
+### Motion y pricing P0
+
+- Núcleo de ubicación azul con opacity 1, anillo exterior 720 ms + descanso 1900 ms.
+  El loop se cancela al perder foco/foreground o activar Reduced Motion. Pines con
+  entrada/rebote 420 ms y halo breve; incidentes con transición nativa 600 ms, sin loop.
+- Ruta con reveal inicial 720 ms y highlight discreto A→B cada 3800 ms. Base estable,
+  índice geométrico cacheado y sólo ventana pequeña serializada por worklet; sin reroute,
+  sin React por frame. Reduced Motion: ruta completa con fade, sin repetición.
+- Recenter con escala/halo y confirmación sólo desde evento nativo de cámara terminada
+  en la coordenada solicitada. Tap/pan cancela el feedback pendiente. Capas: transición
+  240 ms (token próximo al board), switches y menú con feedback. Botones con verde Vima,
+  pressed/disabled/loading; foco de field y profundidad leve del sheet, sin cambiar snaps.
+- PricingEngine puro, config externa/versionada, clasificación por polígonos del servidor,
+  URBANO/REGIONAL/overrides, centavos enteros y aritmética racional BigInt con redondeo final.
+  Store en memoria con TTL 300 s por defecto, conflicto/idempotencia concurrente y cleanup.
+- POST /v1/passenger/quotes compone Routing y Pricing. Sin tarifas/config/región válida
+  conserva routePreview unpriced; fallo de ruta se distingue. Móvil usa sólo ese endpoint,
+  conserva quote válida tras reconexión y pide nueva revisión tras expiración.
+- Gates pricing/payment/request separados. Tener precio no activa matching live ni
+  asigna Efectivo. Sin tarifas sintéticas en producción. Ver [Pricing P0](PRICING_P0.md).
 
 ## VERIFICADO AUTOMÁTICAMENTE
 
 - Tests unitarios/integración de geoespacial, ranking, dedupe, persistencia, contribuciones,
   señales, cámara Search/Recenter, clipping estructural, capas, Reduced Motion y launch surface.
-- 90/90 tests de suite completa y 12/12 gateway; TypeScript y lint OK. Worklets nuevos
-  transformados; Expo Doctor 21/21, aislamiento de fixtures, check:splash y exportación Hermes
+- Validación vigente de motion/pricing: `npm test` 111/111 y `npm run test:gateway` 23/23;
+  TypeScript y lint OK. Worklets transformados en 17 archivos; Expo Doctor 21/21,
+  aislamiento de fixtures y pricing/servidor, check:splash y exportación Hermes
   Android/iOS OK. Expo config resuelto conserva owner, EAS projectId e identificadores.
   El primer export falló por permiso sandbox sobre `hermesc.exe`; el reintento autorizado pasó.
-  Bundles sin `TOMTOM_API_KEY` ni paths del adapter servidor. Los tests de componentes usan
+  Bundles sin `TOMTOM_API_KEY`, tarifas sintéticas ni paths personales/del adapter servidor.
+  El export usa un temporal relativo exclusivo del proceso para que Hermes no incruste
+  la ruta del perfil del desarrollador. Los tests de componentes usan
   dobles nativos; no certifican render de tiles/Fabric en un teléfono.
-- Este bloque sólo cambia TypeScript/JS, docs y `.env.example`: no agrega dependencia/plugin
+- Este bloque sólo cambia TypeScript/JS, scripts, docs y `.env.example`: no agrega dependencia/plugin
   nativo ni cambia splash. Un Development Build que ya incorpore la base `1570e7a` puede
   cargarlo con Metro; un APK anterior al ajuste nativo de splash 183 dp sí requiere reconstrucción.
 
@@ -79,9 +104,14 @@ Actualizado 2026-10-02 en `codex/local-search-map-motion-p0`, creada desde
   El smoke anterior de CU UAEM exigía un Discover intermedio indebido; el adapter corregido
   aún requiere repetición con `TOMTOM_API_KEY` presente en este entorno. No se preservan
   respuestas raw ni se marca cobertura nueva sin consulta real.
+- En esta ronda motion/pricing se omitió el smoke live porque `TOMTOM_API_KEY` no estaba
+  disponible. Los tests de gateway usan respuestas controladas, no verifican cobertura live.
 
 ## PENDIENTE ANDROID FÍSICO
 
+- Revisar pulse con núcleo siempre opaco; ruta repetida suave sin parpadeos; controles, launch
+  con mapa rápido/lento, Reduced Motion y pausa al pasar a background. Comprobar precio
+  con config aprobada, preview sin config y expiración con revisión explícita.
 - Confirmar que los Marker nativos no escapan de `MapViewportClip`; pan/zoom, Search lock,
   Recenter, restauración tras cancelar Search, composición de controles y teclado.
 - Revisar lista local/Suggest, Favoritos/Recientes, selección manual, aporte pending,
@@ -97,12 +127,18 @@ Actualizado 2026-10-02 en `codex/local-search-map-motion-p0`, creada desde
 - Falta aprobar el style productivo `EXPO_PUBLIC_MAP_STYLE_URL` y grosores/opacidades por zoom.
   Los trazos de tráfico de este P0 son provisionales, no signoff del mapa final.
 
+## PENDIENTE CONFIGURACIÓN COMERCIAL
+
+- Proveer VIMA_PRICING_CONFIG_PATH sólo al gateway, con tarifas reales aprobadas y polígonos
+  municipales, version/overrides/extras explícitos. Sin esta configuración live ofrece ruta
+  sin precio. No existe configuración comercial ni tarifa por defecto en el repositorio.
+
 ## PENDIENTE INFRAESTRUCTURA PRODUCTIVA
 
 - Configurar bounds reales de servicio (`VIMA_GEO_SERVICE_AREA_BOUNDS`) para aportes. Sin
   ellos el endpoint falla explícitamente; no se inventó un polígono operativo.
-- Persistencia/agregación multiinstancia, moderación de aportes, autenticación, backend de
-  cotización/matching/pagos y release siguen fuera de P0. El dedupe actor/día actual es
+- Persistencia/agregación multiinstancia, moderación de aportes, autenticación, backend productivo de
+  request/matching/pagos y release siguen fuera de P0. El dedupe actor/día actual es
   únicamente de proceso; un reinicio permite una señal nueva para el mismo actor/lugar/día.
 - Ampliar ground truth regional sólo con evidencia verificable. Los casos Coppel, Hospital,
   Cinemex, Bodega, centros de Ixtlahuaca/El Oro, Teatro Juárez, Presa Brockman y negativo
