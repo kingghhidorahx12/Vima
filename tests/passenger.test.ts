@@ -654,11 +654,48 @@ test('recenter acknowledges only the native completion at the requested coordina
     await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
     await h.act(async () => press(tree, 'Centrar ubicación'));
     assert.ok(!text(tree).includes('Ubicación centrada'));
+    assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Centrar ubicación')!
+      .props.accessibilityState.busy, true);
     const coordinate = nativeNode(tree, 'PassengerMapContent').props.recenter.coordinate;
     await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionDidChange({ nativeEvent: { center: [0, 0], userInteraction: false } }));
     assert.ok(!text(tree).includes('Ubicación centrada'));
     await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionDidChange({ nativeEvent: { center: coordinate, userInteraction: false } }));
     assert.ok(text(tree).includes('Ubicación centrada'));
+    assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Centrar ubicación')!
+      .props.accessibilityState.busy, false);
+    assert.equal(text(tree).split('Ubicación centrada').length - 1, 1);
+    await h.act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    assert.ok(!text(tree).includes('Ubicación centrada'));
+    await h.act(async () => press(tree, 'Centrar ubicación'));
+    await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionDidChange({ nativeEvent: { center: coordinate, userInteraction: false } }));
+    assert.equal(text(tree).split('Ubicación centrada').length - 1, 1);
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('only explicit location confirmation emits a full route fit after the sheet is measured', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle(h);
+    const layout = tree.root.findAllByType('View' as never).find(node => node.props.onLayout && node.props.style?.flex === 1)!;
+    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { height: 700 } } }));
+    await h.act(async () => press(tree, '¿A dónde vas?'));
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.fitRoute, undefined);
+    await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`));
+    await settle(h);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.fitRoute, undefined);
+    await h.act(async () => press(tree, 'Confirmar ubicaciones'));
+    await settle(h);
+    const scroll = tree.root.findAllByType('ScrollView' as never).find(node => node.props.onContentSizeChange)!;
+    await h.act(async () => scroll.props.onContentSizeChange(400, 280));
+    const fit = nativeNode(tree, 'PassengerMapContent').props.fitRoute;
+    assert.ok(fit);
+    assert.equal(fit.coordinates[0][0], fixturePlaces[0]!.coordinate[0]);
+    assert.equal(fit.coordinates.at(-1)[0], fixturePlaces[1]!.coordinate[0]);
+    assert.ok(fit.coordinates.length >= 3);
+    const sequence = fit.sequence;
+    await h.act(async () => scroll.props.onContentSizeChange(400, 280));
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.fitRoute.sequence, sequence);
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
@@ -712,6 +749,8 @@ test('map control press feedback and layer switches use approved timing and obey
       if (!reduced) assert.equal(h.animations.at(-1).duration, 160);
       await h.act(async () => button.props.onPressOut());
       await h.act(async () => press(tree, 'Capas del mapa'));
+      assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Capas del mapa')!
+        .props.accessibilityState.expanded, true);
       assert.ok(text(tree).includes('Tráfico')); assert.ok(text(tree).includes('Incidentes'));
       assert.ok(!text(tree).includes('Siniestros'));
     } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }

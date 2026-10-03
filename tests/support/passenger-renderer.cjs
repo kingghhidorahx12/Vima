@@ -21,11 +21,12 @@ function createHarness(boundaryOverrides = {}, { reduced = false } = {}) {
   const animated = { default: { View: 'AnimatedView' }, cancelAnimation() {}, ReduceMotion: { System: 'system', Never: 'never' },
     useSharedValue: (initial) => { const value = React.useRef(initial); return React.useMemo(() => ({ get: () => value.current, set: (next) => { value.current = next; } }), []); },
     useAnimatedStyle: (fn) => fn(), withTiming: (value, config) => { animations.push({ value, ...config }); return value; }, withRepeat: (value) => value,
-    withSequence: (...values) => values.at(-1) };
+    withSequence: (...values) => values.at(-1), withDelay: (_duration, value) => value };
   const kv = new Map();
   const overrides = {
     'react-native': native, 'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     'react-native-reanimated': { __esModule: true, ...animated },
+    'expo-image': { Image: 'ExpoImage' },
     'expo-router': { useFocusEffect: React.useEffect },
     'expo-sqlite/kv-store': { __esModule: true, default: {
       getItem: async key => kv.get(key) ?? null, setItem: async (key, value) => { kv.set(key, value); },
@@ -72,7 +73,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false } = {}) {
   const fakeMapConfig = {};
   const boundaries = { schedule() {}, call() {}, safety() {}, ...boundaryOverrides };
   const client = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
-  return { animations, mounted, client, kv, back: () => back?.(), async render(gateway) {
+  return { animations, mounted, client, kv, load, back: () => back?.(), async render(gateway) {
     let tree;
     await renderer.act(async () => { tree = renderer.create(React.createElement(query.QueryClientProvider, { client },
       React.createElement(Screen, { gateway, mapConfig: fakeMapConfig, boundaries })), { createNodeMock(element) {

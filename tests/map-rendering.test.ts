@@ -40,9 +40,12 @@ test('MapLibre owns one persistent map, camera fit, Vima pins and route layers',
   assert.deepEqual(pins[0]!.props.lngLat, [-99, 19]);
   assert.equal(pins[0]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#00D68F');
   assert.equal(pins[1]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#FF3830');
-  const line = tree.root.findByType('MapLibreLayer' as never).props;
+  const line = tree.root.findAllByType('MapLibreLayer' as never).find(layer => layer.props.id === 'r')!.props;
   assert.equal(line.type, 'line');
   assert.equal(line.paint['line-width'], 4);
+  const casing = tree.root.findAllByType('MapLibreLayer' as never).find(layer => layer.props.id === 'r-casing')!.props;
+  assert.equal(casing.paint['line-color'], '#FFFFFF');
+  assert.ok(casing.paint['line-width'] > line.paint['line-width']);
   const routeSource = tree.root.findByType('MapLibreSource' as never).props;
   assert.equal(routeSource.id, 'r-source');
   assert.equal(JSON.parse(routeSource.data).geometry.type, 'MultiLineString');
@@ -136,6 +139,36 @@ test('explicit Recenter works during Search lock without automatic refit', async
   await h.act(async () => tree.unmount());
 });
 
+test('confirmed route fit includes full geometry and useful viewport padding without replaying', async () => {
+  for (const reduced of [false, true]) {
+    const h = createMapHarness({ reduced });
+    const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+    const origin = { id: 'origin', name: 'Origen', address: '', coordinate: [-99, 19] };
+    const destination = { id: 'destination', name: 'Destino', address: '', coordinate: [-98, 20] };
+    const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString',
+      coordinates: [[-99, 19], [-99.4, 20.2], [-98, 20]] } };
+    const config = { viewport: () => ({ center: [-99, 19], padding: { top: 16, bottom: 20 } }),
+      route: { width: 4, opacity: 1 }, vehicle: { radius: 12, color: '#000' } };
+    const scene = (sequence?: number) => React.createElement(PassengerMap, { origin, destination,
+      quote: { origin, destination, route }, home: false, ready: true, sheetHeight: 310, config,
+      cameraMode: 'user-controlled', fitRoute: sequence ? { sequence, coordinates: [origin.coordinate,
+        ...route.geometry.coordinates, destination.coordinate] } : undefined });
+    const tree: ReactTestRenderer = await h.render(scene());
+    assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
+    await h.act(async () => tree.update(scene(1)));
+    const stop = h.calls.filter((call: unknown[]) => call[0] === 'setStop').at(-1)?.[1] as {
+      bounds: number[]; padding: { top: number; bottom: number; right: number }; duration: number };
+    assert.ok(stop.bounds.every((value, index) => Math.abs(value - [-99.4, 19, -98, 20.2][index]!) < 1e-9));
+    assert.equal(stop.padding.top, 16);
+    assert.equal(stop.padding.bottom, 330);
+    assert.ok(stop.padding.right >= 80);
+    assert.equal(stop.duration, reduced ? 0 : 420);
+    await h.act(async () => tree.update(scene(1)));
+    assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 1);
+    await h.act(async () => tree.unmount());
+  }
+});
+
 test('Orbis layers remain absent without display key and use vector sources when enabled', async () => {
   const h = createMapHarness({ reduced: true });
   const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
@@ -153,6 +186,33 @@ test('Orbis layers remain absent without display key and use vector sources when
   assert.ok(sources.every((source) => source.props.tiles[0].includes('apiVersion=2')));
   assert.deepEqual(tree.root.findAllByType('MapLibreLayer' as never).map((layer) => layer.props['source-layer']).filter(Boolean),
     ['Traffic flow', 'Traffic incident flow', 'Traffic incident points', 'Traffic incident points']);
+  await h.act(async () => tree.unmount());
+});
+
+test('Traffic toggling does not change Vima route geometry or its casing contrast', async () => {
+  const h = createMapHarness({ reduced: true });
+  const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+  const origin = { id: 'o', name: 'Origen', address: '', coordinate: [-99, 19] };
+  const destination = { id: 'd', name: 'Destino', address: '', coordinate: [-98, 20] };
+  const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString',
+    coordinates: [[-99, 19], [-99.5, 19.5], [-98, 20]] } };
+  const config = { viewport: () => ({ center: [-99, 19] }), route: { width: 4, opacity: 1 },
+    vehicle: { radius: 12, color: '#000' } };
+  const scene = (traffic: boolean) => React.createElement(PassengerMap, { origin, destination,
+    quote: { origin, destination, route }, home: false, ready: true, sheetHeight: 300, config,
+    displayKeyAvailable: true, layers: { traffic, incidents: true } });
+  const tree: ReactTestRenderer = await h.render(scene(false));
+  const source = () => tree.root.findAllByType('MapLibreSource' as never)
+    .find(node => node.props.id === 'passenger-route-source')!;
+  const before = source().props.data;
+  assert.deepEqual(JSON.parse(before).geometry.coordinates, route.geometry.coordinates);
+  await h.act(async () => tree.update(scene(true)));
+  assert.deepEqual(JSON.parse(source().props.data).geometry, JSON.parse(before).geometry);
+  const layers = tree.root.findAllByType('MapLibreLayer' as never);
+  const casing = layers.find(node => node.props.id === 'passenger-route-casing')!;
+  const line = layers.find(node => node.props.id === 'passenger-route')!;
+  assert.equal(casing.props.paint['line-color'], '#FFFFFF');
+  assert.ok(casing.props.paint['line-width'] > line.props.paint['line-width']);
   await h.act(async () => tree.unmount());
 });
 
@@ -177,11 +237,14 @@ test('incident point taps normalize documented fields and stop map dismissal bub
     icon_category_0: 'roadWorks', description_0: ' Obras ', magnitude_of_delay: 'minor', road_category: 'street',
   } }] }, stopPropagation: () => { stopped = true; } });
   assert.equal(stopped, true);
-  assert.deepEqual(selected, [{ category: 'Obras', description: 'Obras', severity: 'Tráfico lento' }]);
+  assert.deepEqual(selected, [{ category: 'Obras', icon: 'work', description: 'Obras', severity: 'Tráfico lento' }]);
   const { incidentDetails } = h.load('src/map/incidentDetails.ts');
-  assert.deepEqual(incidentDetails(null), {});
+  assert.deepEqual(incidentDetails(null), { category: 'Incidente vial' });
   assert.deepEqual(incidentDetails({ icon_category_0: 'unknown', description_0: {}, magnitude_of_delay: 'undefined' }),
-    { category: undefined, description: undefined, severity: undefined });
+    { category: 'Incidente vial', description: undefined, severity: undefined });
+  assert.deepEqual(incidentDetails({ icon_category_0: 'roadClosed', description_0: 'Road closure', magnitude_of_delay: 'major' }),
+    { category: 'Vía cerrada', icon: 'route', description: 'Cierre vial', severity: 'Tráfico detenido' });
+  assert.equal(incidentDetails({ icon_category_0: 'fog', description_0: 'Fog reported ahead' }).description, undefined);
   await h.act(async () => tree.unmount());
 });
 

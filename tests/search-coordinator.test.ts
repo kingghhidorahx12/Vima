@@ -16,3 +16,14 @@ test('local and personal results are immediate, while only compatible stale remo
   assert.deepEqual(coordinator.visible('   ', [favorite], [], remote), []);
   assert.equal(geospatialClientConfig.debounceMs, 200);
 });
+
+test('optional image metadata and an image loading failure never change search order', () => {
+  const coordinator = createSearchCoordinator(approvedLocalPlaces);
+  const places = [{ id: 'one', name: 'Mercado Atlacomulco', address: 'Centro' },
+    { id: 'two', name: 'Mercado Municipal', address: 'Centro' }];
+  const before = coordinator.visible('merc', places, []).map(place => place.id);
+  const withImage = [{ ...places[0]!, image: { source: 'vima' as const, assetId: 'mercado', version: 1 } }, places[1]!];
+  const after = coordinator.visible('merc', withImage, []).map(place => place.id);
+  assert.deepEqual(after, before);
+  assert.equal(coordinator.visible('merc', withImage, [])[0]?.image?.source, 'vima');
+});

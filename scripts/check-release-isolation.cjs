@@ -7,7 +7,8 @@ const metadata = JSON.parse(fs.readFileSync(path.join(directory, 'metadata.json'
 for (const [platform, files] of Object.entries(metadata.fileMetadata)) {
   const bundle = fs.readFileSync(path.join(directory, files.bundle));
   for (const marker of ['SYNTHETIC_PRICING_TEST_ONLY', 'VIMA_PRICING_CONFIG_PATH', 'TOMTOM_API_KEY',
-    'intermunicipalOverrides', 'distanceMinorPerKm', 'C:\\Users\\', '/Users/', 'gateway/pricing/engine']) {
+    'intermunicipalOverrides', 'distanceMinorPerKm', 'VIMA_PLACE_MEDIA_DIR', 'manifest.v1.json',
+    'gateway/placeMedia', 'C:\\Users\\', '/Users/', 'gateway/pricing/engine']) {
     assert.equal(bundle.includes(Buffer.from(marker)), false, `Release contains server/test/path marker: ${platform} ${marker}`);
   }
   console.log(`Release pricing/server/path isolation OK: ${platform}`);
