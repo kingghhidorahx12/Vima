@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSequence } from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence } from 'react-native-reanimated';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { fadeTo } from '../../motion/helpers';
 import { mapPersonality } from '../../motion/mapPersonality';
@@ -20,7 +20,7 @@ export function MapControls({ available, canRecenter, layers, open, onRecenter, 
   useEffect(() => { menuOpacity.set(open ? fadeTo(1, mapPersonality.layer) : 0); return () => cancelAnimation(menuOpacity); }, [menuOpacity, open]);
   const menuStyle = useAnimatedStyle(() => ({ opacity: menuOpacity.get() }));
   return <View style={styles.stack}>
-    {centered ? <View style={styles.menu}><VimaText variant="caption" accessibilityLiveRegion="polite">Ubicación centrada</VimaText></View> : null}
+    {centered ? <CenteredToast /> : null}
     {open ? <Animated.View style={[styles.menu, menuStyle]}>
       {!available ? <VimaText variant="caption" style={styles.unavailable}>Capas no disponibles</VimaText> : null}
       {(['traffic', 'incidents'] as const).map((layer) => <Pressable key={layer} accessibilityRole="switch"
@@ -31,10 +31,24 @@ export function MapControls({ available, canRecenter, layers, open, onRecenter, 
         <LayerSwitch checked={layers[layer] && available} />
       </Pressable>)}
     </Animated.View> : null}
-    <MapControl label="Centrar ubicación" icon="recenter" disabled={!canRecenter} active={recentering || centered}
+    <MapControl label="Centrar ubicación" icon="recenter" disabled={!canRecenter} active={recentering || centered} busy={recentering}
       onPress={() => tap(onRecenter)} />
-    <MapControl label="Capas del mapa" icon="layers" active={open} onPress={() => tap(onOpen)} />
+    <MapControl label="Capas del mapa" icon="layers" active={open || available && (layers.traffic || layers.incidents)}
+      expanded={open} onPress={() => tap(onOpen)} />
   </View>;
+}
+
+function CenteredToast() {
+  const { reducedMotion } = useMotionPolicy();
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    opacity.set(withDelay(reducedMotion ? 900 : 800, fadeTo(0, { ...mapPersonality.control, duration: reducedMotion ? 100 : 200 })));
+    return () => cancelAnimation(opacity);
+  }, [opacity, reducedMotion]);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+  return <Animated.View pointerEvents="none" style={[styles.toast, style]}>
+    <VimaText variant="caption" accessibilityLiveRegion="polite">Ubicación centrada</VimaText>
+  </Animated.View>;
 }
 
 function LayerSwitch({ checked }: { checked: boolean }) {
@@ -44,8 +58,8 @@ function LayerSwitch({ checked }: { checked: boolean }) {
   const knob = useAnimatedStyle(() => ({ transform: [{ translateX: progress.get() * 14 }] }));
   return <View style={[styles.switch, checked && styles.switchOn]}><Animated.View style={[styles.knob, knob]} /></View>;
 }
-function MapControl({ label, icon, onPress, disabled = false, active = false }: {
-  label: string; icon: VimaGlyphName; onPress: () => void; disabled?: boolean; active?: boolean;
+function MapControl({ label, icon, onPress, disabled = false, active = false, expanded = false, busy = false }: {
+  label: string; icon: VimaGlyphName; onPress: () => void; disabled?: boolean; active?: boolean; expanded?: boolean; busy?: boolean;
 }) {
   const { reducedMotion } = useMotionPolicy(); const progress = useSharedValue(0);
   useEffect(() => () => cancelAnimation(progress), [progress]);
@@ -55,7 +69,7 @@ function MapControl({ label, icon, onPress, disabled = false, active = false }: 
   return <Animated.View style={feedback}>
     <Animated.View pointerEvents="none" style={[styles.controlHalo, halo]} />
     <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled}
-      accessibilityState={{ disabled, busy: active && icon === 'recenter', expanded: icon === 'layers' ? active : undefined }}
+      accessibilityState={{ disabled, busy, expanded: icon === 'layers' ? expanded : undefined }}
       onPressIn={() => { cancelAnimation(progress); if (!reducedMotion) progress.set(fadeTo(1, mapPersonality.control)); }}
       onPressOut={() => progress.set(reducedMotion ? 0 : fadeTo(0, mapPersonality.control))}
       onPress={() => { if (!reducedMotion) progress.set(withSequence(fadeTo(1, mapPersonality.control), fadeTo(0, mapPersonality.control))); onPress(); }}
@@ -69,7 +83,10 @@ const styles = StyleSheet.create({
   buttonActive: { backgroundColor: t.colors.greenDark }, buttonDisabled: { opacity: 0.5 },
   stack: { alignItems: 'flex-end', gap: t.spacing.scalePx[1] },
   button: { width: 48, height: 48, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
-    alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: t.colors.grayLight, elevation: 2 },
+    alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: t.colors.greenDark, elevation: 2 },
+  toast: { minWidth: 170, paddingHorizontal: t.spacing.scalePx[2], paddingVertical: t.spacing.scalePx[1],
+    borderRadius: t.radii.pillPx, backgroundColor: t.colors.white, borderWidth: t.borders.standardWidthPx,
+    borderColor: t.colors.greenDark, elevation: 2, alignItems: 'center' },
   menu: { minWidth: 170, padding: t.spacing.scalePx[2], borderRadius: t.radii.cardPx,
     backgroundColor: t.colors.white, elevation: 3 },
   menuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[2] },

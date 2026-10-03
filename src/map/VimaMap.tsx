@@ -16,9 +16,11 @@ export function VimaMap({ style, ...props }: VimaMapProps) {
     let active = true;
     const id = TransformRequestManager.addHeader({ id: 'vima-tomtom-orbis-display', name: 'TomTom-Api-Key',
       value: displayKey, match: /^https:\/\/api\.tomtom\.com\/maps\/orbis\// });
+    const languageId = TransformRequestManager.addHeader({ id: 'vima-tomtom-incidents-language', name: 'Accept-Language',
+      value: 'es-ES', match: /^https:\/\/api\.tomtom\.com\/maps\/orbis\/traffic\/incidents\// });
     // Mount the native map after its first Orbis request can receive the display header.
     queueMicrotask(() => { if (active) setCredentialReady(true); });
-    return () => { active = false; TransformRequestManager.removeHeader(id); };
+    return () => { active = false; TransformRequestManager.removeHeader(languageId); TransformRequestManager.removeHeader(id); };
   }, [displayKey]);
   return credentialReady ? <Map {...props} mapStyle={mapStyle} attribution style={[styles.fill, style]} />
     : <View style={[styles.fill, style]} />;

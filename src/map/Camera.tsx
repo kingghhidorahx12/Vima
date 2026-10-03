@@ -2,13 +2,14 @@ import { Camera as NativeCamera, type CameraRef } from '@maplibre/maplibre-react
 import { useEffect, useRef } from 'react';
 import { useMotionPolicy } from '../motion/ReducedMotion';
 import { motionTimings } from '../motion/timing';
-import { fitBounds, type CameraTarget, type ApprovedCameraMotion } from './models';
+import { fitBounds, type CameraTarget, type ApprovedCameraMotion, type MapPadding } from './models';
 export type { CameraTarget, ApprovedCameraMotion } from './models';
 export type CameraMode = 'automatic' | 'search-locked' | 'user-controlled';
 export interface RecenterIntent { readonly coordinate: readonly [number, number]; readonly sequence: number }
+export interface RouteFitIntent { readonly coordinates: readonly (readonly [number, number])[]; readonly sequence: number; readonly padding?: MapPadding }
 
-export function Camera({ target, motion, mode = 'automatic', recenter }: {
-  target?: CameraTarget; motion?: ApprovedCameraMotion; mode?: CameraMode; recenter?: RecenterIntent;
+export function Camera({ target, motion, mode = 'automatic', recenter, fitRoute }: {
+  target?: CameraTarget; motion?: ApprovedCameraMotion; mode?: CameraMode; recenter?: RecenterIntent; fitRoute?: RouteFitIntent;
 }) {
   const ref = useRef<CameraRef>(null);
   const { allowCameraAnimation } = useMotionPolicy();
@@ -30,5 +31,12 @@ export function Camera({ target, motion, mode = 'automatic', recenter }: {
       padding: currentPadding.current,
       duration: allowCameraAnimation ? motionTimings.map.duration : 0 });
   }, [recenter, allowCameraAnimation]);
+  const fittedSequence = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!fitRoute || mode === 'search-locked' || fittedSequence.current === fitRoute.sequence) return;
+    fittedSequence.current = fitRoute.sequence;
+    void ref.current?.setStop({ bounds: fitBounds(fitRoute.coordinates), padding: fitRoute.padding ?? target?.padding,
+      duration: allowCameraAnimation ? motionTimings.map.duration : 0 });
+  }, [fitRoute, target, mode, allowCameraAnimation]);
   return <NativeCamera ref={ref} />;
 }

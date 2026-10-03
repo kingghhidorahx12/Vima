@@ -14,7 +14,7 @@ export const mapPersonality = {
   layer: motionTimings.navigation,
   controlScale: 0.92,
   control: motionTimings.focus,
-  feedbackMs: motionTokens.durationsMs.searchCycle,
+  feedbackMs: 1000,
   launch: { ...motionTimings.navigation, duration: motionTimings.map.duration + motionTimings.sheetEnter.duration },
 } as const;
 

@@ -1,7 +1,7 @@
 import type { CircleAppearance } from '../../map/models';
 import { useEffect, useMemo } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
-import { Camera, type CameraMode, type CameraTarget, type RecenterIntent } from '../../map/Camera';
+import { Camera, type CameraMode, type CameraTarget, type RecenterIntent, type RouteFitIntent } from '../../map/Camera';
 import { TrafficFlowLayer } from '../../map/TrafficFlowLayer';
 import { IncidentLayer } from '../../map/IncidentLayer';
 import type { IncidentDetails } from '../../map/incidentDetails';
@@ -11,6 +11,7 @@ import { VehicleLayer } from '../../map/VehicleLayer';
 import type { VehicleMotionConfig, VehicleSample } from '../../map/vehicleMotion';
 import type { Assignment, Place, RideQuote } from './model';
 import { PassengerMapPin, PassengerUserLocation } from './PassengerMapPin';
+import { visualTokens as t } from '../../design/tokens';
 
 /** Required appearance/viewports are injected. The unfinished map design gets no production defaults. */
 export interface PassengerMapConfig {
@@ -21,10 +22,10 @@ export interface PassengerMapConfig {
   readonly vehicleMotion: VehicleMotionConfig;
 }
 export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, searchPresentationActive,
-  cameraMode = 'automatic', recenter, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
+  cameraMode = 'automatic', recenter, fitRoute, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
   quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
   ready: boolean; sheetHeight: number; searchPresentationActive?: boolean; cameraMode?: CameraMode;
-  recenter?: RecenterIntent; layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
+  recenter?: RecenterIntent; fitRoute?: RouteFitIntent; layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
   onIncidentSelect?: (details: IncidentDetails) => void;
   manualSelection?: { coordinate: Place['coordinate']; kind: 'origin' | 'destination' } | null; config: PassengerMapConfig;
 }) {
@@ -38,7 +39,10 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
   }, [assignment, config, origin, quote, sheetHeight]);
   return <>
     <Camera target={ready ? target : undefined} mode={searchPresentationActive ? 'search-locked' : cameraMode}
-      recenter={ready ? recenter : undefined} />
+      recenter={ready ? recenter : undefined} fitRoute={ready && fitRoute ? {
+        ...fitRoute, padding: { ...target.padding, right: Math.max(target.padding.right ?? 0,
+          t.spacing.mobileHorizontalMarginPx + t.spacing.scalePx[8]! + t.spacing.scalePx[2]!) },
+      } : undefined} />
     {displayKeyAvailable ? <TrafficFlowLayer enabled={!!layers?.traffic} /> : null}
     {displayKeyAvailable ? <IncidentLayer enabled={!!layers?.incidents} onSelect={onIncidentSelect} /> : null}
     {(home && origin || searchPresentationActive && currentLocation) ? <PassengerUserLocation place={(searchPresentationActive ? currentLocation : origin)!} active={active} />

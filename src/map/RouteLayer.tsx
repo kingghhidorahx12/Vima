@@ -63,6 +63,10 @@ export function RouteLayer({ id, data, appearance, state, activeTone, reveal = t
       vimaRed: red.get(), vimaGreen: green.get(), vimaBlue: blue.get() } }) };
   });
   return <><AnimatedSource id={`${id}-source`} data={emptyData} animatedProps={animatedProps}>
+    <Layer id={`${id}-casing`} type="line" layout={{ 'line-cap': appearance.cap, 'line-join': appearance.join }}
+      paint={{ 'line-width': appearance.width + visualTokens.spacing.scalePx[0]!,
+        'line-opacity': ['*', appearance.opacity, ['get', 'vimaRevealOpacity']],
+        'line-color': visualTokens.colors.white }} />
     <Layer id={id} type="line" layout={{ 'line-cap': appearance.cap, 'line-join': appearance.join }}
       paint={{ 'line-width': appearance.width, 'line-opacity': appearance.opacity,
         'line-color': ['rgba', ['get', 'vimaRed'], ['get', 'vimaGreen'], ['get', 'vimaBlue'], ['get', 'vimaRevealOpacity']] }} />
