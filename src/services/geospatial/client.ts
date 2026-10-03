@@ -3,6 +3,8 @@ import { normalizeCoordinate, type Coordinate } from '../../map/models.ts';
 import { GeospatialError, type GeospatialErrorCode, type PlacesSession, type RouteRequest } from './contracts.ts';
 import { decodeContribution, decodeDiscovery, decodeOptionalPlace, decodePlace, decodeRoute, decodeSession,
   decodeSignalAck, decodeSuggestions } from './normalize.ts';
+import { decodeQuoteResponse } from '../pricing/normalize.ts';
+import type { QuoteRequest } from '../pricing/contracts.ts';
 
 /** Dormant until a Vima HTTPS backend is supplied. Provider credentials never enter the app. */
 export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
@@ -37,6 +39,12 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
     } finally { clearTimeout(timer); input.signal?.removeEventListener('abort', abort); }
   }
   return {
+    quote(input: QuoteRequest, signal?: AbortSignal) {
+      const place = ({ id, name, address, coordinate }: QuoteRequest['origin']) => ({ id, name, address, coordinate });
+      return request({ path: '/v1/passenger/quotes', method: 'POST', body: { operationId: input.operationId,
+        origin: place(input.origin), destination: place(input.destination), stops: input.stops.map(place) },
+        decode: decodeQuoteResponse, signal }, 'route_unavailable');
+    },
     async startPlacesSession(signal?: AbortSignal): Promise<PlacesSession> {
       const sessionId = await request({ path: '/v1/geospatial/places/sessions', method: 'POST',
         decode: decodeSession, signal }, 'search_unavailable');

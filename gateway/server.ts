@@ -10,6 +10,9 @@ import { allowFields, coordinate, optionalBias, query, routeRequest } from './va
 import { providerCanonicalId, type TomTomAdapter, type UpstreamContext } from './tomtom.ts';
 import { createContributionRepository } from './contributions.ts';
 import { createPopularityRepository } from './popularity.ts';
+import { createQuoteService } from './pricing/service.ts';
+import { PricingError } from './pricing/contracts.ts';
+import type { PricingConfiguration } from './pricing/config.ts';
 
 export interface GatewayLog { requestId: string; endpoint: string; durationMs: number; upstreamStatus?: number; count: number; error?: GeospatialErrorCode }
 async function readBody(request: IncomingMessage, maximum: number): Promise<unknown> {
@@ -25,12 +28,14 @@ async function readBody(request: IncomingMessage, maximum: number): Promise<unkn
 }
 export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, options: {
   now?: () => number; logger?: (entry: GatewayLog) => void; localPlaces?: readonly VimaLocalPlace[]; configured?: boolean;
+  pricing?: PricingConfiguration;
 } = {}) {
   const now = options.now ?? Date.now;
   const state = createGatewayState(config, now);
   const contributions = createContributionRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const popularity = createPopularityRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
-  const cleanup = setInterval(state.cleanup, config.cleanupMs); cleanup.unref();
+  const quotes = createQuoteService(adapter, config, options.pricing ?? { status: 'pricing_not_configured' }, now);
+  const cleanup = setInterval(() => { state.cleanup(); quotes.store.cleanup(); }, config.cleanupMs); cleanup.unref();
   const server = createServer({ maxHeaderSize: config.maxBodyBytes, requestTimeout: config.upstreamTimeoutMs * 2 }, async (request, response) => {
     const requestId = randomUUID(); const started = now(); const controller = new AbortController();
     const context: UpstreamContext = { signal: controller.signal };
@@ -60,6 +65,11 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
         count = result.popular.length + result.featured.length; reply(200, result, true); return;
       }
       if (path.includes('?')) throw new GeospatialError('invalid_result');
+      if (request.method === 'POST' && path === '/v1/passenger/quotes') {
+        endpoint = 'passenger.quotes';
+        const result = await quotes.quote(await readBody(request, config.maxBodyBytes), context);
+        count = 1; reply(200, result); return;
+      }
       if (request.method === 'POST' && path === '/v1/geospatial/place-signals') {
         endpoint = 'place-signals';
         if (!state.allowSignal(request.socket.remoteAddress ?? 'unknown')) throw new GeospatialError('network_recoverable');
@@ -151,6 +161,9 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       }
       category = 'no_result'; reply(404, { error: { code: category } });
     } catch (error) {
+      if (error instanceof PricingError) {
+        reply(error.code === 'idempotency_conflict' ? 409 : 503, { error: { code: error.code } }); return;
+      }
       category = error instanceof GeospatialError ? error.code : 'network_recoverable';
       const status = category === 'invalid_result' ? 400 : category === 'no_result' ? 404 : category === 'timeout' ? 504 :
         category === 'cancelled' ? 499 : 503;

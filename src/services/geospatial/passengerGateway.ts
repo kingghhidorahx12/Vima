@@ -1,19 +1,19 @@
 import type { PassengerGateway } from '../../features/passenger/model.ts';
 import type { GeospatialClient } from './client.ts';
-import { GeospatialError } from './contracts.ts';
 import { createPlaceSearch } from './search.ts';
 import { geospatialClientConfig } from './config.ts';
 import type { PersonalPlacesRepository, SavedPlace } from './personalPlaces.ts';
 
 const toPlace = (place: SavedPlace) => ({ ...place, id: place.canonicalId });
 
-/** Geospatial-only P0: never fabricates pricing, payment, matching or recent trips. */
+/** Live quote authority stays in Vima gateway. Payment and ride requests remain unavailable. */
 export function createPassengerLiveGateway(client: GeospatialClient, locate: PassengerGateway['locate'],
   personal?: PersonalPlacesRepository, installationId?: () => Promise<string>): PassengerGateway {
   const search = createPlaceSearch(client, geospatialClientConfig.debounceMs);
   const unavailable = async (): Promise<never> => { throw new Error('Servicio no disponible'); };
   return {
     scope: 'vima-geospatial-live', source: 'server', locate,
+    paymentReady: false, tripRequestAvailable: false,
     recentPlaces: async () => (await personal?.recents() ?? []).map(toPlace),
     favoritePlaces: async () => (await personal?.favorites() ?? []).map(toPlace),
     saveFavorite: personal ? place => personal.saveFavorite(place) : undefined,
@@ -35,11 +35,12 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
       const result = await client.geocode(query, signal);
       return result ? [result] : [];
     },
-    async quote(draft, signal) {
-      const route = await client.route({ origin: draft.origin.coordinate, destination: draft.destination.coordinate,
-        stops: draft.stops.map(place => place.coordinate) }, signal);
-      if (!route.geometry) throw new GeospatialError('invalid_result');
-      return { ...draft, id: `route-preview:${draft.origin.id}:${draft.destination.id}`, route: route.geometry,
+    async quote(draft, signal, operationId) {
+      if (!operationId) throw new Error('quote_operation_required');
+      const pricing = await client.quote({ ...draft, operationId }, signal);
+      const snapshot = pricing.status === 'priced' ? pricing.quote : pricing.routePreview;
+      const route = snapshot.route;
+      return { ...draft, id: snapshot.id, pricing, route: route.geometry,
         durationMinutes: Math.ceil((route.trafficDurationSeconds ?? route.durationSeconds) / 60),
         distanceKm: Math.round(route.distanceMeters / 100) / 10 };
     },

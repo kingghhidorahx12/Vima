@@ -153,18 +153,18 @@ test('live Passenger gateway uses normalized route, no price/matching fabricatio
   let fail = false; const paths: string[] = [];
   const client = createGeospatialClient({ async request(input) {
     paths.push(input.path); if (fail) throw new TypeError('network');
-    return input.decode({ geometry: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[-99, 19], [-98, 20]] } },
-      bounds: { southwest: [-99, 19], northeast: [-98, 20] }, distanceMeters: 1200, durationSeconds: 120, trafficDurationSeconds: 180 });
+    return input.decode({ status: 'unpriced', reason: 'pricing_not_configured', routePreview: { id: 'preview', createdAt: 1, expiresAt: 300001, origin, destination, stops: [], route: { geometry: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[-99, 19], [-98, 20]] } },
+      bounds: { southwest: [-99, 19], northeast: [-98, 20] }, distanceMeters: 1200, durationSeconds: 120, trafficDurationSeconds: 180 } } });
   } }, 500);
   const gateway = createPassengerLiveGateway(client, async () => null);
   const origin = { id: 'origin', name: 'Origin', address: '', coordinate: [-99, 19] as const };
   const destination = { ...origin, id: 'destination', coordinate: [-98, 20] as const };
-  const quote = await gateway.quote({ origin, destination, stops: [] });
-  assert.deepEqual(paths, ['/v1/geospatial/routes']); assert.equal(quote.durationMinutes, 3);
+  const quote = await gateway.quote({ origin, destination, stops: [] }, undefined, 'synthetic-operation-1');
+  assert.deepEqual(paths, ['/v1/passenger/quotes']); assert.equal(quote.durationMinutes, 3);
   assert.equal(quote.price, undefined); assert.equal(canRequest(quote, 'online', false), false);
   assert.deepEqual(await gateway.recentPlaces(), []);
   await assert.rejects(gateway.request(quote, 'request'));
-  fail = true; await assert.rejects(gateway.quote({ origin, destination, stops: [] }), /network_recoverable/);
+  fail = true; await assert.rejects(gateway.quote({ origin, destination, stops: [] }, undefined, 'synthetic-operation-1'), /network_recoverable/);
   assert.equal(gateway.source, 'server');
 });
 

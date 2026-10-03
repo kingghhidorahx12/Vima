@@ -83,7 +83,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const dismissKeyboard = useCallback(() => { input.current?.blur(); Keyboard.dismiss(); }, []);
   const matching = isMatching(flow.phase);
   const assignment = flow.phase === 'assigned' ? flow.trip?.assignment : undefined;
-  const draftKey = `${flow.origin?.id ?? ''}:${flow.destination?.id ?? ''}`;
+  const draftKey = `${flow.origin?.id ?? ''}:${flow.destination?.id ?? ''}:${flow.quote?.pricing ? flow.quote.id : ''}`;
   const reviewing = (flow.phase === 'confirm' && reviewedDraft !== draftKey) || (flow.phase === 'home' && !!flow.destination);
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
@@ -175,9 +175,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => { backAction.current(); return true; });
     return () => subscription.remove();
   }, []));
-  const money = (amount: number, currency: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
+  const quotePrice = flow.quote?.pricing?.status === 'priced' ? { amount: flow.quote.pricing.quote.price.totalMinor / 100, currency: 'MXN' } : flow.quote?.price;
+  const money = (amount: number, currency: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   const content = <Animated.View style={[styles.fill, animatedContent]}>
     {flow.connection !== 'online' ? <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>Sin conexión · Intentando reconectar</VimaText> : null}
+    {flow.quoteExpired ? <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>La cotización venció. Revisa y confirma la nueva cotización.</VimaText> : null}
     {flow.error ? <Pressable onPress={flow.retry} accessibilityRole="button" accessibilityLabel={flow.error.message}>
       <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.notice}>{flow.error.message} ↻</VimaText>
     </Pressable> : null}
@@ -288,8 +290,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           <View style={styles.metrics}>
             <Metric icon="car" value={`${flow.quote.durationMinutes} min`} label="Duración" />
             <Metric icon="route" value={`${flow.quote.distanceKm} km`} label="Distancia" />
-            <Metric icon="payment" value={flow.quote.price ? money(flow.quote.price.amount, flow.quote.price.currency) : '—'} label="Precio estimado" />
+            <Metric icon="payment" value={quotePrice ? money(quotePrice.amount, quotePrice.currency) : '—'} label="Precio estimado" />
           </View>
+          {flow.quote.pricing?.status === 'unpriced' ? <VimaText variant="caption" style={styles.muted}>Precio no disponible</VimaText> : null}
           <View style={styles.paymentRow}><VimaGlyph name="payment" /><VimaText variant="bodySmall" style={styles.fill}>{flow.quote.paymentMethod ?? '—'}</VimaText><VimaGlyph name="chevron" color={t.colors.gray} /></View>
         </> : null}
         <VimaButton gradient label="Solicitar viaje" onPress={() => { void flow.submit(); }} haptic="requestRide"

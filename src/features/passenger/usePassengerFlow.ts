@@ -26,6 +26,8 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const [search, setSearch] = useState('');
   const [searchCoordinator] = useState(() => createSearchCoordinator(approvedLocalPlaces));
   const [followUpResults, setFollowUpResults] = useState<{ query: string; results: readonly PlaceSuggestion[] }>();
+  const quoteOperation = useRef<{ draft: string; id: string } | undefined>(undefined);
+  const [quoteExpired, setQuoteExpired] = useState(false);
   const requestId = useRef<string | null>(null);
   const contributionRequest = useRef<{ fingerprint: string; id: string } | undefined>(undefined);
   const locked = useRef(false);
@@ -61,9 +63,28 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const trip = useQuery({ ...tripQueryOptions(gateway, tripId ?? ''), enabled: !!tripId && connection === 'online',
     select: passengerTrip, retry: false });
   const draftStops = trip.data?.phase === 'expired' ? trip.data.quote.stops : stops;
-  const quote = useQuery({ queryKey: ['passenger', gateway.scope, 'quote', origin?.id, destination?.id, draftStops.map((stop) => stop.id)],
-    queryFn: ({ signal }) => gateway.quote({ origin: origin!, destination: destination!, stops: draftStops }, signal),
-    enabled: confirming && validDraft(origin, destination) && connection === 'online', retry: false });
+  const quote = useQuery({ queryKey: ['passenger', gateway.scope, 'quote', origin, destination, draftStops],
+    queryFn: ({ signal }) => {
+      const draft = { origin: origin!, destination: destination!, stops: draftStops };
+      const fingerprint = JSON.stringify(draft);
+      if (quoteOperation.current?.draft !== fingerprint) quoteOperation.current = { draft: fingerprint, id: operationId() };
+      return gateway.quote(draft, signal, quoteOperation.current.id);
+    },
+    enabled: confirming && validDraft(origin, destination) && connection === 'online', retry: false,
+    staleTime: Infinity, refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false });
+  const quoteExpiry = quote.data?.pricing ? (quote.data.pricing.status === 'priced' ? quote.data.pricing.quote : quote.data.pricing.routePreview).expiresAt : undefined;
+  useEffect(() => {
+    if (!confirming || !quoteExpiry) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const expire = () => {
+      const remaining = quoteExpiry - Date.now();
+      if (remaining > 0) { timer = setTimeout(expire, Math.min(2_147_483_647, remaining)); return; }
+      quoteOperation.current = undefined; setQuoteExpired(true);
+      void client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'quote'] });
+    };
+    timer = setTimeout(expire, Math.max(0, Math.min(2_147_483_647, quoteExpiry - Date.now())));
+    return () => clearTimeout(timer);
+  }, [confirming, quoteExpiry, client, gateway.scope]);
   const refetchTrip = trip.refetch;
   useEffect(() => tripId ? connectTripRealtime(client, gateway, tripId) : undefined, [client, gateway, tripId]);
   useEffect(() => {
@@ -81,6 +102,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     requestId.current = null;
     if (target === 'origin') setOrigin({ place: value, kind: 'manual' }); else {
       setDestination(value);
+      setQuoteExpired(false);
       void gateway.sendPlaceSignal?.('place_selected', value)?.catch(() => {});
     }
     const nextOrigin = target === 'origin' ? value : origin;
@@ -145,7 +167,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
   };
   const submit = async () => {
-    if (locked.current || phase !== 'confirm' || !canRequest(quote.data, connection, pending)) return;
+    if (locked.current || phase !== 'confirm' || !canRequest(quote.data, connection, pending, gateway)) return;
     locked.current = true;
     requestId.current ??= operationId(); // Keep on ambiguous failure/retry.
     try {
@@ -192,6 +214,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   };
   const confirmLocations = async () => {
     if (!validDraft(origin, destination)) return;
+    setQuoteExpired(false);
     void gateway.sendPlaceSignal?.('destination_confirmed', destination!)?.catch(() => {});
     try { if (gateway.recordConfirmedDestination) {
       await gateway.recordConfirmedDestination(destination!);
@@ -213,7 +236,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     [...(geography.data ?? []), ...(recents.data ?? [])],
     followUpResults?.query === search ? followUpResults.results : places.data,
     followUpResults?.query === search || !places.isPlaceholderData ? search : undefined) : [];
-  return { phase, connection, origin, currentLocation: location.data ?? null, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
+  return { phase, connection, quoteExpired, origin, currentLocation: location.data ?? null, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
     locationAvailable: !!location.data, field, search, setSearch: (value: string) => {
       cancelSelection(); setFollowUpResults(undefined);
       if (!value.trim()) { gateway.closePlaces?.(); searchCoordinator.clear(); }
@@ -225,7 +248,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     popular: discovery.data?.popular ?? [], featured: discovery.data?.featured ?? [],
     saveFavorite, removeFavorite, confirmLocations,
     loadingPlaces: !!search.trim() && (places.isFetching || resolving), loadingQuote: quote.isFetching, error,
-    canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending), choosePlace, chooseMapCoordinate,
+    canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending, gateway), choosePlace, chooseMapCoordinate,
     contributePlace, submitSearch, submit, act, edit, schedule,
     returnHome: () => {
       // Back never cancels or abandons an in-flight/active ride.
@@ -233,6 +256,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear();
       setField(null); setSearch(''); setFollowUpResults(undefined);
       setDestination(null); setStops([]); setConfirming(false); setEditing(false); setTripId(undefined);
+      setQuoteExpired(false);
       requestId.current = null; request.reset();
     },
     openField: (target: 'origin' | 'destination') => {
@@ -240,7 +264,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined); setField(target); setSearch('');
     },
     closeField: () => { cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setField(null); },
-    retry: () => { cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
+    retry: () => { if (quote.data) quoteOperation.current = undefined; cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
       if (tripId) void trip.refetch(); },
   };
 }

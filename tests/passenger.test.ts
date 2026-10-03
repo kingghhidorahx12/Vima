@@ -662,6 +662,40 @@ test('recenter acknowledges only the native completion at the requested coordina
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
+// Quote fixtures stay inside tests and never enter the mobile production dependency graph.
+test('live quote UI keeps valid snapshots across reconnect and requires a new review after expiry', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  let calls = 0; const operations: string[] = [];
+  const gateway: PassengerGateway = { ...fixture.gateway, source: 'server', paymentReady: false, tripRequestAvailable: false,
+    quote: async (draft, _signal, operationId) => {
+      calls++; operations.push(operationId!);
+      const { priceTrip } = await import('../gateway/pricing/engine.ts');
+      const { syntheticPricing, syntheticRoute } = await import('./support/pricing-fixture.ts');
+      const priced = priceTrip({ config: syntheticPricing(), profile: 'URBANO', routeMetrics: syntheticRoute });
+      const now = Date.now();
+      return { ...fixtureQuote(draft), price: undefined, paymentMethod: undefined, id: `server-${calls}`,
+        pricing: { status: 'priced', quote: { ...draft, id: `server-${calls}`, createdAt: now, expiresAt: now + (calls === 1 ? 800 : 300000),
+          route: syntheticRoute, configVersion: 'SYNTHETIC_PRICING_TEST_ONLY', profile: 'URBANO', distanceMeters: syntheticRoute.distanceMeters, ...priced } } };
+    } };
+  const h = createHarness(); const tree: ReactTestRenderer = await h.render(gateway);
+  try {
+    await settle(h);
+    await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`)); await settle(h);
+    await h.act(async () => press(tree, 'Confirmar ubicaciones')); await settle(h);
+    assert.ok(text(tree).includes('6.66'));
+    const submit = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Solicitar viaje')!;
+    assert.equal(submit.props.disabled, true);
+    await h.act(async () => fixture.controls.setConnection('offline'));
+    await h.act(async () => fixture.controls.setConnection('online')); await settle(h);
+    assert.equal(calls, 1);
+    await h.act(async () => { await new Promise(resolve => setTimeout(resolve, 850)); }); await settle(h);
+    assert.equal(calls, 2); assert.notEqual(operations[0], operations[1]);
+    assert.ok(text(tree).includes('La cotización venció'));
+    assert.ok(text(tree).includes('Confirmar ubicaciones'));
+    await h.act(async () => press(tree, 'Confirmar ubicaciones')); assert.ok(!text(tree).includes('La cotización venció'));
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
 test('map control press feedback and layer switches use approved timing and obey Reduced Motion', async () => {
   for (const reduced of [false, true]) {
     const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { reduced });

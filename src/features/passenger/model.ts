@@ -3,6 +3,7 @@ import type { RouteFeature } from '../../map/routeGeometry.ts';
 import type { RealtimeTransport } from '../../services/realtime/index';
 import type { AuthoritativeTrip, TripGateway } from '../trip/contracts.ts';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts.ts';
+import type { QuoteResponse } from '../../services/pricing/contracts.ts';
 
 export interface Place {
   readonly id: string;
@@ -22,6 +23,7 @@ export interface RideQuote extends RideDraft {
   /** Absent for a route preview until an authoritative pricing backend exists. */
   readonly price?: { readonly amount: number; readonly currency: string };
   readonly paymentMethod?: string;
+  readonly pricing?: QuoteResponse;
 }
 export interface Assignment {
   readonly id: string;
@@ -49,6 +51,8 @@ export type Connection = 'online' | 'offline' | 'reconnecting';
 export interface PassengerGateway extends TripGateway, RealtimeTransport {
   readonly scope: string;
   readonly source: 'server' | 'fixture';
+  readonly paymentReady?: boolean;
+  readonly tripRequestAvailable?: boolean;
   locate(signal?: AbortSignal): Promise<Place | null>;
   recentPlaces(signal?: AbortSignal): Promise<readonly Place[]>;
   favoritePlaces?(signal?: AbortSignal): Promise<readonly Place[]>;
@@ -67,7 +71,7 @@ export interface PassengerGateway extends TripGateway, RealtimeTransport {
     featured: readonly PlaceSuggestion[] }>;
   sendPlaceSignal?(type: 'place_selected' | 'destination_confirmed', place: Place): Promise<void>;
   closePlaces?(): void;
-  quote(draft: RideDraft, signal?: AbortSignal): Promise<RideQuote>;
+  quote(draft: RideDraft, signal?: AbortSignal, operationId?: string): Promise<RideQuote>;
   /** Editing/scheduling must confirm cancellation of the active request before a new request. */
   request(quote: RideQuote, requestId: string): Promise<PassengerTrip>;
   fetch(tripId: string, signal?: AbortSignal): Promise<PassengerTrip>;
@@ -99,8 +103,16 @@ export function passengerPhase(trip: PassengerTrip | undefined, editing: boolean
 export function isMatching(phase: PassengerPhase): phase is MatchingPhase {
   return phase === 'searching' || phase === 'expanding' || phase === 'prolonged' || phase === 'reassigning';
 }
-export function canRequest(quote: RideQuote | undefined, connection: Connection, pending: boolean): boolean {
-  return !!quote?.price && !!quote.paymentMethod && validDraft(quote.origin, quote.destination) && connection === 'online' && !pending;
+export function quoteGates(quote: RideQuote | undefined, gateway?: Pick<PassengerGateway, 'source' | 'paymentReady' | 'tripRequestAvailable'>, now = Date.now()) {
+  const pricingReady = quote?.pricing ? quote.pricing.status === 'priced' && quote.pricing.quote.expiresAt > now : !!quote?.price;
+  return { pricingReady, paymentReady: gateway?.source === 'server' ? gateway.paymentReady === true : !!quote?.paymentMethod,
+    tripRequestAvailable: gateway?.source === 'server' ? gateway.tripRequestAvailable === true : true };
+}
+export function canRequest(quote: RideQuote | undefined, connection: Connection, pending: boolean,
+  gateway?: Pick<PassengerGateway, 'source' | 'paymentReady' | 'tripRequestAvailable'>): boolean {
+  const gates = quoteGates(quote, gateway);
+  return gates.pricingReady && gates.paymentReady && gates.tripRequestAvailable && !!quote &&
+    validDraft(quote.origin, quote.destination) && connection === 'online' && !pending;
 }
 export function passengerTitle(phase: PassengerPhase): string {
   if (phase === 'assigned') return 'Tu conductor va en camino';
