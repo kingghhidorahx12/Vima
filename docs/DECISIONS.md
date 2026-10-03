@@ -119,3 +119,15 @@ Splash Android crece de160 a183dp por medición alpha y círculo seguro, sin edi
 - Se aprueba una ronda acotada de coherencia de iconos y superficies P0, sin rediseñar layouts.
   La elección técnica de Material Symbols reutiliza la fuente ya instalada; no representa
   un nuevo asset master de marca ni una migración global de iconografía.
+
+## Referencia principal Passenger P0 — aprobada 2026-10-03
+
+La [nueva referencia](design/PASSENGER_VISUAL_DIRECTION_2026-10-03.md) guía el acabado
+visual de las pantallas existentes: superficies claras, jerarquías limpias, profundidad leve,
+iconografía consistente y motion contenido. Se excluye explícitamente su branding y se
+conservan los assets Vima. Verde sigue siendo acción/origen, azul ruta/ubicación/foco/mapa y
+rojo destino/alerta. La referencia no autoriza nuevos flujos, categorías, datos ni funciones.
+
+Los ajustes de presentación reutilizan tokens y la arquitectura Motion vigente. No cambian
+cámara, pricing, ranking Search, matching, contratos live ni Reduced Motion policy. La falta
+de pantalla de acceso, fotos en contratos o style final de producción no se suple con invenciones.

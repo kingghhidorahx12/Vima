@@ -5,6 +5,34 @@ de `codex/motion-pricing-p0`. No se modificaron ramas históricas ni main.
 
 ## IMPLEMENTADO
 
+### Dirección visual luminosa Passenger P0 — 2026-10-03
+
+- Nueva [referencia principal de UI/UX](design/PASSENGER_VISUAL_DIRECTION_2026-10-03.md)
+  conservada en docs/design/references, con exclusión expresa de su branding. Logo, lockup,
+  splash nativo y demás assets Vima no cambian. Acceso/login sigue sin pantalla/contrato;
+  no se añade a partir del board ni se crean tabs, categorías o acciones nuevas.
+- Acabado centralizado en `design/presentation.ts`: cards blancas, fondos neutros, bordes
+  suaves, lavados semánticos y sombras existentes; Inter con más aire entre líneas.
+  Header, search pill 52 dp, resultados, selección y sheet comparten ese lenguaje.
+  CTA pasajero verde oscuro sólido, mínimo 56 dp, label legible en disabled/loading,
+  secundarios táctiles y acciones con iconos de la misma familia existente.
+- Confirmación conserva las tres métricas: precio con énfasis sólo cuando existe,
+  estado sin precio legible y pago ausente explícito; sin chevron que simule edición de pago.
+  Matching conserva copy/estados y progreso, con anillos más discretos. Conductor conserva
+  ETA/PIN/placa; avatar neutral por falta de foto en contrato, fallback de vehículo con icono
+  y las acciones Llamar/Seguridad existentes, sin añadir Mensaje ni datos de identidad.
+- Traffic usa trazo 2.5 dp al 60%, por debajo de ruta azul/casing blanco; ubicación con núcleo
+  siempre visible, aro suave y pulso menor. Controles/incident card/toast comparten superficies.
+  Cámara, geometría, basemap configurado, permisos y contratos siguen intactos. No se añade
+  compass personalizado: no existía y requeriría una nueva acción de cámara.
+- Motion contenido: control 0.98, halo ubicación 1.18, brillo ruta 0.16, rebote pin 0.5 dp;
+  launch de app sale en 480 ms/8 dp sin esperas decorativas. Reduced Motion mantiene las
+  reglas vigentes (launch fade 160 ms, sin loops/transformaciones espaciales); loading de
+  botón conserva label estático y estado accesible busy. Sheet mantiene sus gestos/timings.
+- Esta ronda no añade dependencias ni configuración nativa. No se genera APK. Sólo sigue
+  siendo necesario reconstruir si el Development Build todavía carece del `expo-image`
+  añadido en la ronda premium/media anterior.
+
 ### Contraste y acento secundario P0 — 2026-10-03
 
 - Ruta pasajero azul `#2F80FF`, sobre casing blanco existente y por encima de Traffic.
@@ -134,6 +162,15 @@ de `codex/motion-pricing-p0`. No se modificaron ramas históricas ni main.
 
 ## VERIFICADO AUTOMÁTICAMENTE
 
+- Dirección luminosa: suite completa 122/122; TypeScript/lint, worklets (17 archivos),
+  splash y Expo Doctor 21/21 OK; exportación Hermes Android/iOS e aislamiento release/fixtures.
+  Doctor necesitó acceso de red fuera del sandbox. Se conservan warnings no bloqueantes
+  conocidos de Node sobre tipo de módulo y de react-test-renderer.
+- Revisión visual de siete composiciones mediante proyección HTML de componentes/fixtures,
+  con Inter y Material Symbols locales. No verifica Yoga, mapa ni Android real. Pendientes:
+  contraste sobre Traffic ON/OFF, text scaling, teclado/safe area, panels/snaps, lectura de
+  PIN/ETA/precio, estados sin precio/pago/fotos y motion/Reduced Motion en teléfono.
+
 - Ronda de acento: TypeScript, lint, `npm test` 121/121 y worklets en 17 archivos OK.
   Pruebas de ruta verifican azul/casing sobre Traffic, geometría invariable y Reduced Motion;
   controles mantienen hit targets/feedback y media conserva icono ante error. Se inspeccionó
@@ -159,7 +196,7 @@ de `codex/motion-pricing-p0`. No se modificaron ramas históricas ni main.
   El export usa un temporal relativo exclusivo del proceso para que Hermes no incruste
   la ruta del perfil del desarrollador. Los tests de componentes usan
   dobles nativos; no certifican render de tiles/Fabric en un teléfono.
-- Esta ronda añade `expo-image` y su plugin, por lo que el Development Build anterior debe
+- La ronda premium/media anterior añadió `expo-image` y su plugin, por lo que aquel Development Build debe
   reconstruirse para comprobar miniaturas. No se generó otro APK. El resto del bloque es
   código/estilos y no modifica splash.
 

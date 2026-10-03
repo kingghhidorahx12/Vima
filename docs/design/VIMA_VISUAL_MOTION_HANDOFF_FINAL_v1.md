@@ -391,3 +391,10 @@ La ronda autoriza refinar iconografía y superficies visibles P0, sin modificar 
 La implementación reutiliza Material Symbols regular a 24 dp desde su fuente local ya presente;
 los assets de marca aprobados permanecen intactos. Los pendientes históricos de iconografía
 no impiden este acabado acotado, ni equivalen a aprobar un nuevo master de marca.
+
+## Referencia UI/UX posterior — 2026-10-03
+
+La dirección principal de acabado para Passenger P0 pasa a la [referencia luminosa](PASSENGER_VISUAL_DIRECTION_2026-10-03.md),
+excluyendo su branding. Las reglas de identidad/semántica Vima y Reduced Motion siguen vigentes.
+Los detalles de superficies y amplitudes decorativas P0 se recogen en esa adenda; no cambian
+la lógica, los contratos ni los assets aprobados.
