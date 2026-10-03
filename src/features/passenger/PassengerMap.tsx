@@ -39,15 +39,15 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
   return <>
     <Camera target={ready ? target : undefined} mode={searchPresentationActive ? 'search-locked' : cameraMode}
       recenter={ready ? recenter : undefined} />
-    {displayKeyAvailable && layers?.traffic ? <TrafficFlowLayer /> : null}
-    {displayKeyAvailable && layers?.incidents ? <IncidentLayer onSelect={onIncidentSelect} /> : null}
+    {displayKeyAvailable ? <TrafficFlowLayer enabled={!!layers?.traffic} /> : null}
+    {displayKeyAvailable ? <IncidentLayer enabled={!!layers?.incidents} onSelect={onIncidentSelect} /> : null}
     {(home && origin || searchPresentationActive && currentLocation) ? <PassengerUserLocation place={(searchPresentationActive ? currentLocation : origin)!} active={active} />
       : (quote?.origin ?? origin) ? <PassengerMapPin place={(quote?.origin ?? origin)!} kind="origin" /> : null}
     {!searchPresentationActive && (quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}
     {manualSelection ? <PassengerMapPin place={{ id: 'manual-selection', name: '', address: '', coordinate: manualSelection.coordinate }}
       kind={manualSelection.kind} /> : null}
     {!searchPresentationActive && quote ? <RouteLayer id="passenger-route" data={assignment?.routeToOrigin ?? quote.route}
-      activeTone="greenDark" state="active" appearance={config.route} /> : null}
+      activeTone="greenDark" state="active" appearance={config.route} active={active} /> : null}
     {!searchPresentationActive ? <VehicleLayer id="passenger-assigned-vehicle" kind="circle" sample={sample}
       appearance={config.vehicle} motion={config.vehicleMotion} /> : null}
   </>;

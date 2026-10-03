@@ -1,10 +1,13 @@
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
-import { useEffect, useRef } from 'react';
-import Animated, { cancelAnimation, useAnimatedProps, useSharedValue } from 'react-native-reanimated';
+import { useEffect, useMemo, useRef } from 'react';
+import Animated, { cancelAnimation, useAnimatedProps, useSharedValue, withDelay, withRepeat } from 'react-native-reanimated';
 import { useMotionPolicy } from '../motion/ReducedMotion';
 import { fadeTo } from '../motion/helpers';
 import { motionTimings } from '../motion/timing';
-import { routeFrame, type RouteFeature } from './routeGeometry';
+import { indexRoute, routeFrame, routeWindow, type RouteFeature } from './routeGeometry';
+import { mapPersonality } from '../motion/mapPersonality';
+import { useMotionActive } from '../motion/useMotionActive';
+import { visualTokens } from '../design/tokens';
 import { routeColor } from './semantics';
 import type { RouteAppearance } from './models';
 
@@ -14,10 +17,22 @@ const emptyData = JSON.stringify({ type: 'FeatureCollection', features: [] });
 export interface RouteLayerProps {
   readonly id: string; readonly data: RouteFeature; readonly state: 'active' | 'completed';
   readonly activeTone: 'carbon' | 'greenDark'; readonly appearance: RouteAppearance; readonly reveal?: boolean;
+  readonly active?: boolean;
 }
 /** Vima appearance is translated here; features never carry MapLibre paint objects. */
-export function RouteLayer({ id, data, appearance, state, activeTone, reveal = true }: RouteLayerProps) {
+export function RouteLayer({ id, data, appearance, state, activeTone, reveal = true, active = true }: RouteLayerProps) {
   const { reducedMotion } = useMotionPolicy();
+  const running = useMotionActive(active);
+  const flow = useSharedValue(0);
+  const index = useMemo(() => indexRoute(data), [data]);
+  useEffect(() => {
+    cancelAnimation(flow); flow.set(0);
+    if (running && !reducedMotion && state === 'active') flow.set(withDelay(mapPersonality.pulse.duration,
+      withRepeat(fadeTo(1, { ...motionTimings.map, duration: mapPersonality.routeCycleMs }), -1, false)));
+    return () => cancelAnimation(flow);
+  }, [flow, index, running, reducedMotion, state]);
+  const flowProps = useAnimatedProps(() => ({ data: JSON.stringify(routeWindow(index,
+    running && !reducedMotion ? flow.get() : 0, mapPersonality.routeWindow)) }));
   const progress = useSharedValue(reveal ? 0 : 1);
   const mounted = useRef(false);
   const geometryKey = JSON.stringify(data.geometry);
@@ -47,9 +62,14 @@ export function RouteLayer({ id, data, appearance, state, activeTone, reveal = t
     return { data: JSON.stringify({ ...frame, properties: { ...frame.properties,
       vimaRed: red.get(), vimaGreen: green.get(), vimaBlue: blue.get() } }) };
   });
-  return <AnimatedSource id={`${id}-source`} data={emptyData} animatedProps={animatedProps}>
+  return <><AnimatedSource id={`${id}-source`} data={emptyData} animatedProps={animatedProps}>
     <Layer id={id} type="line" layout={{ 'line-cap': appearance.cap, 'line-join': appearance.join }}
       paint={{ 'line-width': appearance.width, 'line-opacity': appearance.opacity,
         'line-color': ['rgba', ['get', 'vimaRed'], ['get', 'vimaGreen'], ['get', 'vimaBlue'], ['get', 'vimaRevealOpacity']] }} />
-  </AnimatedSource>;
+  </AnimatedSource>
+    {!reducedMotion && state === 'active' ? <AnimatedSource id={`${id}-flow-source`} data={emptyData} animatedProps={flowProps}>
+      <Layer id={`${id}-flow`} type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+        paint={{ 'line-width': appearance.width, 'line-opacity': mapPersonality.routeHighlightOpacity,
+          'line-color': visualTokens.colors.white }} />
+    </AnimatedSource> : null}</>;
 }

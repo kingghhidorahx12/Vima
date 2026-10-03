@@ -24,6 +24,7 @@ import { normalizeCoordinate, type Coordinate } from '../../map/models';
 import { defaultTrafficLayers, displayKeyAvailable, type TrafficLayerPreferences } from '../../map/traffic';
 import { mapLayerStorage } from '../../services/storage/mapLayers';
 import { MapControls } from './MapControls';
+import { mapPersonality } from '../../motion/mapPersonality';
 import { IncidentCard } from './IncidentCard';
 import type { IncidentDetails } from '../../map/incidentDetails';
 
@@ -53,6 +54,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [layersOpen, setLayersOpen] = useState(false);
   const [incident, setIncident] = useState<IncidentDetails | null>(null);
   const [recenter, setRecenter] = useState<{ coordinate: Coordinate; sequence: number }>();
+  const [recentering, setRecentering] = useState(false);
+  const [centered, setCentered] = useState(false);
+  const pendingCenter = useRef<Coordinate | null>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
+  useEffect(() => { if (!centered) return; const timer = setTimeout(() => setCentered(false), mapPersonality.feedbackMs); return () => clearTimeout(timer); }, [centered]);
+  useEffect(() => { if (!recentering) return; const timer = setTimeout(() => { pendingCenter.current = null; setRecentering(false); }, mapPersonality.feedbackMs * 2); return () => clearTimeout(timer); }, [recentering]);
   const hasDisplayKey = displayKeyAvailable(process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY);
   useEffect(() => {
     let active = true;
@@ -136,9 +143,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   };
   const recenterMap = () => {
     if (!flow.currentLocation) return;
+    pendingCenter.current = flow.currentLocation.coordinate; setRecentering(true); setCentered(false);
     setRecenter((previous) => ({ coordinate: flow.currentLocation!.coordinate, sequence: (previous?.sequence ?? 0) + 1 }));
   };
   const choosePlace = (place: Place | PlaceSuggestion, target?: 'origin' | 'destination') => {
+    void semanticHaptics('buttonChip');
     dismissKeyboard(); setMapUserControlled(false); setSearchAction('results'); void flow.choosePlace(place, target);
   };
   const confirmMapSelection = () => {
@@ -203,8 +212,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           setSearchAction('contribute-map');
         }} />
       </> : flow.field ? <>
-        <View style={styles.searchField}><SmallPin color={t.colors.red} />
-          <TextInput ref={input} autoFocus onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección" value={flow.search}
+        <View style={[styles.searchField, searchFocused && styles.searchFocused]}><SmallPin color={t.colors.red} />
+          <TextInput ref={input} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección" value={flow.search}
             onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }} returnKeyType="search"
             style={styles.searchInput} placeholderTextColor={t.colors.gray} />
           {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.greenDark} /> : null}</View>
@@ -345,7 +354,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     </View>
     <View style={styles.fill} onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
       <PassengerRideShell trip={flow.trip}
-        map={{ onTouchStart: () => { dismissKeyboard(); setMapUserControlled(true); },
+        map={{ onRegionDidChange: event => {
+          const target = pendingCenter.current;
+          if (target && !event.nativeEvent.userInteraction && event.nativeEvent.center.every((value, i) => Math.abs(value - target[i]!) < 0.00001)) {
+            pendingCenter.current = null; setRecentering(false); setCentered(true); void semanticHaptics('pinCorrect');
+          }
+        }, onTouchStart: () => { pendingCenter.current = null; setRecentering(false); dismissKeyboard(); setMapUserControlled(true); },
           onPress: event => { setIncident(null); if (pickingMap) setSelectedCoordinate(normalizeCoordinate(event.nativeEvent.lngLat)); },
           onDidFinishLoadingMap: () => { setMapReady(true); setMapFailed(false); }, onDidFailLoadingMap: () => setMapFailed(true) }}
         mapContent={<PassengerMap quote={flow.quote} assignment={assignment} origin={flow.origin} destination={flow.destination}
@@ -361,13 +375,13 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       {mapReady && (interaction?.targetOffset ?? height) > 130 ? <View pointerEvents="box-none"
         style={[styles.mapControls, { bottom: height - (interaction?.targetOffset ?? height) + t.spacing.scalePx[2]! }]}>
         <MapControls available={hasDisplayKey} canRecenter={!!flow.currentLocation} layers={mapLayers}
-          open={layersOpen} onRecenter={recenterMap} onOpen={() => setLayersOpen((value) => !value)} onToggle={toggleMapLayer} />
+          recentering={recentering} centered={centered} open={layersOpen} onRecenter={recenterMap} onOpen={() => setLayersOpen((value) => !value)} onToggle={toggleMapLayer} />
       </View> : null}
       {incident && (interaction?.targetOffset ?? height) > 100 ? <IncidentCard details={incident}
         maxHeight={Math.min(200, (interaction?.targetOffset ?? height) - 24)} onClose={() => setIncident(null)} /> : null}
       {mapFailed ? <VimaText variant="caption" style={styles.mapStatus}>Mapa · !</VimaText> : null}
     </View>
-    <VimaLaunchSurface ready={mapReady || mapFailed} />
+    <VimaLaunchSurface active={focused} ready={mapReady || mapFailed} />
   </SafeAreaView>;
 }
 
@@ -435,7 +449,7 @@ const styles = StyleSheet.create({
   headerLockup: { width: 672 * 28 / 200, height: 28 },
   headerSide: { width: t.components.iconSizesPx[2], justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', color: t.colors.carbon },
-  sheet: { overflow: 'hidden' },
+  sheet: { overflow: 'hidden', elevation: 3 },
   sheetHeader: { paddingHorizontal: base, alignItems: 'center', paddingTop: sm, paddingBottom: md, gap: sm },
   handle: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[0], borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   content: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingBottom: base, gap: md },
@@ -466,7 +480,8 @@ const styles = StyleSheet.create({
   metric: { flex: 1, alignItems: 'center', gap: xs },
   paymentRow: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md,
     paddingHorizontal: md, borderTopWidth: t.borders.standardWidthPx, borderColor: t.colors.background },
-  searchField: { height: t.components.inputPrimary.heightPx, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
+  searchFocused: { borderColor: t.colors.greenDark },
+  searchField: { borderWidth: t.borders.standardWidthPx, borderColor: t.borders.standardColor, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
     paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm },
   searchInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, height: t.components.inputPrimary.heightPx, color: t.colors.carbon },
   contributionInput: { ...textStyle({ variant: 'body', weight: 400 }), height: t.components.inputPrimary.heightPx,

@@ -152,7 +152,7 @@ test('Orbis layers remain absent without display key and use vector sources when
   assert.equal(sources.length, 2);
   assert.ok(sources.every((source) => source.props.tiles[0].includes('apiVersion=2')));
   assert.deepEqual(tree.root.findAllByType('MapLibreLayer' as never).map((layer) => layer.props['source-layer']).filter(Boolean),
-    ['Traffic flow', 'Traffic incident flow', 'Traffic incident points']);
+    ['Traffic flow', 'Traffic incident flow', 'Traffic incident points', 'Traffic incident points']);
   await h.act(async () => tree.unmount());
 });
 
@@ -183,4 +183,64 @@ test('incident point taps normalize documented fields and stop map dismissal bub
   assert.deepEqual(incidentDetails({ icon_category_0: 'unknown', description_0: {}, magnitude_of_delay: 'undefined' }),
     { category: undefined, description: undefined, severity: undefined });
   await h.act(async () => tree.unmount());
+});
+
+test('location animates only its outer ring, stops in background and remains opaque under Reduced Motion', async () => {
+  for (const reduced of [false, true]) {
+    const h = createMapHarness({ reduced }); const { PassengerUserLocation } = h.load('src/features/passenger/PassengerMapPin.tsx');
+    const place = { id: 'p', coordinate: [0, 0] };
+    const tree: ReactTestRenderer = await h.render(React.createElement(PassengerUserLocation, { place }));
+    const core = tree.root.findAllByType('View' as never).find(node => node.props.style?.backgroundColor === '#3B82F6');
+    assert.ok(core); assert.equal(core.props.style.opacity, 1);
+    assert.equal(h.calls.some((c: unknown[]) => c[0] === 'repeat'), !reduced);
+    const repeats = h.calls.filter((c: unknown[]) => c[0] === 'repeat').length;
+    await h.act(async () => h.appState('background'));
+    assert.equal(h.calls.filter((c: unknown[]) => c[0] === 'repeat').length, repeats);
+    const before = h.calls.filter((c: unknown[]) => c[0] === 'cancelAnimation').length;
+    await h.act(async () => tree.unmount());
+    assert.ok(h.calls.filter((c: unknown[]) => c[0] === 'cancelAnimation').length > before);
+  }
+});
+
+test('route reveals once then repeats a separate highlight; reduced/background disable repetition', async () => {
+  for (const reduced of [false, true]) {
+    const h = createMapHarness({ reduced }); const { RouteLayer } = h.load('src/map/RouteLayer.tsx');
+    const data = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[0, 0], [1, 0]] } };
+    const scene = (active = true) => React.createElement(RouteLayer, { id: 'test', data, state: 'active', activeTone: 'greenDark', appearance: { width: 4, opacity: 1 }, active });
+    const tree: ReactTestRenderer = await h.render(scene());
+    assert.equal(h.calls.some((c: unknown[]) => c[0] === 'repeat'), !reduced);
+    assert.equal(tree.root.findAllByType('MapLibreSource' as never).length, reduced ? 1 : 2);
+    const mounts = h.calls.filter((c: unknown[]) => c[0] === 'mount').length;
+    await h.act(async () => tree.update(scene(false)));
+    assert.equal(h.calls.filter((c: unknown[]) => c[0] === 'mount').length, mounts);
+    assert.ok(h.calls.some((c: unknown[]) => c[0] === 'timing' && (c[2] as { duration: number }).duration === (reduced ? 160 : 720)));
+    await h.act(async () => tree.unmount());
+  }
+});
+
+test('native traffic and incident layers fade at toggle boundaries and preserve tap targets', async () => {
+  const h = createMapHarness(); const { IncidentLayer } = h.load('src/map/IncidentLayer.tsx');
+  const scene = (enabled: boolean) => React.createElement(IncidentLayer, { enabled, onSelect: () => {} });
+  const tree: ReactTestRenderer = await h.render(scene(true));
+  await h.act(async () => { await new Promise(resolve => setTimeout(resolve, 5)); });
+  const points = () => tree.root.findAllByType('MapLibreLayer' as never).find(n => n.props.id === 'vima-incident-points')!;
+  assert.equal(points().props.paint['circle-opacity'], 1); assert.equal(points().props.paint['circle-radius-transition'].duration, 600);
+  await h.act(async () => tree.update(scene(false)));
+  await h.act(async () => { await new Promise(resolve => setTimeout(resolve, 5)); });
+  assert.equal(points().props.paint['circle-opacity'], 0);
+  assert.equal(tree.root.findByType('MapLibreVectorSource' as never).props.onPress, undefined);
+  await h.act(async () => tree.unmount());
+});
+
+test('launch starts exit as soon as ready and reduced motion only crossfades', async () => {
+  for (const reduced of [false, true]) {
+    const h = createMapHarness({ reduced }); const { VimaLaunchSurface } = h.load('src/motion/VimaLaunchSurface.tsx');
+    const tree: ReactTestRenderer = await h.render(React.createElement(VimaLaunchSurface, { ready: false }));
+    assert.equal(h.calls.some((c: unknown[]) => c[0] === 'timing' && c[1] === 1.02), !reduced);
+    await h.act(async () => tree.update(React.createElement(VimaLaunchSurface, { ready: true })));
+    assert.equal(tree.root.findAllByType('View' as never)[0]!.props.pointerEvents, 'none');
+    assert.ok(h.calls.some((c: unknown[]) => c[0] === 'timing' && c[1] === 0 && (c[2] as { duration: number }).duration === (reduced ? 160 : 720)));
+    assert.ok(!h.calls.some((c: unknown[]) => c[0] === 'repeat' || c[0] === 'delay'));
+    await h.act(async () => tree.unmount());
+  }
 });

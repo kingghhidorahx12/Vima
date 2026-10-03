@@ -8,7 +8,7 @@ const { transformSync } = require('@babel/core');
 function createMapHarness({ reduced = false } = {}) {
   const root = path.resolve(__dirname, '../..');
   const modules = new Map(); const calls = []; const reactions = []; const frames = [];
-  const policy = { reducedMotion: reduced, allowCameraAnimation: !reduced };
+  const policy = { allowDecorativeLoops: !reduced, reducedMotion: reduced, allowCameraAnimation: !reduced };
   const sample = { current: null, get() { return this.current; }, set(v) { this.current = v; } };
   const poses = { current: null, get() { return this.current; }, set(v) { this.current = v; } };
   function component(name) {
@@ -25,7 +25,8 @@ function createMapHarness({ reduced = false } = {}) {
       render() { return React.createElement(name, this.props, this.props.children); }
     };
   }
-  const native = { View: 'View', Image: 'Image', Platform: { OS: 'android' },
+  const appListeners = new Set();
+  const native = { AppState: { currentState: 'active', addEventListener: (_event, fn) => { appListeners.add(fn); return { remove: () => appListeners.delete(fn) }; } }, View: 'View', Image: 'Image', Platform: { OS: 'android' },
     StyleSheet: { create: s => s, absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } } };
   const animated = {
     __esModule: true, default: { View: 'View', createAnimatedComponent: Component => function Animated(props) {
@@ -39,8 +40,8 @@ function createMapHarness({ reduced = false } = {}) {
       React.useEffect(() => { const entry = { latest, previous: undefined }; reactions.push(entry);
         return () => { reactions.splice(reactions.indexOf(entry), 1); }; }, []);
     },
-    cancelAnimation() {}, withTiming: v => v, withSequence: (...values) => values.at(-1),
-    withRepeat: value => value, ReduceMotion: { Never: 0, System: 1 },
+    cancelAnimation(value) { calls.push(['cancelAnimation', value]); }, withTiming: (v, config) => { calls.push(['timing', v, config]); return v; }, withDelay: (ms, value) => { calls.push(['delay', ms]); return value; }, withSequence: (...values) => values.at(-1),
+    withRepeat: value => { calls.push(['repeat']); return value; }, ReduceMotion: { Never: 0, System: 1 },
   };
   const overrides = {
     react: React, 'react-native': native,
@@ -76,7 +77,7 @@ function createMapHarness({ reduced = false } = {}) {
       id => { frames[id - 1] = null; });
     return module.exports;
   }
-  return { load, calls, sample, poses, policy, act: renderer.act,
+  return { load, calls, sample, poses, policy, appState: state => appListeners.forEach(fn => fn(state)), act: renderer.act,
     async render(element) { let tree; await renderer.act(async () => { tree = renderer.create(element); }); return tree; },
     async flush() { await renderer.act(async () => {
       for (const entry of [...reactions]) {

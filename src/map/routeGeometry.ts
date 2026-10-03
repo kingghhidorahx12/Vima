@@ -11,6 +11,38 @@ function distance(from: GeoJSON.Position, to: GeoJSON.Position): number {
   return 2 * Math.asin(Math.sqrt(Math.min(1, a)));
 }
 
+/** Cache angular offsets once per route. Repeated frames copy only a short window. */
+export function indexRoute(data: RouteFeature) {
+  const lines = data.geometry.type === 'LineString' ? [data.geometry.coordinates] : data.geometry.coordinates;
+  let total = 0;
+  const segments = lines.flatMap(line => line.slice(1).map((end, i) => {
+    const start = line[i]!; const from = total; total += distance(start, end);
+    return { start, end, from, to: total };
+  }));
+  return { segments, total };
+}
+export function routeWindow(index: ReturnType<typeof indexRoute>, progress: number, width: number): RouteFeature {
+  'worklet';
+  if (progress <= 0 || progress >= 1) return { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: [] } };
+  const low = Math.max(0, progress - width) * index.total;
+  const high = Math.min(1, progress) * index.total;
+  // Binary search skips the whole route prefix. Output stays bounded by the visible window.
+  let left = 0; let right = index.segments.length;
+  while (left < right) { const middle = (left + right) >>> 1;
+    if (index.segments[middle]!.to < low) left = middle + 1; else right = middle; }
+  const lines: GeoJSON.Position[][] = [];
+  for (let i = left; i < index.segments.length; i++) {
+    const segment = index.segments[i]!;
+    if (segment.from > high) break;
+    const length = segment.to - segment.from;
+    if (!length) continue;
+    const a = Math.max(0, (low - segment.from) / length); const b = Math.min(1, (high - segment.from) / length);
+    lines.push([[...interpolateCoordinate([segment.start[0]!, segment.start[1]!], [segment.end[0]!, segment.end[1]!], a)],
+      [...interpolateCoordinate([segment.start[0]!, segment.start[1]!], [segment.end[0]!, segment.end[1]!], b)]]);
+  }
+  return { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } };
+}
+
 /** Clip in angular distance along actual route geometry; disconnected lines add no connector. */
 export function revealRoute(data: RouteFeature, progress: number): RouteFeature {
   'worklet';

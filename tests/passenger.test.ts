@@ -643,3 +643,43 @@ test('incident detail closes by outside tap, close button and Android back, incl
     await h.act(async () => press(tree, 'Cerrar detalle del incidente'));
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
+
+test('recenter acknowledges only the native completion at the requested coordinate', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle(h);
+    const layout = tree.root.findAllByType('View' as never).find(node => node.props.onLayout && node.props.style?.flex === 1)!;
+    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { height: 700 } } }));
+    await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+    await h.act(async () => press(tree, 'Centrar ubicación'));
+    assert.ok(!text(tree).includes('Ubicación centrada'));
+    const coordinate = nativeNode(tree, 'PassengerMapContent').props.recenter.coordinate;
+    await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionDidChange({ nativeEvent: { center: [0, 0], userInteraction: false } }));
+    assert.ok(!text(tree).includes('Ubicación centrada'));
+    await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionDidChange({ nativeEvent: { center: coordinate, userInteraction: false } }));
+    assert.ok(text(tree).includes('Ubicación centrada'));
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('map control press feedback and layer switches use approved timing and obey Reduced Motion', async () => {
+  for (const reduced of [false, true]) {
+    const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { reduced });
+    const tree: ReactTestRenderer = await h.render(fixture.gateway);
+    try {
+      await settle(h);
+      const layout = tree.root.findAllByType('View' as never).find(node => node.props.onLayout && node.props.style?.flex === 1)!;
+      await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { height: 700 } } }));
+      await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+      const button = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Centrar ubicación')!;
+      const before = h.animations.length;
+      await h.act(async () => button.props.onPressIn());
+      assert.equal(h.animations.length > before, !reduced);
+      if (!reduced) assert.equal(h.animations.at(-1).duration, 160);
+      await h.act(async () => button.props.onPressOut());
+      await h.act(async () => press(tree, 'Capas del mapa'));
+      assert.ok(text(tree).includes('Tráfico')); assert.ok(text(tree).includes('Incidentes'));
+      assert.ok(!text(tree).includes('Siniestros'));
+    } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+  }
+});

@@ -7,7 +7,8 @@ const renderer = require('react-test-renderer');
 const query = require('@tanstack/react-query');
 
 // Native boundaries are test doubles. This tests React identity/interaction, not native rendering.
-function createHarness(boundaryOverrides = {}) {
+function createHarness(boundaryOverrides = {}, { reduced = false } = {}) {
+  const animations = [];
   const modules = new Map();
   const mounted = { map: 0, unmountedMap: 0, sheet: 0, haptics: [], keyboardDismiss: 0, blur: 0, inputFocused: false };
   const root = path.resolve(__dirname, '../..');
@@ -19,7 +20,7 @@ function createHarness(boundaryOverrides = {}) {
   native.Keyboard = { dismiss() { mounted.keyboardDismiss++; mounted.inputFocused = false; } };
   const animated = { default: { View: 'AnimatedView' }, cancelAnimation() {}, ReduceMotion: { System: 'system', Never: 'never' },
     useSharedValue: (initial) => { const value = React.useRef(initial); return React.useMemo(() => ({ get: () => value.current, set: (next) => { value.current = next; } }), []); },
-    useAnimatedStyle: (fn) => fn(), withTiming: (value) => value, withRepeat: (value) => value,
+    useAnimatedStyle: (fn) => fn(), withTiming: (value, config) => { animations.push({ value, ...config }); return value; }, withRepeat: (value) => value,
     withSequence: (...values) => values.at(-1) };
   const kv = new Map();
   const overrides = {
@@ -44,7 +45,7 @@ function createHarness(boundaryOverrides = {}) {
         return React.createElement('SheetBoundary', props, props.header, props.children); },
     };
     if (resolved.endsWith('haptics.ts')) return { semanticHaptics: async (event) => { mounted.haptics.push(event); } };
-    if (resolved.endsWith('ReducedMotion.tsx')) return { useMotionPolicy: () => ({ reducedMotion: false, allowDecorativeLoops: true }) };
+    if (resolved.endsWith('ReducedMotion.tsx')) return { useMotionPolicy: () => ({ reducedMotion: reduced, allowDecorativeLoops: !reduced }) };
     if (resolved.endsWith(path.join('themes', 'index.tsx'))) return { useVimaTheme: () => load(path.join(root, 'src/design/themes/light.ts')).lightTheme };
     if (resolved.endsWith('.json')) return JSON.parse(fs.readFileSync(resolved, 'utf8'));
     if (resolved.endsWith('.png')) return resolved;
@@ -71,7 +72,7 @@ function createHarness(boundaryOverrides = {}) {
   const fakeMapConfig = {};
   const boundaries = { schedule() {}, call() {}, safety() {}, ...boundaryOverrides };
   const client = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
-  return { mounted, client, kv, back: () => back?.(), async render(gateway) {
+  return { animations, mounted, client, kv, back: () => back?.(), async render(gateway) {
     let tree;
     await renderer.act(async () => { tree = renderer.create(React.createElement(query.QueryClientProvider, { client },
       React.createElement(Screen, { gateway, mapConfig: fakeMapConfig, boundaries })), { createNodeMock(element) {
