@@ -16,6 +16,10 @@
     "greenBright": "#2DFFB3",
     "red": "#FF3830",
     "blue": "#3B82F6",
+    "accentBlue": "#2F80FF",
+    "accentBluePressed": "#1E6FE8",
+    "accentBlueSoft": "#EAF3FF",
+    "accentBlueGlow": "rgba(47, 128, 255, 0.16)",
     "amber": "#F59E0B"
   },
   "semanticRoles": {
@@ -31,7 +35,11 @@
     "highlightAndMotion": "greenBright",
     "destinationAndCriticalMapPin": "red",
     "communicationAndInformation": "blue",
-    "warningAndWait": "amber"
+    "warningAndWait": "amber",
+    "spatialAndSecondaryAction": "accentBlue",
+    "secondaryPressed": "accentBluePressed",
+    "secondarySurface": "accentBlueSoft",
+    "secondaryHalo": "accentBlueGlow"
   },
   "typography": {
     "family": "Inter",
@@ -157,8 +165,8 @@
   "mapSemantics": {
     "origin": "green",
     "destination": "red",
-    "user": "blue/green location dot with halo depending context",
-    "routeActive": "greenDark or carbon by context",
+    "user": "accentBlue location dot with halo",
+    "routeActive": "accentBlue",
     "routeCompleted": "gray",
     "communicationAction": "blue",
     "waitWarning": "amber"

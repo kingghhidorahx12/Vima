@@ -8,8 +8,8 @@ export const mapColors = {
   wait: resolveColor(visualTokens.mapSemantics.waitWarning),
 };
 
-/** Both active-route choices are approved; the caller must provide the actual context. */
-export function routeColor(state: 'active' | 'completed', activeTone: 'carbon' | 'greenDark'): string {
+/** Passenger routes use accentBlue; legacy contexts remain explicit. */
+export function routeColor(state: 'active' | 'completed', activeTone: 'carbon' | 'greenDark' | 'accentBlue'): string {
   return state === 'completed' ? mapColors.routeCompleted : visualTokens.colors[activeTone];
 }
 

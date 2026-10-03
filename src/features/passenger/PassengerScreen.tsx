@@ -233,7 +233,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           <TextInput ref={input} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección" value={flow.search}
             onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }} returnKeyType="search"
             style={styles.searchInput} placeholderTextColor={t.colors.gray} />
-          {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.greenDark} /> : null}</View>
+          {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</View>
         {flow.search.trim() ? <>
           {flow.places.map((place) => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}
           {flow.loadingPlaces && !flow.places.length ? <View accessible accessibilityLabel="Buscando lugares" style={styles.searchSkeleton}>
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   priceValue: { color: t.colors.greenDark },
   paymentRow: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md,
     paddingHorizontal: md, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background },
-  searchFocused: { borderColor: t.colors.greenDark },
+  searchFocused: { borderColor: t.colors.accentBlue, boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 0, spreadDistance: 2, color: t.colors.accentBlueGlow }] },
   searchField: { borderWidth: t.borders.standardWidthPx, borderColor: t.borders.standardColor, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
     paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm },
   searchInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, height: t.components.inputPrimary.heightPx, color: t.colors.carbon },

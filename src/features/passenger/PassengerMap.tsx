@@ -51,7 +51,7 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
     {manualSelection ? <PassengerMapPin place={{ id: 'manual-selection', name: '', address: '', coordinate: manualSelection.coordinate }}
       kind={manualSelection.kind} /> : null}
     {!searchPresentationActive && quote ? <RouteLayer id="passenger-route" data={assignment?.routeToOrigin ?? quote.route}
-      activeTone="greenDark" state="active" appearance={config.route} active={active} /> : null}
+      activeTone="accentBlue" state="active" appearance={config.route} active={active} /> : null}
     {!searchPresentationActive ? <VehicleLayer id="passenger-assigned-vehicle" kind="circle" sample={sample}
       appearance={config.vehicle} motion={config.vehicleMotion} /> : null}
   </>;

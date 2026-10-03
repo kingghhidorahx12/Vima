@@ -1,9 +1,31 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-02 en `codex/premium-media-pricing-p0`, creada desde el HEAD publicado
+Actualizado 2026-10-03 en `codex/premium-media-pricing-p0`, creada desde el HEAD publicado
 de `codex/motion-pricing-p0`. No se modificaron ramas históricas ni main.
 
 ## IMPLEMENTADO
+
+### Contraste y acento secundario P0 — 2026-10-03
+
+- Ruta pasajero azul `#2F80FF`, sobre casing blanco existente y por encima de Traffic.
+  Geometría, fit, clipping y flujo animado no cambian; Reduced Motion conserva ruta completa
+  sin highlight repetido. Origen verde, destino rojo y CTA/pricing/matching verdes se mantienen.
+- Tokens aprobados accentBlue/Pressed/Soft/Glow incorporados al JSON autoritativo. Se usan
+  en ubicación actual, controles activos, switches de capas, foco de Search, categorías
+  informativas y toast. Recenter conserva su confirmación nativa y autodismiss; su loading
+  muestra spinner con motion normal e icono estático con Reduced Motion.
+- VimaGlyph sustituye aproximaciones de Views por Material Symbols regular, una familia
+  consistente de 24 dp en header, controles y acciones P0. Se reutiliza la fuente local ya
+  instalada por Expo Router, ahora declarada directamente y cargada con Inter antes del shell.
+  Sin descarga runtime, nuevos módulos nativos ni modificación de assets de marca.
+- Controles de 48 dp con superficies neutras, azul activo/pressed, elevación contenida,
+  cierre de capas reconocible y divisor entre toggles. Sheet y paneles con borde/profundidad
+  sutil; incidentes con cierre de la misma familia, datos separados y severidad disponible.
+  No cambia ningún flujo, contrato live, backend, búsqueda, pricing ni regla funcional.
+- No se ha validado en Android físico. Falta comprobar contraste sobre tiles live con
+  Traffic ON/OFF, iconos a escala real, estados de controles y paneles con texto ampliado.
+  El style productivo definitivo sigue pendiente. Esta ronda no exige otro APK; si el build
+  todavía no incluye `expo-image` de la ronda anterior, continúa pendiente aquella reconstrucción.
 
 ### Corrección incremental Android P0 — 2026-10-02
 
@@ -111,6 +133,13 @@ de `codex/motion-pricing-p0`. No se modificaron ramas históricas ni main.
   habiendo ruta/distancia/duración y no se habilita la solicitud live.
 
 ## VERIFICADO AUTOMÁTICAMENTE
+
+- Ronda de acento: TypeScript, lint, `npm test` 121/121 y worklets en 17 archivos OK.
+  Pruebas de ruta verifican azul/casing sobre Traffic, geometría invariable y Reduced Motion;
+  controles mantienen hit targets/feedback y media conserva icono ante error. Se inspeccionó
+  una lámina de los 23 glifos renderizados desde la fuente local; no equivale a render Android.
+  Exportación Hermes Android/iOS OK, incluida la fuente. El sandbox bloqueó inicialmente
+  `hermesc.exe`; el reintento autorizado pasó. No se generó APK ni se ejecutó EAS.
 
 - Tests unitarios/integración de geoespacial, ranking, dedupe, persistencia, contribuciones,
   señales, cámara Search/Recenter, clipping estructural, capas, Reduced Motion y launch surface.

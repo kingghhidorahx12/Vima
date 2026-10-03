@@ -4,6 +4,7 @@ import test from 'node:test';
 import React from 'react';
 import renderer from 'react-test-renderer';
 import { createPlaceMediaResolver } from '../src/services/geospatial/placeMedia.ts';
+import { glyphCodepoints, glyphFamily } from '../src/design/glyphs.ts';
 
 const require = createRequire(import.meta.url);
 const { createHarness } = require('./support/passenger-renderer.cjs');
@@ -30,7 +31,10 @@ test('thumbnail keeps its footprint and Vima icon when media is absent or fails'
     assert.equal(photo.props.source.cacheKey, 'place-image:plaza-atlacomulco:v1:thumb');
     await renderer.act(async () => photo.props.onError());
     assert.equal(tree.root.findAllByType('ExpoImage' as never).length, 0);
-    assert.ok(tree.root.findAllByType('View' as never).length > 1);
+    const fallbackIcon = tree.root.findByType('Text' as never);
+    assert.equal(fallbackIcon.props.children, String.fromCodePoint(glyphCodepoints.commerce));
+    assert.equal(fallbackIcon.props.style[0].fontFamily, glyphFamily);
+    assert.equal(fallbackIcon.props.accessible, false);
     await renderer.act(async () => tree.update(React.createElement(PlaceThumbnail, {
       place: { ...place, image: undefined }, resolveMedia })));
     assert.equal(tree.root.findAllByType('ExpoImage' as never).length, 0);

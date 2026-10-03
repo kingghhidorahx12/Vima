@@ -106,3 +106,16 @@ Splash Android crece de160 a183dp por medición alpha y círculo seguro, sin edi
 | Catálogo de media controlado | Binarios y manifiesto con provenance viven fuera del repo mediante `VIMA_PLACE_MEDIA_DIR`; sólo imágenes aprobadas de Local Places verificados se publican. Aportes `pending` no reciben foto pública ni upload en P0. |
 | Fotos proveedor fuera de P0 | No integrar TomTom POI Photos ni Google Places Photos; `source: external` sólo deja abierto un contrato futuro sujeto a derechos y metadata por proveedor. |
 | Español visible P0 | Categorías de incidentes reales traducidas; desconocidas muestran `Incidente vial`, sin enums ni fallback inglés visible. |
+
+## Acento secundario P0 — decisión visual aprobada 2026-10-03
+
+- Azul Vima Accent: `#2F80FF`, pressed `#1E6FE8`, superficie suave `#EAF3FF` y halo
+  derivado. El JSON de tokens incorpora estos valores; el halo usa el azul al 16%.
+- Ruta principal azul con casing claro, ubicación actual y controles activos del mapa,
+  foco/selección secundarios y realce informativo. Esta decisión sustituye el uso de
+  verde/carbono para la ruta principal del pasajero.
+- Verde conserva CTA principal, éxito, acción de negocio, origen e identidad; rojo conserva
+  destino y estados críticos. No se modifica el Motion System ni las reglas funcionales.
+- Se aprueba una ronda acotada de coherencia de iconos y superficies P0, sin rediseñar layouts.
+  La elección técnica de Material Symbols reutiliza la fuente ya instalada; no representa
+  un nuevo asset master de marca ni una migración global de iconografía.

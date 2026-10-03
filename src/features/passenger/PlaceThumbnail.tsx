@@ -11,9 +11,9 @@ function fallback(place: PlaceSuggestion): { icon: VimaGlyphName; color: string 
   if (name.includes('casa')) return { icon: 'home', color: t.colors.greenDark };
   if (name.includes('trabajo')) return { icon: 'work', color: t.colors.carbon };
   if (['mall', 'market', 'shop', 'supermarket'].includes(place.category ?? '')) return { icon: 'commerce', color: t.colors.greenDark };
-  if (['university', 'school', 'college'].includes(place.category ?? '')) return { icon: 'education', color: t.colors.blue };
+  if (['university', 'school', 'college'].includes(place.category ?? '')) return { icon: 'education', color: t.colors.accentBlue };
   if (['hospital', 'clinic', 'pharmacy'].includes(place.category ?? '')) return { icon: 'health', color: t.colors.red };
-  if (['airport', 'bus_station', 'station'].includes(place.category ?? '')) return { icon: 'transport', color: t.colors.blue };
+  if (['airport', 'bus_station', 'station'].includes(place.category ?? '')) return { icon: 'transport', color: t.colors.accentBlue };
   return { icon: 'route', color: t.colors.greenDark };
 }
 

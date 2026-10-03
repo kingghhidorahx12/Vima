@@ -13,6 +13,9 @@ export const lightTheme = {
       backgroundColor: semanticColors.contrastSurface,
       borderTopLeftRadius: visualTokens.radii.sheetPx,
       borderTopRightRadius: visualTokens.radii.sheetPx,
+      borderWidth: visualTokens.borders.standardWidthPx,
+      borderColor: visualTokens.colors.grayLight,
+      ...elevationStyle('level1', visualTokens.colors.carbon),
     },
     card: { backgroundColor: semanticColors.contrastSurface, borderRadius: visualTokens.radii.cardPx },
     buttonPrimary: {

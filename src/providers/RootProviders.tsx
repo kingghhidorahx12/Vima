@@ -3,7 +3,7 @@ import { useEffect, useState, type PropsWithChildren } from 'react';
 import { AppState, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
-import { interFonts } from '../design/fonts';
+import { appFonts } from '../design/fonts';
 import { VimaThemeProvider } from '../design/themes';
 import { lightTheme } from '../design/themes/light';
 import { ReducedMotionProvider } from '../motion/ReducedMotion';
@@ -11,7 +11,7 @@ import { createQueryClient } from '../services/api/queryClient';
 import { localStorage } from '../services/storage/local';
 
 export function RootProviders({ children }: PropsWithChildren) {
-  const [fontsLoaded, fontError] = useFonts(interFonts);
+  const [fontsLoaded, fontError] = useFonts(appFonts);
   const [client] = useState(createQueryClient);
   const [preference, setPreference] = useState<'system' | 'reduce'>('reduce');
   useEffect(() => {

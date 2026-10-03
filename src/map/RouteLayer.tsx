@@ -16,7 +16,7 @@ const emptyData = JSON.stringify({ type: 'FeatureCollection', features: [] });
 
 export interface RouteLayerProps {
   readonly id: string; readonly data: RouteFeature; readonly state: 'active' | 'completed';
-  readonly activeTone: 'carbon' | 'greenDark'; readonly appearance: RouteAppearance; readonly reveal?: boolean;
+  readonly activeTone: 'carbon' | 'greenDark' | 'accentBlue'; readonly appearance: RouteAppearance; readonly reveal?: boolean;
   readonly active?: boolean;
 }
 /** Vima appearance is translated here; features never carry MapLibre paint objects. */

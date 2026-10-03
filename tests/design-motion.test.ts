@@ -18,6 +18,9 @@ test('runtime tokens preserve both approved JSON documents, including unresolved
   assert.deepEqual(visualTokens, JSON.parse(readFileSync(new URL('../docs/design/vima.visual.final.json', import.meta.url), 'utf8')));
   assert.deepEqual(motionTokens, JSON.parse(readFileSync(new URL('../docs/design/vima.motion.final.json', import.meta.url), 'utf8')));
   assert.equal(semanticColors.destinationAndCriticalMapPin, visualTokens.colors.red);
+  assert.equal(semanticColors.spatialAndSecondaryAction, '#2F80FF');
+  assert.equal(semanticColors.primaryActionAndSuccess, '#00D68F');
+  assert.equal(routeColor('active', 'accentBlue'), '#2F80FF');
   assert.deepEqual(primaryGradient.stops.map((stop) => stop.position), [0, 0.58, 1]);
   assert.throws(() => resolveColor('unapproved'));
 });

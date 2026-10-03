@@ -378,3 +378,16 @@ Codex **no puede**:
 - cambiar flujos funcionales aprobados.
 
 Con este documento, Visual System v1 + Motion System v1 queda **listo para 01 — Prompts para Codex**.
+
+## Adenda aprobada — 2026-10-03: acento secundario P0
+
+El encargo posterior aprueba `accentBlue` (#2F80FF), `accentBluePressed` (#1E6FE8),
+`accentBlueSoft` (#EAF3FF) y halo derivado. El JSON incorpora la paleta; el halo usa 16%.
+La ruta principal del pasajero pasa a azul con casing blanco, conservando geometría y motion.
+Azul también identifica ubicación actual, controles activos, foco secundario e información.
+Verde sigue siendo CTA/negocio/origen/éxito; rojo destino y estados críticos.
+
+La ronda autoriza refinar iconografía y superficies visibles P0, sin modificar layouts ni flujos.
+La implementación reutiliza Material Symbols regular a 24 dp desde su fuente local ya presente;
+los assets de marca aprobados permanecen intactos. Los pendientes históricos de iconografía
+no impiden este acabado acotado, ni equivalen a aprobar un nuevo master de marca.

@@ -189,31 +189,40 @@ test('Orbis layers remain absent without display key and use vector sources when
   await h.act(async () => tree.unmount());
 });
 
-test('Traffic toggling does not change Vima route geometry or its casing contrast', async () => {
-  const h = createMapHarness({ reduced: true });
-  const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
-  const origin = { id: 'o', name: 'Origen', address: '', coordinate: [-99, 19] };
-  const destination = { id: 'd', name: 'Destino', address: '', coordinate: [-98, 20] };
-  const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString',
-    coordinates: [[-99, 19], [-99.5, 19.5], [-98, 20]] } };
-  const config = { viewport: () => ({ center: [-99, 19] }), route: { width: 4, opacity: 1 },
-    vehicle: { radius: 12, color: '#000' } };
-  const scene = (traffic: boolean) => React.createElement(PassengerMap, { origin, destination,
-    quote: { origin, destination, route }, home: false, ready: true, sheetHeight: 300, config,
-    displayKeyAvailable: true, layers: { traffic, incidents: true } });
-  const tree: ReactTestRenderer = await h.render(scene(false));
-  const source = () => tree.root.findAllByType('MapLibreSource' as never)
-    .find(node => node.props.id === 'passenger-route-source')!;
-  const before = source().props.data;
-  assert.deepEqual(JSON.parse(before).geometry.coordinates, route.geometry.coordinates);
-  await h.act(async () => tree.update(scene(true)));
-  assert.deepEqual(JSON.parse(source().props.data).geometry, JSON.parse(before).geometry);
-  const layers = tree.root.findAllByType('MapLibreLayer' as never);
-  const casing = layers.find(node => node.props.id === 'passenger-route-casing')!;
-  const line = layers.find(node => node.props.id === 'passenger-route')!;
-  assert.equal(casing.props.paint['line-color'], '#FFFFFF');
-  assert.ok(casing.props.paint['line-width'] > line.props.paint['line-width']);
-  await h.act(async () => tree.unmount());
+test('Traffic toggling preserves blue route, casing and geometry with and without Reduced Motion', async () => {
+  for (const reduced of [false, true]) {
+    const h = createMapHarness({ reduced });
+    const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+    const origin = { id: 'o', name: 'Origen', address: '', coordinate: [-99, 19] };
+    const destination = { id: 'd', name: 'Destino', address: '', coordinate: [-98, 20] };
+    const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString',
+      coordinates: [[-99, 19], [-99.5, 19.5], [-98, 20]] } };
+    const config = { viewport: () => ({ center: [-99, 19] }), route: { width: 4, opacity: 1 },
+      vehicle: { radius: 12, color: '#000' } };
+    const scene = (traffic: boolean) => React.createElement(PassengerMap, { origin, destination,
+      quote: { origin, destination, route }, home: false, ready: true, sheetHeight: 300, config,
+      displayKeyAvailable: true, layers: { traffic, incidents: true } });
+    const tree: ReactTestRenderer = await h.render(scene(false));
+    await h.act(async () => tree.update(scene(false))); // Settle initial reveal in the animation double.
+    const source = () => tree.root.findAllByType('MapLibreSource' as never)
+      .find(node => node.props.id === 'passenger-route-source')!;
+    const before = source().props.data;
+    const color = (data: string) => { const p = JSON.parse(data).properties; return [p.vimaRed, p.vimaGreen, p.vimaBlue]; };
+    assert.deepEqual(color(before), [47, 128, 255]);
+    assert.deepEqual(JSON.parse(before).geometry.coordinates, route.geometry.coordinates);
+    await h.act(async () => tree.update(scene(true)));
+    assert.deepEqual(JSON.parse(source().props.data).geometry, JSON.parse(before).geometry);
+    assert.deepEqual(color(source().props.data), [47, 128, 255]);
+    const layers = tree.root.findAllByType('MapLibreLayer' as never);
+    const casing = layers.find(node => node.props.id === 'passenger-route-casing')!;
+    const line = layers.find(node => node.props.id === 'passenger-route')!;
+    assert.equal(casing.props.paint['line-color'], '#FFFFFF');
+    assert.ok(casing.props.paint['line-width'] > line.props.paint['line-width']);
+    const trafficIndex = layers.findIndex(node => node.props.id === 'vima-traffic-flow-lines');
+    assert.ok(trafficIndex >= 0 && layers.indexOf(casing) > trafficIndex);
+    assert.equal(layers.some(node => node.props.id === 'passenger-route-flow'), !reduced);
+    await h.act(async () => tree.unmount());
+  }
 });
 
 test('launch surface uses approved image and exits when map is ready', async () => {
@@ -253,7 +262,7 @@ test('location animates only its outer ring, stops in background and remains opa
     const h = createMapHarness({ reduced }); const { PassengerUserLocation } = h.load('src/features/passenger/PassengerMapPin.tsx');
     const place = { id: 'p', coordinate: [0, 0] };
     const tree: ReactTestRenderer = await h.render(React.createElement(PassengerUserLocation, { place }));
-    const core = tree.root.findAllByType('View' as never).find(node => node.props.style?.backgroundColor === '#3B82F6');
+    const core = tree.root.findAllByType('View' as never).find(node => node.props.style?.backgroundColor === '#2F80FF');
     assert.ok(core); assert.equal(core.props.style.opacity, 1);
     assert.equal(h.calls.some((c: unknown[]) => c[0] === 'repeat'), !reduced);
     const repeats = h.calls.filter((c: unknown[]) => c[0] === 'repeat').length;
