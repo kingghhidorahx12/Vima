@@ -30,6 +30,7 @@ const config: ExpoConfig = {
     'expo-secure-store',
     'expo-sqlite',
     'expo-font',
+    'expo-image',
     ['expo-splash-screen', {
       image: './assets/brand/vima_splash_lockup_final.png',
       imageWidth: 280,

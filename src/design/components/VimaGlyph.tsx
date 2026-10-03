@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { visualTokens as t } from '../tokens';
 
 /** Simple geometric UI glyphs; the production icon master and stroke are still pending. */
-export type VimaGlyphName = 'menu' | 'profile' | 'back' | 'chevron' | 'search' | 'home' | 'work' | 'favorite' | 'car' | 'clock' | 'route' | 'payment' | 'recenter' | 'layers';
+export type VimaGlyphName = 'menu' | 'profile' | 'back' | 'chevron' | 'search' | 'home' | 'work' | 'favorite' | 'car' | 'clock' | 'route' | 'payment' | 'recenter' | 'layers' | 'commerce' | 'education' | 'health' | 'transport';
 export function VimaGlyph({ name, color = t.colors.carbon }: { name: VimaGlyphName; color?: string }) {
   const line = { borderColor: color };
   const fill = { backgroundColor: color };
@@ -20,6 +20,10 @@ export function VimaGlyph({ name, color = t.colors.carbon }: { name: VimaGlyphNa
     {name === 'payment' ? <><View style={[styles.payment, line]} /><View style={[styles.paymentLine, fill]} /></> : null}
     {name === 'recenter' ? <><View style={[styles.recenterRing, line]} /><View style={[styles.recenterDot, fill]} /></> : null}
     {name === 'layers' ? <><View style={[styles.layerBack, line]} /><View style={[styles.layerFront, line]} /></> : null}
+    {name === 'commerce' ? <><View style={[styles.shopAwning, line]} /><View style={[styles.shopBody, line]} /></> : null}
+    {name === 'education' ? <><View style={[styles.bookLeft, line]} /><View style={[styles.bookRight, line]} /></> : null}
+    {name === 'health' ? <><View style={[styles.crossVertical, fill]} /><View style={[styles.crossHorizontal, fill]} /></> : null}
+    {name === 'transport' ? <><View style={[styles.carRoof, line]} /><View style={[styles.carBody, line]} /><View style={[styles.carWheelLeft, fill]} /><View style={[styles.carWheelRight, fill]} /></> : null}
   </View>;
 }
 
@@ -56,4 +60,10 @@ const styles = StyleSheet.create({
   recenterDot: { position: 'absolute', width: 4, height: 4, top: 10, left: 10, borderRadius: t.radii.pillPx },
   layerBack: { position: 'absolute', width: 14, height: 14, top: 7, left: 5, borderWidth: edge, transform: [{ rotate: '45deg' }] },
   layerFront: { position: 'absolute', width: 14, height: 14, top: 3, left: 5, borderWidth: edge, transform: [{ rotate: '45deg' }] },
+  shopAwning: { position: 'absolute', width: 18, height: 6, top: 4, left: 3, borderWidth: edge, borderRadius: 2 },
+  shopBody: { position: 'absolute', width: 16, height: 11, top: 10, left: 4, borderWidth: edge, borderRadius: 2 },
+  bookLeft: { position: 'absolute', width: 9, height: 15, top: 5, left: 3, borderWidth: edge, borderRadius: 2 },
+  bookRight: { position: 'absolute', width: 9, height: 15, top: 5, left: 12, borderWidth: edge, borderRadius: 2 },
+  crossVertical: { position: 'absolute', width: 5, height: 18, top: 3, left: 10, borderRadius: 1 },
+  crossHorizontal: { position: 'absolute', width: 18, height: 5, top: 10, left: 3, borderRadius: 1 },
 });

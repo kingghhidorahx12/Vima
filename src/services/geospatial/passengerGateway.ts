@@ -3,16 +3,18 @@ import type { GeospatialClient } from './client.ts';
 import { createPlaceSearch } from './search.ts';
 import { geospatialClientConfig } from './config.ts';
 import type { PersonalPlacesRepository, SavedPlace } from './personalPlaces.ts';
+import { createPlaceMediaResolver } from './placeMedia.ts';
 
 const toPlace = (place: SavedPlace) => ({ ...place, id: place.canonicalId });
 
 /** Live quote authority stays in Vima gateway. Payment and ride requests remain unavailable. */
 export function createPassengerLiveGateway(client: GeospatialClient, locate: PassengerGateway['locate'],
-  personal?: PersonalPlacesRepository, installationId?: () => Promise<string>): PassengerGateway {
+  personal?: PersonalPlacesRepository, installationId?: () => Promise<string>, mediaBaseUrl?: string): PassengerGateway {
   const search = createPlaceSearch(client, geospatialClientConfig.debounceMs);
   const unavailable = async (): Promise<never> => { throw new Error('Servicio no disponible'); };
   return {
     scope: 'vima-geospatial-live', source: 'server', locate,
+    resolvePlaceMedia: mediaBaseUrl ? createPlaceMediaResolver(mediaBaseUrl) : undefined,
     paymentReady: false, tripRequestAvailable: false,
     recentPlaces: async () => (await personal?.recents() ?? []).map(toPlace),
     favoritePlaces: async () => (await personal?.favorites() ?? []).map(toPlace),

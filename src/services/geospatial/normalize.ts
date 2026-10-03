@@ -1,5 +1,6 @@
 import { normalizeBounds, normalizeCoordinate } from '../../map/models.ts';
 import { GeospatialError, type PlaceSuggestion, type ResolvedPlace, type RouteResult } from './contracts.ts';
+import { parsePlaceImageRef } from './placeMedia.ts';
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new GeospatialError('invalid_result');
@@ -19,13 +20,15 @@ export function decodeSuggestion(value: unknown): PlaceSuggestion {
   if (v.provenance !== undefined && v.provenance !== 'provider' && v.provenance !== 'vima-local' &&
     v.provenance !== 'contribution') throw new GeospatialError('invalid_result');
   if (v.kind !== undefined && v.kind !== 'action') throw new GeospatialError('invalid_result');
+  const image = v.image === undefined ? undefined : parsePlaceImageRef(v.image);
   return { id: text(v.id), name: text(v.name), address: text(v.address, true),
     ...(v.canonicalId === undefined ? {} : { canonicalId: text(v.canonicalId) }),
     ...(v.kind === 'action' ? { kind: 'action' as const } : {}),
     ...(v.provenance === undefined ? {} : { provenance: v.provenance }),
     ...(v.category === undefined ? {} : { category: text(v.category) }),
     ...(v.distanceMeters === undefined ? {} : { distanceMeters: number(v.distanceMeters) }),
-    ...(v.regionId === undefined ? {} : { regionId: text(v.regionId) }) };
+    ...(v.regionId === undefined ? {} : { regionId: text(v.regionId) }),
+    ...(image ? { image } : {}) };
 }
 export function decodeSuggestions(value: unknown): readonly PlaceSuggestion[] {
   const v = object(value);

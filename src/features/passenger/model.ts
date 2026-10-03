@@ -4,6 +4,7 @@ import type { RealtimeTransport } from '../../services/realtime/index';
 import type { AuthoritativeTrip, TripGateway } from '../trip/contracts.ts';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts.ts';
 import type { QuoteResponse } from '../../services/pricing/contracts.ts';
+import type { PlaceImageRef, PlaceMediaResolver } from '../../services/geospatial/placeMedia.ts';
 
 export interface Place {
   readonly id: string;
@@ -13,6 +14,7 @@ export interface Place {
   readonly canonicalId?: string;
   readonly regionId?: string;
   readonly category?: string;
+  readonly image?: PlaceImageRef;
 }
 export interface RideDraft { readonly origin: Place; readonly destination: Place; readonly stops: readonly Place[] }
 export interface RideQuote extends RideDraft {
@@ -53,6 +55,7 @@ export interface PassengerGateway extends TripGateway, RealtimeTransport {
   readonly source: 'server' | 'fixture';
   readonly paymentReady?: boolean;
   readonly tripRequestAvailable?: boolean;
+  readonly resolvePlaceMedia?: PlaceMediaResolver;
   locate(signal?: AbortSignal): Promise<Place | null>;
   recentPlaces(signal?: AbortSignal): Promise<readonly Place[]>;
   favoritePlaces?(signal?: AbortSignal): Promise<readonly Place[]>;

@@ -1,5 +1,6 @@
 import type { Bounds, Coordinate } from '../../map/models.ts';
 import type { RouteFeature } from '../../map/routeGeometry.ts';
+import type { PlaceImageRef } from './placeMedia.ts';
 
 export interface PlaceSuggestion {
   readonly id: string; readonly name: string; readonly address: string;
@@ -9,6 +10,7 @@ export interface PlaceSuggestion {
   readonly kind?: 'action';
   readonly provenance?: 'provider' | 'vima-local' | 'contribution'; readonly category?: string;
   readonly regionId?: string;
+  readonly image?: PlaceImageRef;
 }
 export interface ResolvedPlace extends PlaceSuggestion { readonly coordinate: Coordinate }
 export interface RouteResult {

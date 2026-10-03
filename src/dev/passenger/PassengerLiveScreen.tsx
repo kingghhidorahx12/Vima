@@ -14,7 +14,7 @@ export default function PassengerLiveScreen() {
     const api = createApiClient(process.env.EXPO_PUBLIC_VIMA_API_BASE_URL!, async () => null, { development: __DEV__ });
     const client = createGeospatialClient(api, geospatialClientConfig.timeoutMs);
     return createPassengerLiveGateway(client, signal => locateCurrentPlace(signal, client.reverseGeocode),
-      mobilePersonalPlaces, mobileInstallationId);
+      mobilePersonalPlaces, mobileInstallationId, process.env.EXPO_PUBLIC_VIMA_API_BASE_URL);
   });
   return <PassengerScreen gateway={gateway} mapConfig={developmentMap} boundaries={{ schedule() {}, call() {}, safety() {} }} />;
 }

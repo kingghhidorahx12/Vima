@@ -1,10 +1,12 @@
 import type { Coordinate } from '../../map/models.ts';
 import type { ResolvedPlace } from './contracts.ts';
 import { canonicalId } from './placeIdentity.ts';
+import { parsePlaceImageRef, type PlaceImageRef } from './placeMedia.ts';
 
 export interface SavedPlace {
   readonly canonicalId: string; readonly name: string; readonly address: string;
   readonly coordinate: Coordinate; readonly regionId?: string; readonly category?: string; readonly savedAt: number;
+  readonly image?: PlaceImageRef;
 }
 export interface PersonalPlaceStore {
   getItem(key: string): Promise<string | null>;
@@ -20,14 +22,16 @@ function sanitize(value: unknown): SavedPlace | null {
     v.coordinate.some(point => typeof point !== 'number' || !Number.isFinite(point)) ||
     Math.abs(v.coordinate[0] as number) > 180 || Math.abs(v.coordinate[1] as number) > 90 ||
     typeof v.savedAt !== 'number' || !Number.isFinite(v.savedAt) || v.savedAt < 0) return null;
+  const image = parsePlaceImageRef(v.image);
   return { canonicalId: v.canonicalId, name: v.name, address: v.address,
     coordinate: [v.coordinate[0] as number, v.coordinate[1] as number], savedAt: v.savedAt,
     ...(typeof v.regionId === 'string' ? { regionId: v.regionId } : {}),
-    ...(typeof v.category === 'string' ? { category: v.category } : {}) };
+    ...(typeof v.category === 'string' ? { category: v.category } : {}),
+    ...(image ? { image } : {}) };
 }
 function fromPlace(place: ResolvedPlace, now: number): SavedPlace {
   const value = sanitize({ canonicalId: canonicalId(place), name: place.name, address: place.address,
-    coordinate: place.coordinate, regionId: place.regionId, category: place.category, savedAt: now });
+    coordinate: place.coordinate, regionId: place.regionId, category: place.category, image: place.image, savedAt: now });
   if (!value) throw new Error('invalid_personal_place');
   return value;
 }

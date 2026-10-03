@@ -24,6 +24,7 @@ import { normalizeCoordinate, type Coordinate } from '../../map/models';
 import { defaultTrafficLayers, displayKeyAvailable, type TrafficLayerPreferences } from '../../map/traffic';
 import { mapLayerStorage } from '../../services/storage/mapLayers';
 import { MapControls } from './MapControls';
+import { PlaceThumbnail } from './PlaceThumbnail';
 import { mapPersonality } from '../../motion/mapPersonality';
 import { IncidentCard } from './IncidentCard';
 import type { IncidentDetails } from '../../map/incidentDetails';
@@ -54,6 +55,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [layersOpen, setLayersOpen] = useState(false);
   const [incident, setIncident] = useState<IncidentDetails | null>(null);
   const [recenter, setRecenter] = useState<{ coordinate: Coordinate; sequence: number }>();
+  const [routeFitRequestId, setRouteFitRequestId] = useState<number>();
+  const routeFitSerial = useRef(0);
   const [recentering, setRecentering] = useState(false);
   const [centered, setCentered] = useState(false);
   const pendingCenter = useRef<Coordinate | null>(null);
@@ -89,6 +92,15 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
   const measureKey = `${flow.phase}:${flow.field ?? ''}:${searchAction}:${reviewing}`;
   const naturalHeight = contentMeasure?.key === measureKey ? contentMeasure.height + headerHeight : 0;
+  const routeFit = useMemo(() => {
+    if (!routeFitRequestId || reviewing || flow.phase !== 'confirm' || flow.field || !naturalHeight || !flow.quote ||
+      !flow.origin || !flow.destination) return undefined;
+    const geometry = flow.quote.route.geometry;
+    const line = geometry.type === 'LineString' ? geometry.coordinates : geometry.coordinates.flat();
+    const coordinates = [flow.origin.coordinate, ...line.map(normalizeCoordinate), flow.destination.coordinate];
+    if (coordinates.length < 2) return undefined;
+    return { coordinates, sequence: routeFitRequestId };
+  }, [routeFitRequestId, reviewing, flow.phase, flow.field, flow.quote, flow.origin, flow.destination, naturalHeight]);
   const interaction = useMemo(() => {
     if (height <= 0) return undefined;
     const base = rideSheetGeometry(height, snap);
@@ -132,6 +144,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     if (draft) { setReviewedDraft(undefined); boundaries.schedule(draft); }
   };
   const openField = (target: 'origin' | 'destination') => {
+    setRouteFitRequestId(undefined);
     setIncident(null); setMapUserControlled(false); setSearchAction('results'); setSelectedCoordinate(null); flow.openField(target);
   };
   const openSearch = (query = '') => { dismissKeyboard(); openField('destination'); flow.setSearch(query); };
@@ -147,6 +160,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     setRecenter((previous) => ({ coordinate: flow.currentLocation!.coordinate, sequence: (previous?.sequence ?? 0) + 1 }));
   };
   const choosePlace = (place: Place | PlaceSuggestion, target?: 'origin' | 'destination') => {
+    setRouteFitRequestId(undefined);
     void semanticHaptics('buttonChip');
     dismissKeyboard(); setMapUserControlled(false); setSearchAction('results'); void flow.choosePlace(place, target);
   };
@@ -162,6 +176,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     if (place) { setContributedPlace(place); setSearchAction('contribute-done'); }
   };
   const goBack = () => {
+    setRouteFitRequestId(undefined);
     dismissKeyboard();
     if (incident) { setIncident(null); return; }
     if (layersOpen) { setLayersOpen(false); return; }
@@ -220,7 +235,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             style={styles.searchInput} placeholderTextColor={t.colors.gray} />
           {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.greenDark} /> : null}</View>
         {flow.search.trim() ? <>
-          {flow.places.map((place) => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}
+          {flow.places.map((place) => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}
           {flow.loadingPlaces && !flow.places.length ? <View accessible accessibilityLabel="Buscando lugares" style={styles.searchSkeleton}>
             <View style={styles.skeletonLine} /><View style={styles.skeletonLineShort} />
           </View> : null}
@@ -236,13 +251,13 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           </> : null}
         </> : <>
           {flow.favorites.length ? <><VimaText variant="bodyMedium">Favoritos</VimaText>
-            {flow.favorites.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
+            {flow.favorites.map(place => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
           {flow.recents.length ? <><VimaText variant="bodyMedium">Recientes</VimaText>
-            {flow.recents.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
+            {flow.recents.map(place => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
           {flow.popular.length ? <><VimaText variant="bodyMedium">Populares en tu zona</VimaText>
-            {flow.popular.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
+            {flow.popular.map(place => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
           {flow.featured.length ? <><VimaText variant="bodyMedium">Vima Local</VimaText>
-            {flow.featured.map(place => <PlaceRow key={place.id} place={place} onPress={() => choosePlace(place)} />)}</> : null}
+            {flow.featured.map(place => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
         </>}
       </> : reviewing ? <>
         <View style={styles.addressGroup}>
@@ -260,6 +275,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <VimaButton gradient label="Confirmar ubicaciones"
           disabled={!validDraft(flow.origin, flow.destination)} onPress={() => {
             setReviewedDraft(draftKey);
+            setRouteFitRequestId(++routeFitSerial.current);
             void flow.confirmLocations();
             if (flow.phase === 'home' && flow.destination) flow.choosePlace(flow.destination, 'destination');
           }} />
@@ -276,7 +292,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         </View>
         <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Viajes recientes</VimaText>
           <TextAction label="Ver todos" onPress={() => setShowAll(true)} /></View>
-        {(showAll ? flow.recents : flow.recents.slice(0, 2)).map((place) => <PlaceRow key={place.id} place={place}
+        {(showAll ? flow.recents : flow.recents.slice(0, 2)).map((place) => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
         <View style={[styles.addressGroup, styles.confirmAddressGroup]}>
@@ -290,10 +306,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           <View style={styles.metrics}>
             <Metric icon="car" value={`${flow.quote.durationMinutes} min`} label="Duración" />
             <Metric icon="route" value={`${flow.quote.distanceKm} km`} label="Distancia" />
-            <Metric icon="payment" value={quotePrice ? money(quotePrice.amount, quotePrice.currency) : '—'} label="Precio estimado" />
+            <Metric icon="payment" value={quotePrice ? money(quotePrice.amount, quotePrice.currency) : 'Precio no disponible'}
+              label={quotePrice ? 'Precio estimado' : 'Sin tarifa'} emphasis={!!quotePrice} />
           </View>
-          {flow.quote.pricing?.status === 'unpriced' ? <VimaText variant="caption" style={styles.muted}>Precio no disponible</VimaText> : null}
-          <View style={styles.paymentRow}><VimaGlyph name="payment" /><VimaText variant="bodySmall" style={styles.fill}>{flow.quote.paymentMethod ?? '—'}</VimaText><VimaGlyph name="chevron" color={t.colors.gray} /></View>
+          <View style={styles.paymentRow}><VimaGlyph name="payment" color={t.colors.graphite} />
+            <VimaText variant="bodySmall" style={styles.fill}>{flow.quote.paymentMethod ?? 'Método de pago no configurado'}</VimaText>
+            {flow.quote.paymentMethod ? <VimaGlyph name="chevron" color={t.colors.gray} /> : null}</View>
         </> : null}
         <VimaButton gradient label="Solicitar viaje" onPress={() => { void flow.submit(); }} haptic="requestRide"
           loading={flow.phase === 'requesting'} disabled={!flow.canSubmit} />
@@ -369,10 +387,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           currentLocation={flow.currentLocation} onIncidentSelect={pickingMap ? undefined : setIncident}
           home={flow.phase === 'home' && !flow.destination}
           ready={mapReady} searchPresentationActive={flow.field !== null}
-          recenter={recenter} layers={mapLayers} displayKeyAvailable={hasDisplayKey} active={focused}
+          recenter={recenter} fitRoute={routeFit} layers={mapLayers} displayKeyAvailable={hasDisplayKey} active={focused}
           manualSelection={pickingMap && selectedCoordinate ? { coordinate: selectedCoordinate,
             kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
-          cameraMode={mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
+          cameraMode={reviewing || flow.phase === 'confirm' || mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
           sheetHeight={interaction ? height - interaction.targetOffset : height * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
         sheet={{ interaction, header, style: styles.sheet }} renderPhase={() => content} />
       {mapReady && (interaction?.targetOffset ?? height) > 130 ? <View pointerEvents="box-none"
@@ -417,11 +435,9 @@ function AddressField({ label, place, color, onPress, disabled }: { label: strin
       {place ? <VimaText variant="caption" style={styles.muted} numberOfLines={1}>{place.address}</VimaText> : null}</View>
   </Pressable>;
 }
-function PlaceRow({ place, onPress }: { place: PlaceSuggestion; onPress: () => void }) {
-  const lower = place.name.toLowerCase();
-  const glyph: VimaGlyphName = lower.includes('casa') ? 'home' : lower.includes('trabajo') ? 'work' : 'route';
+function PlaceRow({ place, onPress, resolveMedia }: { place: PlaceSuggestion; onPress: () => void; resolveMedia?: PassengerGateway['resolvePlaceMedia'] }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress} style={styles.recent}>
-    <View style={styles.recentIcon}><VimaGlyph name={glyph} /></View>
+    <PlaceThumbnail place={place} resolveMedia={resolveMedia} />
     <View style={styles.fill}><VimaText variant="bodyMedium">{place.name}</VimaText>
       <VimaText variant="bodySmall" style={styles.muted} numberOfLines={1}>{place.address}</VimaText></View>
     <VimaGlyph name="chevron" color={t.colors.gray} />
@@ -432,8 +448,8 @@ function QuickPlace({ label, icon, onPress }: { label: string; icon: VimaGlyphNa
   return onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.quickPlace}>{content}</Pressable>
     : <View accessible accessibilityLabel={label} style={styles.quickPlace}>{content}</View>;
 }
-function Metric({ icon, value, label }: { icon: VimaGlyphName; value: string; label: string }) {
-  return <View style={styles.metric}><VimaGlyph name={icon} /><VimaText variant="bodyMedium" numberOfLines={1}>{value}</VimaText>
+function Metric({ icon, value, label, emphasis = false }: { icon: VimaGlyphName; value: string; label: string; emphasis?: boolean }) {
+  return <View style={styles.metric}><VimaGlyph name={icon} /><VimaText variant="bodyMedium" style={emphasis && styles.priceValue} numberOfLines={2}>{value}</VimaText>
     <VimaText variant="caption" style={styles.muted}>{label}</VimaText></View>;
 }
 function TextAction({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
@@ -446,13 +462,14 @@ const [xs, sm, md, lg, base] = t.spacing.scalePx as [number, number, number, num
 const styles = StyleSheet.create({
   fill: { flex: 1 }, center: { textAlign: 'center' }, muted: { color: t.colors.gray },
   top: { height: t.components.buttonPrimary.heightPx, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', position: 'relative',
-    paddingHorizontal: t.spacing.mobileHorizontalMarginPx, backgroundColor: t.colors.white },
+    paddingHorizontal: t.spacing.mobileHorizontalMarginPx, backgroundColor: t.colors.white,
+    borderBottomWidth: t.borders.standardWidthPx, borderBottomColor: t.colors.background },
   headerLockupSlot: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   // Uniform scaling of the v2 master's visible bounds (672 × 200 raster derivative).
   headerLockup: { width: 672 * 28 / 200, height: 28 },
   headerSide: { width: t.components.iconSizesPx[2], justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', color: t.colors.carbon },
-  sheet: { overflow: 'hidden', elevation: 3 },
+  sheet: { overflow: 'hidden', elevation: 4 },
   sheetHeader: { paddingHorizontal: base, alignItems: 'center', paddingTop: sm, paddingBottom: md, gap: sm },
   handle: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[0], borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   content: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingBottom: base, gap: md },
@@ -460,7 +477,8 @@ const styles = StyleSheet.create({
   originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
   row: { flexDirection: 'row', alignItems: 'center', gap: md },
   homeSearch: { height: t.components.inputPrimary.heightPx, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
-    flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md },
+    flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md,
+    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.grayLight },
   quickRow: { flexDirection: 'row', gap: sm },
   quickPlace: { flex: 1, height: t.components.buttonPrimary.heightPx + t.spacing.scalePx[2]!, alignItems: 'center', justifyContent: 'center',
     gap: xs, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.white, borderWidth: t.borders.standardWidthPx, borderColor: t.colors.background },
@@ -479,10 +497,11 @@ const styles = StyleSheet.create({
   addressRule: { marginLeft: t.components.iconSizesPx[1]! + md, height: t.borders.standardWidthPx, backgroundColor: t.colors.background },
   addressLabel: { color: t.colors.graphite },
   metrics: { flexDirection: 'row', alignItems: 'center', borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
-    paddingVertical: md },
-  metric: { flex: 1, alignItems: 'center', gap: xs },
+    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.grayLight, paddingVertical: md },
+  metric: { flex: 1, alignItems: 'center', gap: xs, paddingHorizontal: xs },
+  priceValue: { color: t.colors.greenDark },
   paymentRow: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md,
-    paddingHorizontal: md, borderTopWidth: t.borders.standardWidthPx, borderColor: t.colors.background },
+    paddingHorizontal: md, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background },
   searchFocused: { borderColor: t.colors.greenDark },
   searchField: { borderWidth: t.borders.standardWidthPx, borderColor: t.borders.standardColor, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
     paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm },
