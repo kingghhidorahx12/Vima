@@ -12,6 +12,7 @@ import { primaryGradient, visualTokens as t } from '../tokens';
 import { VimaGlyph, type VimaGlyphName } from './VimaGlyph';
 import { surfaceColors } from '../presentation';
 import { elevationStyle } from '../themes/light';
+import { ElementEntrance } from '../../motion/ElementEntrance';
 
 export function VimaButton({ label, onPress, disabled = false, loading = false, secondary = false, communication = false, gradient = false, compact = false, danger = false, haptic = 'buttonChip', style, icon }: {
   label: string; onPress: () => void; disabled?: boolean; loading?: boolean; secondary?: boolean;
@@ -23,7 +24,7 @@ export function VimaButton({ label, onPress, disabled = false, loading = false, 
   useEffect(() => () => cancelAnimation(scale), [scale]);
   const animated = useAnimatedStyle(() => ({ transform: [{ scale: reducedMotion ? 1 : scale.get() }] }));
   const labelColor = disabled ? t.colors.gray : danger ? t.colors.red : communication ? t.colors.accentBluePressed : secondary ? t.colors.carbon : t.colors.white;
-  return <Animated.View style={[style, animated]}>
+  return <ElementEntrance style={style}><Animated.View style={animated}>
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }}
       disabled={disabled || loading}
       onPressIn={() => scale.set(moveTo(motionTokens.interactionRules.buttonPressScale, reducedMotion, motionTimings.press))}
@@ -38,7 +39,7 @@ export function VimaButton({ label, onPress, disabled = false, loading = false, 
       </View>
       {loading && !reducedMotion ? <ActivityIndicator style={StyleSheet.absoluteFill} color={labelColor} /> : null}
     </Pressable>
-  </Animated.View>;
+  </Animated.View></ElementEntrance>;
 }
 const styles = StyleSheet.create({
   pressed: { opacity: 0.9, boxShadow: [] },

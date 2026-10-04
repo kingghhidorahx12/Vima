@@ -9,6 +9,7 @@ const query = require('@tanstack/react-query');
 // Native boundaries are test doubles. This tests React identity/interaction, not native rendering.
 function createHarness(boundaryOverrides = {}, { reduced = false } = {}) {
   const animations = [];
+  const projection = { point: [190, 120], project: undefined };
   const modules = new Map();
   const mounted = { map: 0, unmountedMap: 0, sheet: 0, haptics: [], keyboardDismiss: 0, blur: 0, inputFocused: false };
   const root = path.resolve(__dirname, '../..');
@@ -36,6 +37,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false } = {}) {
     const resolved = path.resolve(filename);
     if (modules.has(resolved)) return modules.get(resolved).exports;
     if (resolved.endsWith('VimaMap.tsx')) return { VimaMap: function Map(props) {
+      React.useImperativeHandle(props.ref, () => ({ project: (...args) => projection.project ? projection.project(...args) : Promise.resolve(projection.point) }), []);
       React.useEffect(() => { mounted.map++; return () => { mounted.unmountedMap++; }; }, []);
       return React.createElement('NativeMapBoundary', props, props.children);
     } };
@@ -73,7 +75,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false } = {}) {
   const fakeMapConfig = {};
   const boundaries = { schedule() {}, call() {}, safety() {}, ...boundaryOverrides };
   const client = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
-  return { animations, mounted, client, kv, load, back: () => back?.(), async render(gateway) {
+  return { projection, animations, mounted, client, kv, load, back: () => back?.(), async render(gateway) {
     let tree;
     await renderer.act(async () => { tree = renderer.create(React.createElement(query.QueryClientProvider, { client },
       React.createElement(Screen, { gateway, mapConfig: fakeMapConfig, boundaries })), { createNodeMock(element) {

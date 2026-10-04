@@ -163,7 +163,7 @@
     ]
   },
   "mapSemantics": {
-    "origin": "green",
+    "origin": "carbon",
     "destination": "red",
     "user": "accentBlue location dot with halo",
     "routeActive": "accentBlue",

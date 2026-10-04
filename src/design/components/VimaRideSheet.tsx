@@ -1,7 +1,8 @@
 import { useEffect, useRef, type PropsWithChildren, type ReactNode } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { moveTo, type ApprovedTiming } from '../../motion/helpers';
 import { motionTimings } from '../../motion/timing';
@@ -38,15 +39,24 @@ export interface VimaRideSheetProps extends PropsWithChildren {
   readonly open?: boolean;
   /** Optional dedicated drag area so scrollable content does not compete with the pan. */
   readonly header?: ReactNode;
+  readonly onVisibleHeightChange?: (height: number) => void;
 }
 
-export function VimaRideSheet({ children, style, interaction, enabled = true, open = true, header }: VimaRideSheetProps) {
+export function VimaRideSheet({ children, style, interaction, enabled = true, open = true, header, onVisibleHeightChange }: VimaRideSheetProps) {
   const theme = useVimaTheme();
   const policy = useMotionPolicy();
   const offset = useSharedValue(interaction?.height ?? interaction?.targetOffset ?? 0);
   const start = useSharedValue(0);
   const dragging = useSharedValue(false);
   const wasOpen = useRef(false);
+  const reportedHeight = useSharedValue(-1);
+  const sheetHeight = interaction?.height ?? 0;
+  const restHeight = sheetHeight - (interaction?.targetOffset ?? 0);
+  useAnimatedReaction(() => Math.max(0, sheetHeight - offset.get()), visible => {
+    if (onVisibleHeightChange && (Math.abs(visible - reportedHeight.get()) >= 8 || visible === restHeight && visible !== reportedHeight.get())) {
+      reportedHeight.set(visible); scheduleOnRN(onVisibleHeightChange, visible);
+    }
+  }, [sheetHeight, restHeight, onVisibleHeightChange]);
   useEffect(() => {
     cancelAnimation(offset);
     dragging.set(false);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Image, Keyboard, Pressable, ScrollView, StyleSheet, TextInput, View, type ImageSourcePropType } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import type { VimaMapRef } from '../../map/VimaMap';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph';
@@ -25,7 +26,10 @@ import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 import { normalizeCoordinate, type Coordinate } from '../../map/models';
 import { defaultTrafficLayers, displayKeyAvailable, type TrafficLayerPreferences } from '../../map/traffic';
 import { mapLayerStorage } from '../../services/storage/mapLayers';
-import { MapControls } from './MapControls';
+import { MapControls, LocationCTA, CenteredToast } from './MapControls';
+import { useLocationVisibility } from '../../map/useLocationVisibility';
+import { useMotionPolicy } from '../../motion/ReducedMotion';
+import { ElementEntrance } from '../../motion/ElementEntrance';
 import { PlaceThumbnail } from './PlaceThumbnail';
 import { mapPersonality } from '../../motion/mapPersonality';
 import { IncidentCard } from './IncidentCard';
@@ -50,6 +54,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [focused, setFocused] = useState(false);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const [height, setHeight] = useState(0);
+  const [mapWidth, setMapWidth] = useState(0);
+  const [visibleSheetHeight, setVisibleSheetHeight] = useState<number>();
+  const nativeMap = useRef<VimaMapRef>(null);
+  const { reducedMotion } = useMotionPolicy();
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const [mapUserControlled, setMapUserControlled] = useState(false);
@@ -114,6 +122,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     return createRideSheetInteraction(height, targetOffset, [targetOffset]);
   }, [height, snap, flow.field, flow.phase, reviewing, naturalHeight]);
   const contentOpacity = useSharedValue(1);
+  const usefulHeight = visibleSheetHeight === undefined ? interaction?.targetOffset ?? height : Math.max(0, height - visibleSheetHeight);
+  const locationVisibility = useLocationVisibility(nativeMap, flow.currentLocation?.coordinate, mapWidth, usefulHeight, mapReady && focused);
   const announcedAssignment = useRef<string | undefined>(undefined);
   useEffect(() => {
     scrollOffset.current = 0;
@@ -122,17 +132,18 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     contentOpacity.set(0);
     contentOpacity.set(fadeTo(1, flow.phase === 'assigned' ? motionTimings.success : motionTimings.sheetEnter));
     return () => cancelAnimation(contentOpacity);
-  }, [contentOpacity, flow.phase]);
+  }, [contentOpacity, measureKey, flow.phase]);
   useEffect(() => {
     if (assignment && announcedAssignment.current !== assignment.id) {
       announcedAssignment.current = assignment.id;
       void semanticHaptics('driverFound');
     }
   }, [assignment]);
-  const animatedContent = useAnimatedStyle(() => ({ opacity: contentOpacity.get() }));
+  const animatedContent = useAnimatedStyle(() => ({ opacity: contentOpacity.get(),
+    transform: [{ translateY: reducedMotion ? 0 : (1 - contentOpacity.get()) * 6 }] }));
   const sheetTitle = flow.field ? pickingMap ? 'Elegir en el mapa' : searchAction === 'contribute-form' ? 'Agregar lugar' :
-    searchAction === 'contribute-done' ? '' : flow.field === 'origin' ? '¿Desde dónde?' : '¿A dónde vas?'
-    : assignment ? `Llegará en ${assignment.etaMinutes} min` : flow.phase === 'home' && !reviewing ? '¿A dónde vas?' : '';
+    searchAction === 'contribute-done' ? '' : flow.field === 'origin' ? '¿Desde dónde?' : '¿A dónde vamos?'
+    : assignment ? `Llegará en ${assignment.etaMinutes} min` : '';
   const header = <View onTouchStart={dismissKeyboard} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)} style={styles.sheetHeader}>
     <View style={styles.handle} />
     {sheetTitle ? <VimaText variant={flow.phase === 'home' || assignment ? 'h3' : 'bodyMedium'} style={[styles.center, !!assignment && styles.eta]}
@@ -176,6 +187,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const place = await flow.contributePlace({ name: contributionName.trim(), coordinate: selectedCoordinate,
       ...(contributionReference.trim() ? { reference: contributionReference.trim() } : {}) });
     if (place) { setContributedPlace(place); setSearchAction('contribute-done'); }
+  };
+  const goHome = () => {
+    setRouteFitRequestId(undefined); dismissKeyboard(); setIncident(null); setLayersOpen(false);
+    setSearchAction('results'); setSelectedCoordinate(null);
+    flow.returnHome(); setReviewedDraft(undefined); setMapUserControlled(false);
   };
   const goBack = () => {
     setRouteFitRequestId(undefined);
@@ -284,11 +300,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             if (flow.phase === 'home' && flow.destination) flow.choosePlace(flow.destination, 'destination');
           }} />
       </> : flow.phase === 'home' ? <>
-        <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
-        <Pressable onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vas?"
+        <Pressable onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
           style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed]}>
-          <SmallPin color={t.colors.red} />
-          <VimaText variant="bodySmall" style={styles.muted}>Buscar un lugar o dirección</VimaText>
+          <VimaGlyph name="search" color={t.colors.greenDark} />
+          <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
         </Pressable>
         <View style={styles.quickRow}>
           <QuickPlace label="Casa" icon="home" onPress={() => openSearch('Casa')} />
@@ -301,7 +316,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
         <View style={[styles.addressGroup, styles.confirmAddressGroup]}>
-          <AddressField label="Origen" place={flow.origin} color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />
+          <AddressField label="Origen" place={flow.origin} color={t.colors.carbon} onPress={() => openField('origin')} disabled={blocked} />
           {flow.quote?.stops.map((place) => <AddressField key={place.id} label={place.name} place={place} color={t.colors.gray} disabled />)}
           <View style={styles.addressRule} />
           <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} disabled={blocked} />
@@ -321,7 +336,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <VimaButton label="Solicitar viaje" onPress={() => { void flow.submit(); }} haptic="requestRide"
           loading={flow.phase === 'requesting'} disabled={!flow.canSubmit} />
       </> : assignment ? <>
-        <View style={styles.driverCard}>
+        <ElementEntrance style={styles.driverCard}>
           <View style={styles.row}>
             <View style={styles.avatar}><VimaGlyph name="profile" color={t.colors.greenDark} /></View>
             <View style={styles.fill}><VimaText variant="bodyMedium">{assignment.driver.name}</VimaText>
@@ -337,7 +352,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
               <VimaText variant="bodySmall" style={styles.muted}>{assignment.vehicle.color}</VimaText>
               <VimaText variant="h3" selectable>{assignment.vehicle.plate}</VimaText></View>
           </View>
-        </View>
+        </ElementEntrance>
         <View style={styles.row}><VimaButton style={styles.fill} secondary communication icon="phone" label="Llamar" onPress={() => boundaries.call(assignment)} disabled={blocked} />
           <VimaButton style={styles.fill} secondary icon="shield" label="Seguridad" onPress={() => boundaries.safety(assignment)} /></View>
         <TextAction danger label="Cancelar viaje" onPress={() => { void flow.act('cancel'); }} disabled={blocked} />
@@ -373,7 +388,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           <Image source={require('../../../assets/brand/vima_header_lockup_final.png')} style={styles.headerLockup}
             resizeMode="contain" accessibilityLabel="Vima" />
         </View>
-        <View style={[styles.headerSide, styles.headerControl]}><VimaGlyph name="profile" /></View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Origen" accessibilityHint="Editar ubicación de salida"
+          onPress={() => openField('origin')} style={({ pressed }) => [styles.headerSide, styles.headerControl, pressed && surfaces.pressed]}>
+          <VimaGlyph name="recenter" color={flow.originStatus === 'unavailable' ? t.colors.amber : t.colors.graphite} />
+        </Pressable>
       </>
         : <>{matching ? <View style={[styles.headerSide, styles.headerControl]}><VimaGlyph name="menu" /></View>
           : <Pressable accessibilityRole="button" accessibilityLabel="Volver" disabled={flow.phase === 'requesting' || !!assignment}
@@ -383,9 +401,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             {assignment ? 'Tu conductor va en camino' : matching ? 'Buscando un conductor' : reviewing ? '' : flow.field ? '' : 'Confirma tu viaje'}
           </VimaText><View style={[styles.headerSide, matching && styles.headerControl]}>{matching ? <VimaGlyph name="profile" /> : null}</View></>}
     </View>
-    <View style={styles.fill} onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
+    <View style={styles.fill} onLayout={(event) => { setHeight(event.nativeEvent.layout.height); setMapWidth(event.nativeEvent.layout.width); }}>
       <PassengerRideShell trip={flow.trip}
-        map={{ onRegionDidChange: event => {
+        map={{ ref: nativeMap, onRegionWillChange: locationVisibility.start, onRegionDidChange: event => {
+          locationVisibility.settled();
           const target = pendingCenter.current;
           if (target && !event.nativeEvent.userInteraction && event.nativeEvent.center.every((value, i) => Math.abs(value - target[i]!) < 0.00001)) {
             pendingCenter.current = null; setRecentering(false); setCentered(true); void semanticHaptics('pinCorrect');
@@ -402,17 +421,34 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
           cameraMode={reviewing || flow.phase === 'confirm' || mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
           sheetHeight={interaction ? height - interaction.targetOffset : height * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
-        sheet={{ interaction, header, style: styles.sheet }} renderPhase={() => content} />
+        sheet={{ interaction, header, style: styles.sheet, onVisibleHeightChange: setVisibleSheetHeight }} renderPhase={() => content} />
       {mapReady && (interaction?.targetOffset ?? height) > 130 ? <View pointerEvents="box-none"
         style={[styles.mapControls, { bottom: height - (interaction?.targetOffset ?? height) + t.spacing.scalePx[2]! }]}>
-        <MapControls available={hasDisplayKey} canRecenter={!!flow.currentLocation} layers={mapLayers}
-          recentering={recentering} centered={centered} open={layersOpen} onRecenter={recenterMap} onOpen={() => setLayersOpen((value) => !value)} onToggle={toggleMapLayer} />
+        <MapControls available={hasDisplayKey} layers={mapLayers}
+          open={layersOpen} onOpen={() => setLayersOpen((value) => !value)} onToggle={toggleMapLayer} />
       </View> : null}
+      {mapReady && usefulHeight > 130 && (locationVisibility.outside || centered) ?
+        <View pointerEvents="box-none" style={[styles.locationCTA, { bottom: height - usefulHeight + t.spacing.scalePx[2]! }]}>
+          {centered ? <CenteredToast /> : <LocationCTA busy={recentering} onPress={recenterMap} />}
+        </View> : null}
       {incident && (interaction?.targetOffset ?? height) > 100 ? <IncidentCard details={incident}
         maxHeight={Math.min(200, (interaction?.targetOffset ?? height) - 24)} onClose={() => setIncident(null)} /> : null}
+      {!mapFailed && flow.phase === 'home' && !flow.field && !reviewing && (flow.originStatus === 'loading' || flow.originStatus === 'unavailable') ?
+        <ElementEntrance style={styles.mapStatus}><VimaGlyph name="info" color={t.colors.accentBluePressed} /><VimaText variant="caption" accessibilityLiveRegion="polite">
+          {flow.originStatus === 'loading' ? 'Obteniendo tu ubicación...' : 'No se pudo obtener tu ubicación'}</VimaText></ElementEntrance> : null}
       {mapFailed ? <View style={styles.mapStatus}><VimaGlyph name="warning" color={t.colors.amber} />
         <VimaText variant="caption">No se pudo cargar el mapa</VimaText></View> : null}
     </View>
+    {!matching && !assignment && flow.phase !== 'requesting' ? <View style={styles.bottomBar}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Inicio" accessibilityState={{ selected: flow.phase === 'home' && !flow.field && !reviewing }}
+        onPress={goHome} style={({ pressed }) => [styles.bottomItem, pressed && surfaces.pressed]}>
+        <VimaGlyph name="home" color={flow.phase === 'home' && !flow.field && !reviewing ? t.colors.greenDark : t.colors.gray} /><VimaText variant="caption">Inicio</VimaText>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Favoritos" onPress={() => openSearch()}
+        style={({ pressed }) => [styles.bottomItem, pressed && surfaces.pressed]}>
+        <VimaGlyph name="favorite" color={t.colors.gray} /><VimaText variant="caption">Favoritos</VimaText>
+      </Pressable>
+    </View> : null}
     <VimaLaunchSurface active={focused} ready={mapReady || mapFailed} />
   </SafeAreaView>;
 }
@@ -453,19 +489,19 @@ function AddressField({ label, place, color, onPress, disabled }: { label: strin
   </Pressable>;
 }
 function PlaceRow({ place, onPress, resolveMedia }: { place: PlaceSuggestion; onPress: () => void; resolveMedia?: PassengerGateway['resolvePlaceMedia'] }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress}
+  return <ElementEntrance><Pressable accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress}
     style={({ pressed }) => [styles.recent, pressed && surfaces.pressed]}>
     <PlaceThumbnail place={place} resolveMedia={resolveMedia} />
     <View style={styles.fill}><VimaText variant="bodyMedium">{place.name}</VimaText>
       <VimaText variant="bodySmall" style={styles.muted} numberOfLines={1}>{place.address}</VimaText></View>
     <VimaGlyph name="chevron" color={t.colors.gray} />
-  </Pressable>;
+  </Pressable></ElementEntrance>;
 }
 function QuickPlace({ label, icon, onPress }: { label: string; icon: VimaGlyphName; onPress?: () => void }) {
   const content = <><VimaGlyph name={icon} color={t.colors.greenDark} /><VimaText variant="caption">{label}</VimaText></>;
-  return onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
+  return <ElementEntrance style={styles.fill}>{onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
     style={({ pressed }) => [styles.quickPlace, pressed && surfaces.pressed]}>{content}</Pressable>
-    : <View accessible accessibilityLabel={label} style={styles.quickPlace}>{content}</View>;
+    : <View accessible accessibilityLabel={label} style={styles.quickPlace}>{content}</View>}</ElementEntrance>;
 }
 function Metric({ icon, value, label, emphasis = false }: { icon: VimaGlyphName; value: string; label: string; emphasis?: boolean }) {
   return <View style={[styles.metric, emphasis && styles.metricEmphasis]}><VimaGlyph name={icon} color={emphasis ? t.colors.greenDark : t.colors.graphite} /><VimaText variant="bodyMedium" style={[styles.center, emphasis && styles.priceValue]}>{value}</VimaText>
@@ -496,7 +532,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingBottom: base, gap: md },
   originField: { ...surfaces.field, minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md,
     paddingHorizontal: md, paddingVertical: sm },
-  originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
+  originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.carbon },
   row: { flexDirection: 'row', alignItems: 'center', gap: md },
   homeSearch: { ...surfaces.card, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.pillPx,
     flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md,
@@ -559,4 +595,8 @@ const styles = StyleSheet.create({
   mapStatus: { ...surfaces.floating, position: 'absolute', top: lg, alignSelf: 'center', padding: md,
     flexDirection: 'row', alignItems: 'center', gap: sm, borderRadius: t.radii.pillPx },
   mapControls: { position: 'absolute', right: t.spacing.mobileHorizontalMarginPx },
+  locationCTA: { position: 'absolute', alignSelf: 'center' },
+  bottomBar: { flexDirection: 'row', justifyContent: 'space-evenly', backgroundColor: t.colors.white,
+    borderTopWidth: t.borders.standardWidthPx, borderTopColor: surfaceColors.border, paddingVertical: sm },
+  bottomItem: { minHeight: 48, minWidth: 96, alignItems: 'center', justifyContent: 'center', gap: xs, borderRadius: t.radii.fieldPx },
 });

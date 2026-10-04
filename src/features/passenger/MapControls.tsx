@@ -11,18 +11,17 @@ import { VimaText } from '../../design/primitives';
 import { visualTokens as t } from '../../design/tokens';
 import { semanticHaptics } from '../../motion/haptics';
 import type { TrafficLayerPreferences } from '../../map/traffic';
+import { ElementEntrance } from '../../motion/ElementEntrance';
 
-export function MapControls({ available, canRecenter, layers, open, onRecenter, onOpen, onToggle, recentering = false, centered = false }: {
-  recentering?: boolean; centered?: boolean;
-  available: boolean; canRecenter: boolean; layers: TrafficLayerPreferences; open: boolean;
-  onRecenter: () => void; onOpen: () => void; onToggle: (layer: keyof TrafficLayerPreferences) => void;
+export function MapControls({ available, layers, open, onOpen, onToggle }: {
+  available: boolean; layers: TrafficLayerPreferences; open: boolean;
+  onOpen: () => void; onToggle: (layer: keyof TrafficLayerPreferences) => void;
 }) {
   const tap = (action: () => void) => { void semanticHaptics('toggle'); action(); };
   const menuOpacity = useSharedValue(0);
   useEffect(() => { menuOpacity.set(open ? fadeTo(1, mapPersonality.layer) : 0); return () => cancelAnimation(menuOpacity); }, [menuOpacity, open]);
   const menuStyle = useAnimatedStyle(() => ({ opacity: menuOpacity.get() }));
-  return <View style={styles.stack}>
-    {centered ? <CenteredToast /> : null}
+  return <ElementEntrance style={styles.stack}>
     {open ? <Animated.View style={[styles.menu, menuStyle]}>
       {!available ? <VimaText variant="caption" style={styles.unavailable}>Capas no disponibles</VimaText> : null}
       {(['traffic', 'incidents'] as const).map((layer) => <Pressable key={layer} accessibilityRole="switch"
@@ -36,14 +35,24 @@ export function MapControls({ available, canRecenter, layers, open, onRecenter, 
         <LayerSwitch checked={layers[layer] && available} />
       </Pressable>)}
     </Animated.View> : null}
-    <MapControl label="Centrar ubicación" icon="recenter" disabled={!canRecenter} active={recentering || centered} busy={recentering}
-      onPress={() => tap(onRecenter)} />
     <MapControl label="Capas del mapa" icon="layers" active={open || available && (layers.traffic || layers.incidents)}
       expanded={open} onPress={() => tap(onOpen)} />
-  </View>;
+  </ElementEntrance>;
 }
 
-function CenteredToast() {
+export function LocationCTA({ busy, onPress }: { busy: boolean; onPress: () => void }) {
+  const { reducedMotion } = useMotionPolicy();
+  return <ElementEntrance><Pressable accessibilityRole="button" accessibilityLabel="Tu ubicación"
+    accessibilityState={{ busy }} onPress={() => { void semanticHaptics('toggle'); onPress(); }}
+    style={({ pressed }) => [styles.location, pressed && surfaces.pressed]}>
+    {busy && !reducedMotion ? <ActivityIndicator size="small" color={t.colors.accentBlue} />
+      : <VimaGlyph name="recenter" color={t.colors.accentBluePressed} />}
+    <VimaText variant="bodySmall">Tu ubicación</VimaText>
+    <VimaGlyph name="chevron" color={t.colors.gray} />
+  </Pressable></ElementEntrance>;
+}
+
+export function CenteredToast() {
   const { reducedMotion } = useMotionPolicy();
   const opacity = useSharedValue(1);
   useEffect(() => {
@@ -87,6 +96,8 @@ function MapControl({ label, icon, onPress, disabled = false, active = false, ex
   </Animated.View>;
 }
 const styles = StyleSheet.create({
+  location: { ...surfaces.floating, borderRadius: t.radii.pillPx, minHeight: 48, flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: t.spacing.scalePx[2], gap: t.spacing.scalePx[1] },
   controlHalo: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, backgroundColor: t.colors.accentBlue },
   buttonActive: { backgroundColor: t.colors.accentBlue, borderColor: t.colors.accentBlue },
   buttonActivePressed: { backgroundColor: t.colors.accentBluePressed, borderColor: t.colors.accentBluePressed },

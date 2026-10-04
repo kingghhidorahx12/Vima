@@ -63,17 +63,20 @@ export function RouteLayer({ id, data, appearance, state, activeTone, reveal = t
       vimaRed: red.get(), vimaGreen: green.get(), vimaBlue: blue.get() } }) };
   });
   return <><AnimatedSource id={`${id}-source`} data={emptyData} animatedProps={animatedProps}>
-    <Layer id={`${id}-casing`} type="line" layout={{ 'line-cap': appearance.cap, 'line-join': appearance.join }}
-      paint={{ 'line-width': appearance.width + visualTokens.spacing.scalePx[0]!,
-        'line-opacity': ['*', appearance.opacity, ['get', 'vimaRevealOpacity']],
-        'line-color': visualTokens.colors.white }} />
+    <Layer id={`${id}-shadow`} type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+      paint={{ 'line-width': appearance.width + 6, 'line-blur': 3,
+        'line-opacity': ['*', appearance.opacity * 0.18, ['get', 'vimaRevealOpacity']], 'line-color': visualTokens.colors.carbon }} />
+    <Layer id={`${id}-halo`} type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+      paint={{ 'line-width': appearance.width + 4, 'line-blur': 2,
+        'line-opacity': ['*', appearance.opacity * 0.24, ['get', 'vimaRevealOpacity']], 'line-color': color }} />
     <Layer id={id} type="line" layout={{ 'line-cap': appearance.cap, 'line-join': appearance.join }}
       paint={{ 'line-width': appearance.width, 'line-opacity': appearance.opacity,
         'line-color': ['rgba', ['get', 'vimaRed'], ['get', 'vimaGreen'], ['get', 'vimaBlue'], ['get', 'vimaRevealOpacity']] }} />
   </AnimatedSource>
     {!reducedMotion && state === 'active' ? <AnimatedSource id={`${id}-flow-source`} data={emptyData} animatedProps={flowProps}>
       <Layer id={`${id}-flow`} type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-        paint={{ 'line-width': appearance.width, 'line-opacity': mapPersonality.routeHighlightOpacity,
-          'line-color': visualTokens.colors.white }} />
+        paint={{ 'line-width': appearance.width * 0.7, 'line-blur': 0.5,
+          'line-opacity': ['*', mapPersonality.routeHighlightOpacity, ['coalesce', ['get', 'vimaSheenOpacity'], 0]],
+          'line-color': visualTokens.colors.accentBlueSoft }} />
     </AnimatedSource> : null}</>;
 }

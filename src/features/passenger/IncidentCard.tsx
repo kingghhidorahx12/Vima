@@ -4,11 +4,12 @@ import { visualTokens as t } from '../../design/tokens';
 import type { IncidentDetails } from '../../map/incidentDetails';
 import { VimaGlyph } from '../../design/components/VimaGlyph';
 import { passengerSurfaces as surfaces, surfaceColors } from '../../design/presentation';
+import { ElementEntrance } from '../../motion/ElementEntrance';
 
 export function IncidentCard({ details, onClose, maxHeight }: {
   details: IncidentDetails; onClose: () => void; maxHeight: number;
 }) {
-  return <View style={[styles.card, { maxHeight }]}>
+  return <ElementEntrance style={[styles.card, { maxHeight }]}>
     <View style={styles.row}>
       {details.icon ? <View style={styles.icon}><VimaGlyph name={details.icon} color={t.colors.amber} /></View> : null}
       <VimaText variant="bodyMedium" style={styles.title}>{details.category || 'Incidente vial'}</VimaText>
@@ -21,7 +22,7 @@ export function IncidentCard({ details, onClose, maxHeight }: {
       {details.description ? <VimaText variant="bodySmall">{details.description}</VimaText> : null}
       {details.severity ? <VimaText variant="caption" style={styles.secondary}>{details.severity}</VimaText> : null}
     </ScrollView>
-  </View>;
+  </ElementEntrance>;
 }
 const styles = StyleSheet.create({
   card: { ...surfaces.floating, position: 'absolute', top: t.spacing.scalePx[2], left: t.spacing.mobileHorizontalMarginPx,

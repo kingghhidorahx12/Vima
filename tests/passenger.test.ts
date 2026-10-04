@@ -131,7 +131,7 @@ test('no-result map choice keeps tapped coordinate when Reverse has no address',
   const harness = createHarness(); const tree: ReactTestRenderer = await harness.render(gateway);
   try {
     await settle(harness);
-    await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await harness.act(async () => press(tree, '¿A dónde vamos?'));
     await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('sin resultado'));
     await settle(harness);
     assert.ok(text(tree).includes('No encontramos resultados'));
@@ -153,7 +153,7 @@ test('a contributed place can be used immediately without making it a public cat
   const harness = createHarness(); const tree: ReactTestRenderer = await harness.render(gateway);
   try {
     await settle(harness);
-    await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await harness.act(async () => press(tree, '¿A dónde vamos?'));
     await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Lugar nuevo'));
     await settle(harness);
     await harness.act(async () => press(tree, 'Agregar lugar'));
@@ -186,7 +186,7 @@ test('live suggestions resolve before selection; stale selection cannot overwrit
   const harness = createHarness(); const tree: ReactTestRenderer = await harness.render(gateway);
   try {
     await settle(harness);
-    await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await harness.act(async () => press(tree, '¿A dónde vamos?'));
     await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Suggestion'));
     await settle(harness);
     await harness.act(async () => press(tree, 'Suggestion, Atlacomulco'));
@@ -213,7 +213,7 @@ test('clearing or whitespace-only search cancels Suggest, removes loading and ig
   const searchSpinners = () => nativeNodes(tree, 'ActivityIndicator').filter(node => node.props.accessibilityLabel !== 'Mapa');
   try {
     await settle(harness);
-    await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await harness.act(async () => press(tree, '¿A dónde vamos?'));
     await settle(harness);
     assert.deepEqual(calls, []); assert.equal(searchSpinners().length, 0);
     await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('old'));
@@ -239,7 +239,7 @@ test('destination is editable while locating; late automatic origin never overwr
   const tree: ReactTestRenderer = await harness.render(fixture.gateway);
   try {
     assert.ok(text(tree).includes('Obteniendo tu ubicación...'));
-    await harness.act(async () => press(tree, '¿A dónde vas?'));
+    await harness.act(async () => press(tree, '¿A dónde vamos?'));
     const input = nativeNode(tree, 'TextInput');
     await harness.act(async () => input.props.onChangeText('Parque'));
     await settle(harness);
@@ -441,7 +441,7 @@ test('keyboard dismissal blurs on background, map touch and drag while first res
   const tree: ReactTestRenderer = await harness.render(fixture.gateway);
   try {
     await settle(harness);
-    await harness.act(async () => press(tree, '¿A dónde vas?')); await settle(harness);
+    await harness.act(async () => press(tree, '¿A dónde vamos?')); await settle(harness);
     const input = nativeNode(tree, 'TextInput');
     let inputTouchStopped = false;
     input.props.onTouchStart({ stopPropagation: () => { inputTouchStopped = true; } });
@@ -481,7 +481,7 @@ test('rendered passenger flow preserves the actual shell/map instance across mat
       assert.equal(tree.root.findAll((node) => node.props.accessibilityRole === 'adjustable').length, 0);
     };
     assertSingleSheetSnap();
-    assert.ok(text(tree).includes('¿A dónde vas?'));
+    assert.ok(text(tree).includes('¿A dónde vamos?'));
     const lockup = tree.root.findAll((node) => String(node.type) === 'Image' &&
       String(node.props.source).endsWith('vima_header_lockup_final.png'));
     assert.equal(lockup.length, 1);
@@ -617,7 +617,7 @@ test('header and Android back return drafts home without unmounting the shell or
       assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination, null);
       assert.equal(h.mounted.map, 1);
     }
-    await h.act(async () => press(tree, '¿A dónde vas?'));
+    await h.act(async () => press(tree, '¿A dónde vamos?'));
     await h.act(async () => assert.equal(h.back(), true));
     assert.equal(nativeNodes(tree, 'TextInput').length, 0);
     await reachMatching(h, tree);
@@ -633,7 +633,7 @@ test('incident detail closes by outside tap, close button and Android back, incl
   try {
     await settle(h);
     const layout = tree.root.findAllByType('View' as never).find(node => node.props.onLayout && node.props.style?.flex === 1)!;
-    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { height: 700 } } }));
+    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 } } }));
     for (const close of ['button', 'outside', 'back']) {
       await h.act(async () => nativeNode(tree, 'PassengerMapContent').props.onIncidentSelect({ category: 'Obras', description: 'Obras en la vía', severity: 'Tráfico lento' }));
       assert.ok(text(tree).includes('Obras en la vía'));
@@ -656,23 +656,24 @@ test('recenter acknowledges only the native completion at the requested coordina
   try {
     await settle(h);
     const layout = tree.root.findAllByType('View' as never).find(node => node.props.onLayout && node.props.style?.flex === 1)!;
-    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { height: 700 } } }));
+    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 } } }));
     await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
-    await h.act(async () => press(tree, 'Centrar ubicación'));
+    h.projection.point = [190, 680];
+    await h.act(async () => { await new Promise(resolve => setTimeout(resolve, 180)); });
+    await h.act(async () => press(tree, 'Tu ubicación'));
     assert.ok(!text(tree).includes('Ubicación centrada'));
-    assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Centrar ubicación')!
+    assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Tu ubicación')!
       .props.accessibilityState.busy, true);
     const coordinate = nativeNode(tree, 'PassengerMapContent').props.recenter.coordinate;
     await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionDidChange({ nativeEvent: { center: [0, 0], userInteraction: false } }));
     assert.ok(!text(tree).includes('Ubicación centrada'));
     await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionDidChange({ nativeEvent: { center: coordinate, userInteraction: false } }));
     assert.ok(text(tree).includes('Ubicación centrada'));
-    assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Centrar ubicación')!
-      .props.accessibilityState.busy, false);
+    assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => n.props.accessibilityLabel === 'Tu ubicación').length, 0);
     assert.equal(text(tree).split('Ubicación centrada').length - 1, 1);
     await h.act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
     assert.ok(!text(tree).includes('Ubicación centrada'));
-    await h.act(async () => press(tree, 'Centrar ubicación'));
+    await h.act(async () => press(tree, 'Tu ubicación'));
     await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionDidChange({ nativeEvent: { center: coordinate, userInteraction: false } }));
     assert.equal(text(tree).split('Ubicación centrada').length - 1, 1);
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
@@ -684,8 +685,8 @@ test('only explicit location confirmation emits a full route fit after the sheet
   try {
     await settle(h);
     const layout = tree.root.findAllByType('View' as never).find(node => node.props.onLayout && node.props.style?.flex === 1)!;
-    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { height: 700 } } }));
-    await h.act(async () => press(tree, '¿A dónde vas?'));
+    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 } } }));
+    await h.act(async () => press(tree, '¿A dónde vamos?'));
     assert.equal(nativeNode(tree, 'PassengerMapContent').props.fitRoute, undefined);
     await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`));
     await settle(h);
@@ -746,9 +747,9 @@ test('map control press feedback and layer switches use approved timing and obey
     try {
       await settle(h);
       const layout = tree.root.findAllByType('View' as never).find(node => node.props.onLayout && node.props.style?.flex === 1)!;
-      await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { height: 700 } } }));
+      await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 } } }));
       await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
-      const button = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Centrar ubicación')!;
+      const button = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Capas del mapa')!;
       const paint = (node: ReactTestInstance, pressed: boolean) => Object.assign({}, ...node.props.style({ pressed }).filter(Boolean));
       assert.equal(paint(button, false).backgroundColor, '#FFFFFF');
       assert.equal(paint(button, true).backgroundColor, '#EAF3FF');
@@ -768,4 +769,58 @@ test('map control press feedback and layer switches use approved timing and obey
       assert.ok(!text(tree).includes('Siniestros'));
     } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
   }
+});
+
+test('location CTA follows settled projection and actual sheet height without commanding the camera', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  const visible = () => tree.root.findAllByType('Pressable' as never).some(n => n.props.accessibilityLabel === 'Tu ubicación');
+  const settleProjection = () => h.act(async () => { await new Promise(resolve => setTimeout(resolve, 180)); });
+  const region = () => nativeNode(tree, 'NativeMapBoundary').props.onRegionDidChange({ nativeEvent: { center: [0, 0], userInteraction: true } });
+  try {
+    await settle(h);
+    const layout = tree.root.findAllByType('View' as never).find(n => n.props.onLayout && n.props.style?.flex === 1)!;
+    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 } } }));
+    await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+    await settleProjection(); assert.equal(visible(), false);
+    h.projection.point = [195, 480];
+    await h.act(async () => region()); await settleProjection();
+    assert.equal(visible(), true);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.recenter, undefined);
+    await h.act(async () => nativeNode(tree, 'SheetBoundary').props.onVisibleHeightChange(100));
+    await settleProjection(); assert.equal(visible(), false);
+    await h.act(async () => nativeNode(tree, 'SheetBoundary').props.onVisibleHeightChange(400));
+    await settleProjection(); assert.equal(visible(), true);
+    h.projection.point = [195, 120];
+    await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionWillChange());
+    await settleProjection(); assert.equal(visible(), true); // Do not chatter mid-gesture.
+    await h.act(async () => region()); await settleProjection(); assert.equal(visible(), false);
+    let finish: (point: number[]) => void = () => {};
+    h.projection.project = () => new Promise(resolve => { finish = resolve; });
+    await h.act(async () => region()); await settleProjection();
+    await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onRegionWillChange());
+    await h.act(async () => finish([195, 680]));
+    assert.equal(visible(), false); // Ignore an obsolete native reply.
+    assert.equal(h.mounted.map, 1);
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('bottom Inicio reuses returnHome from selection/search and is absent during an active ride', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle(h);
+    await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`)); await settle(h);
+    await h.act(async () => press(tree, 'Origen'));
+    await h.act(async () => press(tree, 'Inicio')); await settle(h);
+    assert.ok(text(tree).includes('¿A dónde vamos?'));
+    assert.equal(tree.root.findAllByType('TextInput' as never).length, 0);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination, null);
+    assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Inicio')!.props.accessibilityState.selected, true);
+    await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`)); await settle(h);
+    await h.act(async () => press(tree, 'Confirmar ubicaciones')); await settle(h);
+    await h.act(async () => press(tree, 'Solicitar viaje')); await settle(h);
+    assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => n.props.accessibilityLabel === 'Inicio').length, 0);
+    assert.equal(h.mounted.map, 1);
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });

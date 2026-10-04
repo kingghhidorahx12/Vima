@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { resolveMapStyle } from './style';
 
+export type { MapRef as VimaMapRef } from '@maplibre/maplibre-react-native';
+
 export type VimaMapProps = Omit<MapProps, 'mapStyle' | 'attribution'>;
 
 /** The persistent Vima renderer. Orbis style/asset URLs enter only through map configuration. */

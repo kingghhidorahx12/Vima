@@ -38,14 +38,15 @@ test('MapLibre owns one persistent map, camera fit, Vima pins and route layers',
   assert.equal(pins.length, 3);
   assert.equal(pins[0]!.props.anchor, 'bottom');
   assert.deepEqual(pins[0]!.props.lngLat, [-99, 19]);
-  assert.equal(pins[0]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#00D68F');
+  assert.equal(pins[0]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#0B0F0E');
   assert.equal(pins[1]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#FF3830');
   const line = tree.root.findAllByType('MapLibreLayer' as never).find(layer => layer.props.id === 'r')!.props;
   assert.equal(line.type, 'line');
   assert.equal(line.paint['line-width'], 4);
-  const casing = tree.root.findAllByType('MapLibreLayer' as never).find(layer => layer.props.id === 'r-casing')!.props;
-  assert.equal(casing.paint['line-color'], '#FFFFFF');
-  assert.ok(casing.paint['line-width'] > line.paint['line-width']);
+  const halo = tree.root.findAllByType('MapLibreLayer' as never).find(layer => layer.props.id === 'r-halo')!.props;
+  assert.equal(halo.paint['line-color'], '#00826F');
+  assert.ok(halo.paint['line-blur'] > 0);
+  assert.ok(halo.paint['line-width'] > line.paint['line-width']);
   const routeSource = tree.root.findByType('MapLibreSource' as never).props;
   assert.equal(routeSource.id, 'r-source');
   assert.equal(JSON.parse(routeSource.data).geometry.type, 'MultiLineString');
@@ -114,7 +115,7 @@ test('map viewport clips native markers and Search locks camera while hiding onl
   assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
   await h.act(async () => tree.update(scene(false, 420)));
   assert.equal(tree.root.findByType('MapLibreMap' as never).instance, map);
-  assert.equal(tree.root.findAllByType('MapLibreMarker' as never).length, 2);
+  assert.equal(tree.root.findAllByType('MapLibreMarker' as never).length, 3);
   assert.equal(tree.root.findAllByType('MapLibreSource' as never).length, 2);
   const fits = h.calls.filter((call: unknown[]) => call[0] === 'setStop').length;
   await h.act(async () => tree.update(scene(false, 500, 'user-controlled')));
@@ -189,7 +190,7 @@ test('Orbis layers remain absent without display key and use vector sources when
   await h.act(async () => tree.unmount());
 });
 
-test('Traffic toggling preserves blue route, casing and geometry with and without Reduced Motion', async () => {
+test('Traffic toggling preserves blue route, halo and geometry with and without Reduced Motion', async () => {
   for (const reduced of [false, true]) {
     const h = createMapHarness({ reduced });
     const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
@@ -214,12 +215,13 @@ test('Traffic toggling preserves blue route, casing and geometry with and withou
     assert.deepEqual(JSON.parse(source().props.data).geometry, JSON.parse(before).geometry);
     assert.deepEqual(color(source().props.data), [47, 128, 255]);
     const layers = tree.root.findAllByType('MapLibreLayer' as never);
-    const casing = layers.find(node => node.props.id === 'passenger-route-casing')!;
+    const halo = layers.find(node => node.props.id === 'passenger-route-halo')!;
     const line = layers.find(node => node.props.id === 'passenger-route')!;
-    assert.equal(casing.props.paint['line-color'], '#FFFFFF');
-    assert.ok(casing.props.paint['line-width'] > line.props.paint['line-width']);
+    assert.equal(halo.props.paint['line-color'], '#2F80FF');
+    assert.ok(halo.props.paint['line-blur'] > 0);
+    assert.ok(halo.props.paint['line-width'] > line.props.paint['line-width']);
     const trafficIndex = layers.findIndex(node => node.props.id === 'vima-traffic-flow-lines');
-    assert.ok(trafficIndex >= 0 && layers.indexOf(casing) > trafficIndex);
+    assert.ok(trafficIndex >= 0 && layers.indexOf(halo) > trafficIndex);
     assert.equal(layers.some(node => node.props.id === 'passenger-route-flow'), !reduced);
     await h.act(async () => tree.unmount());
   }

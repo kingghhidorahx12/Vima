@@ -15,9 +15,9 @@ function distance(from: GeoJSON.Position, to: GeoJSON.Position): number {
 export function indexRoute(data: RouteFeature) {
   const lines = data.geometry.type === 'LineString' ? [data.geometry.coordinates] : data.geometry.coordinates;
   let total = 0;
-  const segments = lines.flatMap(line => line.slice(1).map((end, i) => {
+  const segments = lines.flatMap((line, part) => line.slice(1).map((end, i) => {
     const start = line[i]!; const from = total; total += distance(start, end);
-    return { start, end, from, to: total };
+    return { start, end, from, to: total, part };
   }));
   return { segments, total };
 }
@@ -30,17 +30,22 @@ export function routeWindow(index: ReturnType<typeof indexRoute>, progress: numb
   let left = 0; let right = index.segments.length;
   while (left < right) { const middle = (left + right) >>> 1;
     if (index.segments[middle]!.to < low) left = middle + 1; else right = middle; }
-  const lines: GeoJSON.Position[][] = [];
+  let points: GeoJSON.Position[] = []; let part = -1;
   for (let i = left; i < index.segments.length; i++) {
     const segment = index.segments[i]!;
     if (segment.from > high) break;
     const length = segment.to - segment.from;
     if (!length) continue;
     const a = Math.max(0, (low - segment.from) / length); const b = Math.min(1, (high - segment.from) / length);
-    lines.push([[...interpolateCoordinate([segment.start[0]!, segment.start[1]!], [segment.end[0]!, segment.end[1]!], a)],
-      [...interpolateCoordinate([segment.start[0]!, segment.start[1]!], [segment.end[0]!, segment.end[1]!], b)]]);
+    if (b <= a) continue;
+    // One joined stroke, not independently capped line segments. A genuine gap starts
+    // a new sheen; never invent a connector or show two competing highlights.
+    if (part !== segment.part) { points = []; part = segment.part; }
+    if (!points.length) points.push([...interpolateCoordinate([segment.start[0]!, segment.start[1]!], [segment.end[0]!, segment.end[1]!], a)]);
+    points.push([...interpolateCoordinate([segment.start[0]!, segment.start[1]!], [segment.end[0]!, segment.end[1]!], b)]);
   }
-  return { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } };
+  return { type: 'Feature', properties: { vimaSheenOpacity: Math.min(1, progress / width, (1 - progress) / width) },
+    geometry: points.length >= 2 ? { type: 'LineString', coordinates: points } : { type: 'MultiLineString', coordinates: [] } };
 }
 
 /** Clip in angular distance along actual route geometry; disconnected lines add no connector. */
