@@ -1,9 +1,48 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-03 en `codex/premium-media-pricing-p0`, creada desde el HEAD publicado
+Actualizado 2026-10-04 en `codex/premium-media-pricing-p0`, creada desde el HEAD publicado
 de `codex/motion-pricing-p0`. No se modificaron ramas históricas ni main.
 
 ## IMPLEMENTADO
+
+### Refinamiento de composición, ruta y ubicación contextual — 2026-10-04
+
+Esta ronda sustituye las decisiones anteriores de origen verde, casing blanco y recenter
+circular siempre visible. Los apartados fechados anteriores quedan como historial.
+
+- Inicio presenta una única acción principal «¿A dónde vamos?» de 52 dp, atajos y recientes.
+  El origen conserva sus estados y edición: acceso en el header y campos en selección/confirmación.
+  Carga/error de ubicación quedan como aviso sobre mapa. Branding y assets no cambian.
+- Barra inferior con Inicio y Favoritos reutiliza returnHome y la búsqueda vacía con Favoritos
+  existentes. No crea rutas, tabs de Viajes/Pagos/Perfil ni funciones nuevas. Se oculta durante
+  solicitud, matching y viaje asignado. Back Android mantiene su manejo interno anterior.
+- Origen carbón en token/marker/campos; destino rojo. Markers nativos después de la ruta en
+  composición, sobre las capas GL. La ubicación azul representa currentLocation real,
+  nunca un origen manual; permanece disponible durante selección/confirmación.
+- Ruta azul sobre Traffic sin borde blanco: sombra carbón y halo azul difuminados. Sheen
+  en un único LineString continuo que recorre la ruta, con entrada/salida de opacidad;
+  sin extremos redondos independientes por cada segmento ni conectores inventados entre
+  partes desconectadas. Geometría base, routing, fit y basemap conservados.
+- «Tu ubicación» centrado sobre el sheet sólo cuando la proyección nativa queda fuera del
+  área visible útil. Se espera el fin del movimiento y 150 ms de estabilidad; histéresis
+  de 8/24 dp e invalidación de respuestas tardías evitan parpadeos. Sin polling ni comandos
+  de cámara por observar visibilidad. Mantiene recenter explícito, busy y confirmación nativa.
+- VimaRideSheet informa su altura visible durante drag/snap; header, barra inferior y safe
+  areas quedan fuera del contenedor del mapa. Se comparan coordenadas locales en dp.
+- Entradas compartidas inmediatas de cards/CTA/overlays: fade de 240 ms y desplazamiento
+  de 4 dp; contenido entre estados de 6 dp. Reduced Motion suprime desplazamientos y loops,
+  con fade simple. Pulso ubicación de 960 ms y opacidad menor, manteniendo núcleo opaco.
+- No hay dependencias ni configuración nativa nuevas. Esta ronda no exige otro Development
+  Build; sigue aplicando el requisito anterior de tener expo-image en el APK instalado.
+
+Verificación: TypeScript y lint sin errores ni warnings; suite completa 127/127; worklets
+18/18; Expo Doctor 21/21; export Hermes Android/iOS correcto. Permanecen los avisos
+no bloqueantes existentes de Node MODULE_TYPELESS_PACKAGE_JSON y react-test-renderer.
+Revisión de siete composiciones mediante proyección HTML de componentes/dobles nativos,
+con animaciones en su estado final. No certifica Yoga ni rasterización MapLibre.
+Pendiente físico Android: contraste halo/Traffic ON, continuidad del sheen, prioridad de pins,
+CTA al pan/zoom/drag y bordes/safe areas/teclado, legibilidad de la nueva barra y Reduced Motion.
+El style productivo final sigue pendiente de aprobación; se conserva la configuración vigente.
 
 ### Dirección visual luminosa Passenger P0 — 2026-10-03
 

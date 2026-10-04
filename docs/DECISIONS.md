@@ -131,3 +131,13 @@ rojo destino/alerta. La referencia no autoriza nuevos flujos, categorías, datos
 Los ajustes de presentación reutilizan tokens y la arquitectura Motion vigente. No cambian
 cámara, pricing, ranking Search, matching, contratos live ni Reduced Motion policy. La falta
 de pantalla de acceso, fotos en contratos o style final de producción no se suple con invenciones.
+
+## Composición y mapa Passenger P0 — decisión aprobada 2026-10-04
+
+La ronda posterior sobre la misma referencia sustituye explícitamente origen verde por
+carbón y casing blanco por halo/sombra suave. Destino rojo, ruta azul y acciones verdes
+permanecen. El brillo de ruta debe ser una única señal continua sin modificar la geometría.
+Inicio expone sólo «¿A dónde vamos?» como acción principal del panel, conservando edición
+interna del origen. «Tu ubicación» reemplaza al recenter circular y aparece sólo fuera del
+viewport útil. Entradas sutiles reutilizan Motion System y respetan Reduced Motion.
+La barra inferior reutiliza acciones existentes; no autoriza nuevos destinos funcionales.

@@ -9,7 +9,7 @@ y cualquier identidad diferente quedan expresamente excluidos: se conservan los 
 - Superficies blancas y neutras claras, radios existentes 12/16/28/pill, bordes de carbón
   al 8%, profundidad de los niveles 1/2 existentes. El verde oscuro al 6% sirve de fondo
   de énfasis; los lavados de azul, rojo y ámbar se reservan a sus roles semánticos.
-- Verde para acción/éxito/origen; azul para ruta/ubicación/foco/mapa; rojo destino/cancelación.
+- Verde para acción/éxito; origen carbón (revisión aprobada 2026-10-04); azul para ruta/ubicación/foco/mapa; rojo destino/cancelación.
   No se copia la paleta de branding del board. Los CTA del pasajero usan verde oscuro sólido
   para mantener contraste; el gradiente original continúa disponible para otros contextos.
 - Inter con interlineado 1.35; iconos Material Symbols regular ya integrados. Search de 52 dp,
@@ -19,14 +19,14 @@ y cualquier identidad diferente quedan expresamente excluidos: se conservan los 
 - Conductor conserva nombre/rating/ETA/placa/PIN y acciones existentes. Avatar de perfil
   neutral porque el contrato no trae foto; vehículo con imagen sólo si la entrega el host.
 - Motion más contenido: control 0.98, halo ubicación 1.18 con menor opacidad, highlight
-  de ruta 0.16 y rebote de pin 0.5 dp. Launch de app: escala 1.01, salida 480 ms/8 dp;
+  continuo de ruta y rebote de pin 0.5 dp. Launch de app: escala 1.01, salida 480 ms/8 dp;
   Reduced Motion conserva crossfade 160 ms. Sheet conserva timings, snaps y gestos existentes.
-- Traffic mantiene colores y datos; trazo 2.5 dp al 60%, debajo de casing blanco/ruta azul.
+- Traffic mantiene colores y datos; trazo 2.5 dp al 60%, debajo de halo difuminado/ruta azul (sin casing blanco).
   Basemap, cámara y contratos TomTom permanecen configurados como antes.
 
 ## Límites
 
-No se incorporan categorías, tabs, acceso/login, mensaje, compartir, fotos ficticias ni un
+No se incorporan categorías, nuevas secciones funcionales, acceso/login, mensaje, compartir, fotos ficticias ni un
 compass personalizado. No se altera navegación, ranking, pricing, matching ni gateways.
 El splash nativo y sus assets/configuración permanecen intactos; se pule el launch de app.
 El style productivo final del mapa continúa pendiente. La referencia no autoriza inventar datos.
@@ -38,3 +38,11 @@ local: Inicio, Search, resultados, selección, confirmación, matching y conduct
 omite mapa, usa dobles de límites nativos y no certifica layout Yoga, tiles, gestures ni Android.
 El signoff requiere Development Build en teléfono, con Traffic ON/OFF y Reduced Motion,
 textos largos/ampliados, teclado, safe areas y estados sin precio/pago/fotos.
+
+## Revisión de composición — 2026-10-04
+
+Inicio concentra el panel en «¿A dónde vamos?», atajos y recientes. Header con edición de
+origen y barra inferior Inicio/Favoritos reutilizan acciones existentes. La ubicación actual
+se recupera con un CTA centrado sobre sheet únicamente cuando queda fuera del área visible.
+Origen carbón, destino rojo y ubicación azul son distintos; ruta con halo suave y un brillo
+continuo. Entradas cortas de superficies y pulso contenido no añaden espera funcional.
