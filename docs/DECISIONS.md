@@ -171,3 +171,17 @@ La barra inferior reutiliza acciones existentes; no autoriza nuevos destinos fun
 - En Android MapLibre necesita un easing nativo explícito para animar `setStop` con duración
   positiva. Se usa `ease` con los 420 ms ya aprobados; Reduced Motion mantiene duración 0.
   No se aprueba un nuevo timing ni se modifica Motion System.
+
+## Chrome de confirmación Passenger — aprobado 2026-10-05
+
+- La zona física de status bar usa carbón `#0B0F0E` e iconos claros. El mapa conserva su
+  comienzo después de la safe area real y el gap exterior de 4 dp.
+- En confirmación, «Confirma tu viaje» es un pill blanco flotante, centrado sobre el mapa:
+  top útil 12 dp, alto 40 dp, padding horizontal 16 dp, radio 999, Inter 600/16 dp carbón y
+  elevación contenida nivel 1. No ocupa layout ni convierte el chrome en una barra.
+- El footprint del pill entra en la oclusión superior del route-fit sin duplicar safe area ni
+  gap exterior. El algoritmo, los intents y el segundo fit permanecen iguales.
+- La bottom nav se muestra sólo en Home normal. Sustituye la regla histórica que la mostraba
+  en reviewing/confirm; se oculta durante todo el proceso de viaje y reaparece al volver a
+  Home. El sheet protege su contenido con el inset inferior cuando no hay nav y la transición
+  sigue la política de Reduced Motion existente.

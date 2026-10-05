@@ -1,9 +1,64 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-safearea-routefit-p0`, desde el HEAD publicado
-`941dbb2` de `codex/passenger-shell-route-autofit-p0`. Sin reset ni merge a main.
+Actualizado 2026-10-05 en `codex/passenger-confirm-chrome-p0`, desde el HEAD publicado
+`b7a8905` de `codex/passenger-safearea-routefit-p0`. Sin reset ni merge a main.
 
 ## IMPLEMENTADO
+
+### Chrome de confirmación y navegación Home-only — 2026-10-05
+
+Esta sección reemplaza únicamente la regla histórica de visibilidad de bottom nav descrita
+más abajo. El mapa, sheet, medición, cámara y route-fit de `b7a8905` se conservan.
+
+- La zona física de la status bar usa una superficie carbón `#0B0F0E` bajo los iconos claros.
+  El espacio total previo al mapa sigue siendo `insets.top + 4 dp`; el gap exterior de 4 dp
+  conserva el fondo del root. No se crea un header blanco ni una compensación vertical nueva.
+- En confirmación real, «Confirma tu viaje» se muestra en un pill blanco flotante sobre el mapa:
+  centrado en el viewport completo, 12 dp desde el inicio útil del mapa, 40 dp de alto,
+  padding horizontal 16 dp, radio 999, Inter 600 de 16 dp en carbón y elevación aprobada
+  nivel 1 (offset Y 2, blur 8, carbón al 6%). El título sale del chrome superior, donde
+  permanece el botón de regreso. El pill no reserva altura ni remonta MapLibre o el sheet.
+- La oclusión superior considera el extremo inferior del pill junto al chrome existente y
+  su separación de 12 dp. En esta geometría, el chrome de 56 dp ya cubre el pill de 52 dp:
+  `topOcclusion` permanece en 68 dp, sin sumar de nuevo safe area ni gap. El segundo fit
+  después de confirmar ubicaciones sigue usando el sheet realmente medido.
+- La bottom nav Inicio/Viajes/Pagos/Perfil aparece sólo en Home normal, sin destino ni field
+  activo. Desaparece en Search, selección/reviewing, confirmación, solicitud, matching y
+  asignación; reaparece al volver a Home. Fuera de Home no deja una altura reservada y el
+  contenido del sheet conserva protección inferior con `insets.bottom`. Usa las transiciones
+  ya existentes, sujetas a Reduced Motion.
+
+VERIFICADO AUTOMÁTICAMENTE: TypeScript y lint limpios; suite completa 136/136; worklets
+18/18; Expo Doctor 21/21; export Hermes Android/iOS y aislamiento de fixtures y
+pricing/servidor correctos. Las pruebas de shell comprueban status, dimensiones del pill,
+visibilidad, oclusión sin duplicar insets, layout, segundo fit, retorno a Home, persistencia
+de mapa/sheet y modo Reduced Motion. La verificación física Android sigue PENDIENTE.
+
+PENDIENTE ANDROID FÍSICO:
+
+1. En confirmación, status area carbón `#0B0F0E`.
+2. Hora, batería y señal claras.
+3. Gap superior de 4 dp intacto.
+4. Mapa con su radio superior actual.
+5. Sin barra blanca.
+6. Pill pequeño «Confirma tu viaje».
+7. Pill centrado en el viewport.
+8. Pill a 12 dp del top útil del mapa.
+9. Ruta y ambos pins visibles.
+10. Sin bottom nav en confirmación.
+11. Sheet a ancho completo.
+12. En Home, pill ausente.
+13. En Home, bottom nav visible.
+14. Bottom nav absorbe el inset inferior.
+15. Mapa y sheet permanecen montados.
+16. Al entrar a Search, nav desaparece.
+17. En reviewing, nav permanece oculta.
+18. Al confirmar, nav permanece oculta.
+19. Al volver a Home, nav reaparece.
+20. Reduced Motion conserva el comportamiento esperado.
+
+No hay cambio nativo, dependencia ni configuración Expo; no se ejecuta EAS Build ni se
+requiere reconstruir el Development Build por este ajuste de JavaScript/estilos.
 
 ### Safe area, viewport y movimiento del fit — 2026-10-05
 
