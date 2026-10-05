@@ -22,8 +22,9 @@ async function press(tree: ReactTestRenderer, label: string) {
   assert.ok(node, label); assert.ok(!node.props.disabled);
   await act(async () => node.props.onPress()); await settle();
 }
-async function mapLayout(tree: ReactTestRenderer, height = 700) {
-  await act(async () => id(tree, 'passenger-map-surface').props.onLayout({ nativeEvent: { layout: { width: 390, height } } }));
+async function mapLayout(tree: ReactTestRenderer, previousSheetFrameHeight = 700) {
+  await act(async () => id(tree, 'passenger-map-surface').props.onLayout({ nativeEvent: {
+    layout: { width: 390, height: previousSheetFrameHeight + 28 } } }));
 }
 async function measure(tree: ReactTestRenderer, content = 250, header = 28) {
   await act(async () => {
@@ -39,7 +40,7 @@ async function measure(tree: ReactTestRenderer, content = 250, header = 28) {
   return visible;
 }
 
-test('status bar and 4 dp gap precede the clipped inset map, while sheet and nav remain full width', async () => {
+test('transparent dark-content status bar overlays the clipped map; safe chrome, sheet and nav retain their geometry', async () => {
   for (const [top, bottom] of [[0, 0], [24, 16], [48, 34]]) {
     const h = createHarness({}, { insets: { top, bottom, left: 0, right: 0 } });
     const fixture = createPassengerFixtureGateway(clock); const tree: ReactTestRenderer = await h.render(fixture.gateway);
@@ -47,14 +48,16 @@ test('status bar and 4 dp gap precede the clipped inset map, while sheet and nav
       await settle();
       assert.equal(style(id(tree, 'passenger-root')).backgroundColor, '#F6F7F8');
       assert.equal(tree.root.findAllByType('SafeAreaView' as never).length, 0);
-      assert.equal(host(tree, 'StatusBar').props.style, 'light');
-      assert.equal(style(id(tree, 'passenger-map-top-gap')).height, top! + 4);
-      assert.equal(style(id(tree, 'passenger-status-surface')).height, top);
-      assert.equal(style(id(tree, 'passenger-status-surface')).backgroundColor, '#0B0F0E');
+      assert.equal(host(tree, 'StatusBar').props.style, 'dark');
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-map-top-gap').length, 0);
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-status-surface').length, 0);
       const surface = id(tree, 'passenger-map-surface');
+      assert.equal(style(surface).flex, 1);
       assert.equal(style(surface).marginHorizontal, undefined);
       assert.equal(style(surface).overflow, undefined);
       assert.equal(surface.props.collapsable, false);
+      await act(async () => surface.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 + top! + 4 } } }));
+      assert.equal(host(tree, 'SheetBoundary').props.interaction.height, 700);
       const mapViewport = surface.findAllByType('View' as never).find(n => style(n).marginHorizontal === 4);
       assert.ok(mapViewport);
       assert.equal(mapViewport!.props.collapsable, false);
@@ -64,9 +67,9 @@ test('status bar and 4 dp gap precede the clipped inset map, while sheet and nav
       assert.equal(mapViewport!.findAllByType('SheetBoundary' as never).length, 0);
       assert.equal(style(host(tree, 'SheetBoundary')).marginHorizontal, undefined);
       const chrome = id(tree, 'passenger-top-chrome');
-      assert.equal(style(chrome).position, 'absolute'); assert.equal(style(chrome).top, 8);
+      assert.equal(style(chrome).position, 'absolute'); assert.equal(style(chrome).top, top! + 12);
       assert.equal(style(chrome).left, 16); assert.equal(style(chrome).backgroundColor, undefined);
-      assert.equal(host(tree, 'PassengerMapContent').props.topOcclusion, 68);
+      assert.equal(host(tree, 'PassengerMapContent').props.topOcclusion, top! + 72);
       assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
       const logo = chrome.findByType('Image' as never);
       assert.match(logo.props.source, /vima_header_lockup_final\.png$/);
@@ -144,7 +147,7 @@ test('confirmation title floats over the persistent map with approved geometry a
       const pillStyle = style(pill);
       assert.equal(pill.props.pointerEvents, 'none');
       assert.equal(pillStyle.position, 'absolute');
-      assert.equal(pillStyle.top, 12);
+      assert.equal(pillStyle.top, top + 16);
       assert.equal(pillStyle.alignSelf, 'center');
       assert.equal(pillStyle.height, 40);
       assert.equal(pillStyle.paddingHorizontal, 16);
@@ -167,8 +170,8 @@ test('confirmation title floats over the persistent map with approved geometry a
       assert.equal(surface.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 1);
       assert.equal(hasNav(tree), false);
       assert.equal(style(id(tree, 'passenger-sheet-content')).paddingBottom, 54);
-      assert.equal(host(tree, 'PassengerMapContent').props.topOcclusion, 68);
-      assert.equal(style(id(tree, 'passenger-map-top-gap')).height, top + 4);
+      assert.equal(host(tree, 'PassengerMapContent').props.topOcclusion, top + 72);
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-map-top-gap').length, 0);
       await press(tree, 'Volver');
       assert.equal(hasNav(tree), true);
       assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);

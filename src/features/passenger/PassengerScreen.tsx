@@ -60,7 +60,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const safeArea = useSafeAreaInsets();
   const topInset = inset ? safeArea.top : 0;
   const bottomInset = inset ? safeArea.bottom : 0;
-  // The status bar and 4 dp exterior gap precede the measured map surface.
+  // The map now extends behind the status bar. Shift only the safe chrome and preserve
+  // the former sheet/fit coordinate frame below the old top inset and 4 dp gap.
+  const topFrameShift = topInset + 4;
   const chromeBottom = 8 + 48;
   const [mapLayoutNavHeight, setMapLayoutNavHeight] = useState<number>();
   const [focused, setFocused] = useState(false);
@@ -115,7 +117,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const draftKey = `${flow.origin?.id ?? ''}:${flow.destination?.id ?? ''}:${flow.quote?.pricing ? flow.quote.id : ''}`;
   const reviewing = (flow.phase === 'confirm' && reviewedDraft !== draftKey) || (flow.phase === 'home' && !!flow.destination);
   const confirmationPillVisible = flow.phase === 'confirm' && !reviewing && flow.field === null;
-  const topOcclusion = Math.max(chromeBottom, confirmationPillVisible ? confirmationPillTop + confirmationPillHeight : 0) + 12;
+  const topOcclusion = topFrameShift + Math.max(chromeBottom,
+    confirmationPillVisible ? confirmationPillTop + confirmationPillHeight : 0) + 12;
+  const sheetFrameHeight = Math.max(0, height - topFrameShift);
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
   // Key only the measured content, never the persistent map/sheet. Search typing and late
@@ -128,27 +132,29 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const naturalHeight = contentMeasure?.key === measureKey && headerMeasure?.key === measureKey
     ? contentMeasure.height + headerHeight : 0;
   const interaction = useMemo(() => {
-    if (height <= 0) return undefined;
-    const base = rideSheetGeometry(height, snap);
-    if (flow.field || !naturalHeight) return createRideSheetInteraction(height, base.targetOffset, [base.targetOffset]);
+    if (sheetFrameHeight <= 0) return undefined;
+    const base = rideSheetGeometry(sheetFrameHeight, snap);
+    if (flow.field || !naturalHeight) return createRideSheetInteraction(sheetFrameHeight, base.targetOffset, [base.targetOffset]);
     // Content determines the single valid rest position while preserving the current drag range.
-    const maximum = flow.phase === 'home' && !reviewing ? height * 0.60 : height * t.components.bottomSheetSnapPointsPercent[2]! / 100;
-    const visibleHeight = Math.min(maximum, Math.max(height * t.components.bottomSheetSnapPointsPercent[0]! / 100, naturalHeight));
-    const targetOffset = height - visibleHeight;
-    return createRideSheetInteraction(height, targetOffset, [targetOffset]);
-  }, [height, snap, flow.field, flow.phase, reviewing, naturalHeight]);
+    const maximum = flow.phase === 'home' && !reviewing ? sheetFrameHeight * 0.60 : sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[2]! / 100;
+    const visibleHeight = Math.min(maximum, Math.max(sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[0]! / 100, naturalHeight));
+    const targetOffset = sheetFrameHeight - visibleHeight;
+    return createRideSheetInteraction(sheetFrameHeight, targetOffset, [targetOffset]);
+  }, [sheetFrameHeight, snap, flow.field, flow.phase, reviewing, naturalHeight]);
   const actualSheetHeight = viewportMeasure?.key === measureKey && headerMeasure?.key === measureKey
     ? viewportMeasure.height + headerHeight : undefined;
   const settledSheetHeight = naturalHeight && interaction && actualSheetHeight !== undefined &&
-    Math.abs(actualSheetHeight - (height - interaction.targetOffset)) < 1 ? actualSheetHeight : undefined;
+    Math.abs(actualSheetHeight - (sheetFrameHeight - interaction.targetOffset)) < 1 ? actualSheetHeight : undefined;
   const routeFit = usePassengerRouteFit({ quote: flow.quote, origin: flow.origin, destination: flow.destination,
     reviewing, confirming: flow.phase === 'confirm' && !reviewing, searchActive: flow.field !== null,
     ready: mapReady && !mapFailed && focused && mapWidth > 0 && mapLayoutNavHeight === navHeight &&
       height - (settledSheetHeight ?? height) > topOcclusion,
     measuredSheetHeight: settledSheetHeight, confirmationRequest: routeFitRequestId });
   const contentOpacity = useSharedValue(1);
-  const usefulHeight = visibleSheetHeight === undefined ? interaction?.targetOffset ?? height : Math.max(0, height - visibleSheetHeight);
-  const locationVisibility = useLocationVisibility(nativeMap, flow.currentLocation?.coordinate, mapWidth, usefulHeight, mapReady && focused, chromeBottom);
+  const usefulHeight = visibleSheetHeight === undefined ? topFrameShift + (interaction?.targetOffset ?? sheetFrameHeight)
+    : Math.max(0, height - visibleSheetHeight);
+  const locationVisibility = useLocationVisibility(nativeMap, flow.currentLocation?.coordinate, mapWidth, usefulHeight,
+    mapReady && focused, topFrameShift + chromeBottom);
   const announcedAssignment = useRef<string | undefined>(undefined);
   useEffect(() => {
     scrollOffset.current = 0;
@@ -408,10 +414,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     </ScrollView>
   </Animated.View>;
   return <View testID="passenger-root" style={styles.root}>
-    <StatusBar style="light" />
-    <View testID="passenger-map-top-gap" style={{ height: topInset + 4 }}>
-      <View testID="passenger-status-surface" style={[styles.statusSurface, { height: topInset }]} />
-    </View>
+    <StatusBar style="dark" />
     <View testID="passenger-map-surface" collapsable={false} style={styles.primarySurface}
       onLayout={(event) => { setHeight(event.nativeEvent.layout.height); setMapWidth(event.nativeEvent.layout.width); setMapLayoutNavHeight(navHeight); }}>
       <PassengerRideShell trip={flow.trip} mapViewportStyle={styles.mapViewport}
@@ -433,12 +436,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
           cameraMode={reviewing || flow.phase === 'confirm' || mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
           topOcclusion={topOcclusion}
-          locationCtaVisible={mapReady && usefulHeight > 130 && (locationVisibility.outside || centered)}
+          locationCtaVisible={mapReady && usefulHeight - topFrameShift > 130 && (locationVisibility.outside || centered)}
           layersMenuOpen={layersOpen}
-          sheetHeight={interaction ? height - interaction.targetOffset : height * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
+          sheetHeight={interaction ? sheetFrameHeight - interaction.targetOffset : sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
         sheet={{ interaction, header, style: styles.sheet, onVisibleHeightChange: setVisibleSheetHeight }} renderPhase={() => content} />
       <View testID="passenger-top-chrome" pointerEvents="box-none" onTouchStart={dismissKeyboard}
-        style={[styles.topChrome, { top: 8 }]}>
+        style={[styles.topChrome, { top: topFrameShift + 8 }]}>
         {homeNormal ? <>
           <Image source={require('../../../assets/brand/vima_header_lockup_final.png')} style={styles.headerLockup}
             resizeMode="contain" accessibilityLabel="Vima" />
@@ -454,24 +457,25 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           </VimaText> : null}
         </>}
       </View>
-      {confirmationPillVisible ? <View testID="passenger-confirmation-pill" pointerEvents="none" style={styles.confirmationPill}>
+      {confirmationPillVisible ? <View testID="passenger-confirmation-pill" pointerEvents="none"
+        style={[styles.confirmationPill, { top: topFrameShift + confirmationPillTop }]}>
         <VimaText variant="bodyMedium" numberOfLines={1} accessibilityRole="header" style={styles.confirmationPillText}>Confirma tu viaje</VimaText>
       </View> : null}
-      {mapReady && (interaction?.targetOffset ?? height) > 130 ? <View pointerEvents="box-none"
-        style={[styles.mapControls, { bottom: height - (interaction?.targetOffset ?? height) + t.spacing.scalePx[2]! }]}>
+      {mapReady && (interaction?.targetOffset ?? sheetFrameHeight) > 130 ? <View pointerEvents="box-none"
+        style={[styles.mapControls, { bottom: (interaction ? sheetFrameHeight - interaction.targetOffset : 0) + t.spacing.scalePx[2]! }]}>
         <MapControls available={hasDisplayKey} layers={mapLayers}
           open={layersOpen} onOpen={() => setLayersOpen((value) => !value)} onToggle={toggleMapLayer} />
       </View> : null}
-      {mapReady && usefulHeight > 130 && (locationVisibility.outside || centered) ?
+      {mapReady && usefulHeight - topFrameShift > 130 && (locationVisibility.outside || centered) ?
         <View pointerEvents="box-none" style={[styles.locationCTA, { bottom: height - usefulHeight + t.spacing.scalePx[2]! }]}>
           {centered ? <CenteredToast /> : <LocationCTA busy={recentering} onPress={recenterMap} />}
         </View> : null}
-      {incident && (interaction?.targetOffset ?? height) > chromeBottom + 100 ? <IncidentCard details={incident}
-        topOffset={chromeBottom + 12} maxHeight={Math.min(200, (interaction?.targetOffset ?? height) - chromeBottom - 24)} onClose={() => setIncident(null)} /> : null}
+      {incident && (interaction?.targetOffset ?? sheetFrameHeight) > chromeBottom + 100 ? <IncidentCard details={incident}
+        topOffset={topFrameShift + chromeBottom + 12} maxHeight={Math.min(200, (interaction?.targetOffset ?? sheetFrameHeight) - chromeBottom - 24)} onClose={() => setIncident(null)} /> : null}
       {!mapFailed && flow.phase === 'home' && !flow.field && !reviewing && (flow.originStatus === 'loading' || flow.originStatus === 'unavailable') ?
-        <ElementEntrance style={[styles.mapStatus, { top: chromeBottom + 12 }]}><Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={() => openField('origin')} style={styles.row}><VimaGlyph name="info" color={t.colors.accentBluePressed} /><VimaText variant="caption" accessibilityLiveRegion="polite">
+        <ElementEntrance style={[styles.mapStatus, { top: topFrameShift + chromeBottom + 12 }]}><Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={() => openField('origin')} style={styles.row}><VimaGlyph name="info" color={t.colors.accentBluePressed} /><VimaText variant="caption" accessibilityLiveRegion="polite">
           {flow.originStatus === 'loading' ? 'Obteniendo tu ubicación...' : 'No se pudo obtener tu ubicación'}</VimaText></Pressable></ElementEntrance> : null}
-      {mapFailed ? <View style={[styles.mapStatus, { top: chromeBottom + 12 }]}><VimaGlyph name="warning" color={t.colors.amber} />
+      {mapFailed ? <View style={[styles.mapStatus, { top: topFrameShift + chromeBottom + 12 }]}><VimaGlyph name="warning" color={t.colors.amber} />
         <VimaText variant="caption">No se pudo cargar el mapa</VimaText></View> : null}
     </View>
     <PassengerBottomNavigation visible={navVisible} bottomInset={bottomInset} onHome={goHome} />
@@ -543,7 +547,6 @@ const [xs, sm, md, lg, base] = t.spacing.scalePx as [number, number, number, num
 const styles = StyleSheet.create({
   fill: { flex: 1 }, center: { textAlign: 'center' }, muted: { color: t.colors.gray },
   root: { flex: 1, backgroundColor: '#F6F7F8' },
-  statusSurface: { backgroundColor: t.colors.carbon },
   primarySurface: { flex: 1 },
   mapViewport: { marginHorizontal: 4, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     overflow: 'hidden', backgroundColor: '#F6F7F8' },
@@ -556,7 +559,7 @@ const styles = StyleSheet.create({
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
     boxShadow: [{ offsetX: 0, offsetY: 4, blurRadius: 16, color: 'rgba(0,0,0,0.12)' }] },
   headerTitle: { flex: 1, textAlign: 'center', color: t.colors.carbon },
-  confirmationPill: { position: 'absolute', top: confirmationPillTop, alignSelf: 'center', height: confirmationPillHeight,
+  confirmationPill: { position: 'absolute', alignSelf: 'center', height: confirmationPillHeight,
     paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center', borderRadius: t.radii.pillPx,
     backgroundColor: t.colors.white, zIndex: 3, ...elevationStyle('level1', t.colors.carbon) },
   confirmationPillText: { fontFamily: interFamilies[600], fontSize: 16, fontWeight: '600', color: t.colors.carbon,
