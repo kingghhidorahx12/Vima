@@ -185,3 +185,13 @@ La barra inferior reutiliza acciones existentes; no autoriza nuevos destinos fun
   en reviewing/confirm; se oculta durante todo el proceso de viaje y reaparece al volver a
   Home. El sheet protege su contenido con el inset inferior cuando no hay nav y la transición
   sigue la política de Reduced Motion existente.
+
+## Mapa Passenger edge-to-edge — aprobado 2026-10-05
+
+- Sustituye la decisión histórica de status area carbón/light: MapLibre continúa detrás de
+  la status bar transparente y el contenido del sistema es oscuro. No hay franja sólida.
+  Los controles superiores conservan su posición segura mediante `safeArea.top`.
+- El route-fit usa padding lateral idéntico a ambos lados: el máximo entre los paddings base
+  izquierdo y derecho y el clearance lateral del pin. Los controles/menú de capas y demás
+  overlays laterales no desplazan el centro de la ruta. Se preserva el encuadre vertical
+  efectivo al trasladar mecánicamente la oclusión al nuevo origen del mapa.

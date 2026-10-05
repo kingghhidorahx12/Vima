@@ -1,9 +1,63 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-confirm-chrome-p0`, desde el HEAD publicado
-`b7a8905` de `codex/passenger-safearea-routefit-p0`. Sin reset ni merge a main.
+Actualizado 2026-10-05 en `codex/passenger-map-edge-to-edge-p0`, desde el HEAD publicado
+`0b1e4b8` de `codex/passenger-confirm-chrome-p0`. Sin reset ni merge a main.
 
 ## IMPLEMENTADO
+
+### Mapa Passenger edge-to-edge y fit horizontal simétrico — 2026-10-05
+
+Esta decisión sustituye la status area carbón/light y la reserva superior sólida descritas
+en la sección histórica siguiente. El mapa empieza en el top del root y se extiende detrás
+de la status bar, que el proyecto Android generado ya configura transparente con
+edge-to-edge. Expo StatusBar usa contenido oscuro. No hay scrim: el basemap de desarrollo
+es claro y el contraste real sobre tiles queda pendiente de comprobar físicamente.
+
+- `MapViewportClip` conserva inset lateral de 4 dp, radios superiores 24 dp y clipping.
+  No hay spacer previo de `safeArea.top + 4 dp` ni nueva barra blanca. El logo, notificaciones,
+  Back, pill y avisos superiores suman mecánicamente ese desplazamiento a su posición dentro
+  del mapa; su ubicación física respecto a la pantalla permanece igual.
+- El mapa gana el área superior, mientras el cálculo del sheet usa el alto equivalente al
+  anterior (`mapHeight - safeArea.top - 4 dp`). La base gestual, snaps, ancho completo y
+  posición física del sheet se conservan. La oclusión superior de Camera suma el mismo
+  desplazamiento de marco: el clearance físico vertical, el padding inferior y el segundo
+  fit mantienen su resultado previo. Los controles flotantes conservan sus posiciones.
+- `fitRoute.padding.left` y `.right` usan exactamente un valor común:
+  `max(padding.left, padding.right, passengerPinClearance.side)`. Ni MapControls, ni el
+  menú de capas, ni LocationCTA alteran ese padding lateral. El clearance del pin permanece;
+  no cambian bounds, geometría, lifecycle, timings, easing o Reduced Motion.
+
+VERIFICACIÓN AUTOMÁTICA: TypeScript y lint limpios; suite completa 136/136; worklets
+18/18; Expo Doctor 21/21; export Hermes Android/iOS y aislamiento de fixtures y
+pricing/servidor correctos. Las pruebas de mapa/shell y flujo Passenger confirman simetría
+con capas cerradas y abiertas, independencia de LocationCTA, padding vertical, segundo fit,
+safe chrome y sheet persistente. La inspección Android física sigue PENDIENTE.
+
+PENDIENTE ANDROID FÍSICO:
+
+1. Mapa visible detrás de hora, señal y batería.
+2. Status bar totalmente transparente.
+3. Iconos y texto del sistema oscuros.
+4. Sin barra carbón.
+5. Sin barra blanca.
+6. Márgenes laterales actuales intactos.
+7. Radios superiores de 24 dp intactos.
+8. Logo y notificaciones separados de los iconos del sistema.
+9. Pill separado de los iconos del sistema.
+10. Home correcto.
+11. Search correcto.
+12. Confirmación correcta.
+13. Ruta horizontalmente centrada.
+14. Espacio visual izquierdo y derecho equivalente.
+15. Abrir el menú de capas no desplaza la ruta.
+16. Ambos pins completos.
+17. Fit vertical visualmente igual al anterior.
+18. Segundo fit visualmente igual al anterior.
+19. Pan y recenter sin regresión.
+20. Reduced Motion sin regresión.
+
+No se modifica configuración nativa ni dependencias. No se ejecuta EAS Build; este cambio
+de JavaScript/estilos no exige reconstruir el Development Build vigente.
 
 ### Chrome de confirmación y navegación Home-only — 2026-10-05
 
