@@ -29,14 +29,14 @@ export function Camera({ target, motion, mode = 'automatic', recenter, fitRoute 
     if (!recenter) return;
     void ref.current?.setStop({ center: [...recenter.coordinate] as [number, number],
       padding: currentPadding.current,
-      duration: allowCameraAnimation ? motionTimings.map.duration : 0 });
+      ...(allowCameraAnimation ? { duration: motionTimings.map.duration, easing: 'ease' as const } : { duration: 0 }) });
   }, [recenter, allowCameraAnimation]);
   const fittedSequence = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!fitRoute || mode === 'search-locked' || fittedSequence.current === fitRoute.sequence) return;
     fittedSequence.current = fitRoute.sequence;
     void ref.current?.setStop({ bounds: fitBounds(fitRoute.coordinates), padding: fitRoute.padding ?? target?.padding,
-      duration: allowCameraAnimation ? motionTimings.map.duration : 0 });
+      ...(allowCameraAnimation ? { duration: motionTimings.map.duration, easing: 'ease' as const } : { duration: 0 }) });
   }, [fitRoute, target, mode, allowCameraAnimation]);
   return <NativeCamera ref={ref} />;
 }

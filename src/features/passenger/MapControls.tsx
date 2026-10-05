@@ -12,6 +12,7 @@ import { visualTokens as t } from '../../design/tokens';
 import { semanticHaptics } from '../../motion/haptics';
 import type { TrafficLayerPreferences } from '../../map/traffic';
 import { ElementEntrance } from '../../motion/ElementEntrance';
+import { locationCtaHeight, mapControlSize, mapLayersMenuWidth } from './mapCameraFootprint';
 
 export function MapControls({ available, layers, open, onOpen, onToggle }: {
   available: boolean; layers: TrafficLayerPreferences; open: boolean;
@@ -96,7 +97,7 @@ function MapControl({ label, icon, onPress, disabled = false, active = false, ex
   </Animated.View>;
 }
 const styles = StyleSheet.create({
-  location: { ...surfaces.floating, borderRadius: t.radii.pillPx, minHeight: 48, flexDirection: 'row', alignItems: 'center',
+  location: { ...surfaces.floating, borderRadius: t.radii.pillPx, minHeight: locationCtaHeight, flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: t.spacing.scalePx[2], gap: t.spacing.scalePx[1] },
   controlHalo: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, backgroundColor: t.colors.accentBlue },
   buttonActive: { backgroundColor: t.colors.accentBlue, borderColor: t.colors.accentBlue },
@@ -104,13 +105,13 @@ const styles = StyleSheet.create({
   buttonPressed: { backgroundColor: t.colors.accentBlueSoft, borderColor: t.colors.accentBlue },
   buttonDisabled: { opacity: 0.5 },
   stack: { alignItems: 'flex-end', gap: t.spacing.scalePx[1] },
-  button: { width: 48, height: 48, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
+  button: { width: mapControlSize, height: mapControlSize, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border,
     ...elevationStyle('level1', t.colors.carbon) },
   toast: { minWidth: 170, paddingHorizontal: t.spacing.scalePx[2], paddingVertical: t.spacing.scalePx[1],
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.accentBlueSoft, borderWidth: t.borders.standardWidthPx,
     borderColor: t.colors.white, ...elevationStyle('level1', t.colors.carbon), flexDirection: 'row', gap: t.spacing.scalePx[1], alignItems: 'center' },
-  menu: { ...surfaces.floating, minWidth: 170, padding: t.spacing.scalePx[2] },
+  menu: { ...surfaces.floating, minWidth: mapLayersMenuWidth, padding: t.spacing.scalePx[2] },
   menuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[2] },
   menuDivider: { borderTopWidth: t.borders.standardWidthPx, borderTopColor: surfaceColors.border },
   rowPressed: { backgroundColor: t.colors.accentBlueSoft },

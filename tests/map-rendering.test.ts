@@ -69,6 +69,24 @@ test('approved camera motion reaches MapLibre while Reduced Motion stays immedia
   await h.act(async () => tree.unmount());
 });
 
+test('a reviewing fit is the only camera stop and supplies Android easing with the approved 420 ms', async () => {
+  const h = createMapHarness();
+  const { Camera } = h.load('src/map/Camera.tsx');
+  const target = (zoom: number) => ({ center: [-99, 19], zoom, padding: { top: 68 } });
+  const fitRoute = { sequence: 1, coordinates: [[-99, 19], [-98, 20]], padding: { top: 115, bottom: 310 } };
+  const scene = (zoom: number, fit?: typeof fitRoute) => React.createElement(Camera,
+    { target: target(zoom), mode: 'user-controlled', fitRoute: fit });
+  const tree: ReactTestRenderer = await h.render(scene(14));
+  const stops = () => h.calls.filter((call: unknown[]) => call[0] === 'setStop');
+  assert.equal(stops().length, 0);
+  await h.act(async () => tree.update(scene(10, fitRoute)));
+  assert.deepEqual(stops().map((stop: unknown[]) => stop[1]), [{ bounds: [-99, 19, -98, 20],
+    padding: fitRoute.padding, duration: 420, easing: 'ease' }]);
+  await h.act(async () => tree.update(scene(11, fitRoute)));
+  assert.equal(stops().length, 1); // A later target/layout update cannot snap over the fit.
+  await h.act(async () => tree.unmount());
+});
+
 test('MapLibre vehicle pose flows through animated GeoJSON without React pose renders', async () => {
   const h = createMapHarness();
   const { VimaMap } = h.load('src/map/VimaMap.tsx');
@@ -109,8 +127,9 @@ test('map viewport clips native markers and Search locks camera while hiding onl
   assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
   assert.equal(tree.root.findAllByType('MapLibreMarker' as never).length, 1);
   assert.equal(tree.root.findAllByType('MapLibreSource' as never).length, 0);
-  assert.ok(tree.root.findAllByType('View' as never).some((view) => view.props.style?.overflow === 'hidden'));
-  assert.match(readFileSync('src/features/trip/RideShell.tsx', 'utf8'), /<MapViewportClip><VimaMap/);
+  assert.ok(tree.root.findAllByType('View' as never).some((view) =>
+    [view.props.style].flat(Infinity).some((part: { overflow?: string }) => part?.overflow === 'hidden')));
+  assert.match(readFileSync('src/features/trip/RideShell.tsx', 'utf8'), /<MapViewportClip style={mapViewportStyle}><VimaMap/);
   await h.act(async () => tree.update(scene(true, 420)));
   assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
   await h.act(async () => tree.update(scene(false, 420)));
@@ -158,12 +177,15 @@ test('confirmed route fit includes full geometry and useful viewport padding wit
     assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
     await h.act(async () => tree.update(scene(1)));
     const stop = h.calls.filter((call: unknown[]) => call[0] === 'setStop').at(-1)?.[1] as {
-      bounds: number[]; padding: { top: number; bottom: number; right: number }; duration: number };
+      bounds: number[]; padding: { top: number; bottom: number; left: number; right: number };
+      duration: number; easing?: string };
     assert.ok(stop.bounds.every((value, index) => Math.abs(value - [-99.4, 19, -98, 20.2][index]!) < 1e-9));
-    assert.equal(stop.padding.top, 16);
-    assert.equal(stop.padding.bottom, 330);
-    assert.ok(stop.padding.right >= 80);
+    assert.ok(stop.padding.top > 16); // Bottom-anchored pin and its entrance stay below top chrome.
+    assert.ok(stop.padding.bottom > 330); // Pin tip remains above the sheet.
+    assert.ok(stop.padding.left >= 20);
+    assert.ok(stop.padding.right > 80); // Right map controls plus pin width.
     assert.equal(stop.duration, reduced ? 0 : 420);
+    assert.equal(stop.easing, reduced ? undefined : 'ease');
     await h.act(async () => tree.update(scene(1)));
     assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 1);
     await h.act(async () => tree.unmount());
@@ -322,14 +344,16 @@ test('launch starts exit as soon as ready and reduced motion only crossfades', a
 test('both passenger fit intents use measured occlusion and exclude exterior margins/nav under either motion policy', async () => {
   for (const reduced of [false, true]) {
     const h = createMapHarness({ reduced }); const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+    const { passengerPinClearance, locationCtaHeight, mapLayersMenuWidth } = h.load('src/features/passenger/mapCameraFootprint.ts');
     const origin = { id: 'o', coordinate: [-99, 19] }; const destination = { id: 'd', coordinate: [-98, 20] };
     const coordinates = [origin.coordinate, [-100, 22], [-97, 21], destination.coordinate];
     const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } };
     const config = { viewport: () => ({ center: [-99, 19], padding: { top: 24, bottom: 20, left: 20, right: 20 } }),
       route: { width: 4, opacity: 1 }, vehicle: { radius: 12, color: '#000' } };
-    const scene = (sequence: number, measuredHeight: number, search = false, estimatedHeight = 500) => React.createElement(PassengerMap, {
+    const scene = (sequence: number, measuredHeight: number, search = false, estimatedHeight = 500,
+      layersMenuOpen = false) => React.createElement(PassengerMap, {
       quote: { origin, destination, route }, origin, destination, home: false, ready: true, sheetHeight: estimatedHeight,
-      topOcclusion: 92, config, cameraMode: 'user-controlled', searchPresentationActive: search,
+      topOcclusion: 68, locationCtaVisible: true, layersMenuOpen, config, cameraMode: 'user-controlled', searchPresentationActive: search,
       fitRoute: { sequence, sheetHeight: measuredHeight, coordinates },
     });
     const tree: ReactTestRenderer = await h.render(scene(1, 280));
@@ -338,18 +362,23 @@ test('both passenger fit intents use measured occlusion and exclude exterior mar
       assert.equal(stops().length, 1);
       const first = stops()[0][1];
       assert.deepEqual(first.bounds, [-100, 19, -97, 22]);
-      assert.deepEqual(first.padding, { top: 92, bottom: 300, left: 20, right: 80 });
+      assert.deepEqual(first.padding, { top: 68 + passengerPinClearance.top,
+        bottom: 20 + 280 + passengerPinClearance.bottom + locationCtaHeight + 12,
+        left: Math.max(20, passengerPinClearance.side), right: 80 + passengerPinClearance.side });
       assert.equal(first.duration, reduced ? 0 : 420);
+      assert.equal(first.easing, reduced ? undefined : 'ease');
       await h.act(async () => tree.update(scene(1, 282, false, 550)));
       assert.equal(stops().length, 1); // Height/target recomposition is not a fit trigger.
       await h.act(async () => tree.update(scene(2, 390, true)));
       assert.equal(stops().length, 1); // Search rejects even a new sequence.
       await h.act(async () => tree.update(scene(2, 390)));
       assert.equal(stops().length, 2);
-      assert.equal(stops()[1][1].padding.bottom, 410);
+      assert.equal(stops()[1][1].padding.bottom - first.padding.bottom, 110);
       assert.equal(stops()[1][1].duration, reduced ? 0 : 420);
       await h.act(async () => tree.update(scene(2, 392)));
       assert.equal(stops().length, 2);
+      await h.act(async () => tree.update(scene(3, 390, false, 500, true)));
+      assert.equal(stops()[2][1].padding.right, 20 + mapLayersMenuWidth + 12 + passengerPinClearance.side);
     } finally { await h.act(async () => tree.unmount()); }
   }
 });

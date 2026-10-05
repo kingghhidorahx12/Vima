@@ -13,6 +13,7 @@ import type { Assignment, Place, RideQuote } from './model';
 import { PassengerMapPin, PassengerUserLocation } from './PassengerMapPin';
 import { visualTokens as t } from '../../design/tokens';
 import type { PassengerRouteFitIntent } from './usePassengerRouteFit';
+import { locationCtaHeight, mapControlSize, mapLayersMenuWidth, passengerPinClearance } from './mapCameraFootprint';
 
 /** Required appearance/viewports are injected. The unfinished map design gets no production defaults. */
 export interface PassengerMapConfig {
@@ -22,10 +23,10 @@ export interface PassengerMapConfig {
   readonly viewport: (quote: RideQuote | undefined, assignment: Assignment | undefined, origin: Place | null) => CameraTarget;
   readonly vehicleMotion: VehicleMotionConfig;
 }
-export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, topOcclusion = 0, searchPresentationActive,
+export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, topOcclusion = 0, locationCtaVisible = false, layersMenuOpen = false, searchPresentationActive,
   cameraMode = 'automatic', recenter, fitRoute, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
   quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
-  ready: boolean; sheetHeight: number; topOcclusion?: number; searchPresentationActive?: boolean; cameraMode?: CameraMode;
+  ready: boolean; sheetHeight: number; topOcclusion?: number; locationCtaVisible?: boolean; layersMenuOpen?: boolean; searchPresentationActive?: boolean; cameraMode?: CameraMode;
   recenter?: RecenterIntent; fitRoute?: Omit<PassengerRouteFitIntent, 'sheetHeight'> & { sheetHeight?: number }; layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
   onIncidentSelect?: (details: IncidentDetails) => void;
   manualSelection?: { coordinate: Place['coordinate']; kind: 'origin' | 'destination' } | null; config: PassengerMapConfig;
@@ -34,16 +35,21 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
   useEffect(() => { sample.set(assignment?.sample ?? null); }, [assignment?.sample, sample]);
   const target = useMemo(() => {
     const view = config.viewport(quote, assignment, origin);
-    // Outer margins and bottom navigation are outside the measured map. Only overlapping
-    // chrome/sheet enter camera padding; topOcclusion already contains the top safe inset.
+    // Safe area, outer gap and navigation are outside the measured map. Only overlapping
+    // chrome and sheet enter this padding.
     return { ...view, padding: { ...view.padding, top: Math.max(view.padding?.top ?? 0, topOcclusion), bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
   }, [assignment, config, origin, quote, sheetHeight, topOcclusion]);
   return <>
     <Camera target={ready ? target : undefined} mode={searchPresentationActive ? 'search-locked' : cameraMode}
       recenter={ready ? recenter : undefined} fitRoute={ready && fitRoute ? {
         ...fitRoute, padding: { ...target.padding,
-          bottom: (target.padding.bottom ?? 0) - sheetHeight + (fitRoute.sheetHeight ?? sheetHeight), right: Math.max(target.padding.right ?? 0,
-          t.spacing.mobileHorizontalMarginPx + t.spacing.scalePx[8]! + t.spacing.scalePx[2]!) },
+          top: (target.padding.top ?? 0) + passengerPinClearance.top,
+          bottom: (target.padding.bottom ?? 0) - sheetHeight + (fitRoute.sheetHeight ?? sheetHeight) +
+            passengerPinClearance.bottom + (locationCtaVisible ? locationCtaHeight + t.spacing.scalePx[2]! : 0),
+          left: Math.max(target.padding.left ?? 0, passengerPinClearance.side),
+          right: Math.max(target.padding.right ?? 0,
+            t.spacing.mobileHorizontalMarginPx + (layersMenuOpen ? mapLayersMenuWidth : mapControlSize) +
+            t.spacing.scalePx[2]! + passengerPinClearance.side) },
       } : undefined} />
     {displayKeyAvailable ? <TrafficFlowLayer enabled={!!layers?.traffic} /> : null}
     {displayKeyAvailable ? <IncidentLayer enabled={!!layers?.incidents} onSelect={onIncidentSelect} /> : null}

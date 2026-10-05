@@ -56,7 +56,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const safeArea = useSafeAreaInsets();
   const topInset = inset ? safeArea.top : 0;
   const bottomInset = inset ? safeArea.bottom : 0;
-  const chromeBottom = topInset + 8 + 48;
+  // The status bar and 4 dp exterior gap precede the measured map surface.
+  const chromeBottom = 8 + 48;
   const [mapLayoutNavHeight, setMapLayoutNavHeight] = useState<number>();
   const [focused, setFocused] = useState(false);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
@@ -400,9 +401,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     </ScrollView>
   </Animated.View>;
   return <View testID="passenger-root" style={styles.root}>
+    <View testID="passenger-map-top-gap" style={{ height: topInset + 4 }} />
     <View testID="passenger-map-surface" collapsable={false} style={styles.primarySurface}
       onLayout={(event) => { setHeight(event.nativeEvent.layout.height); setMapWidth(event.nativeEvent.layout.width); setMapLayoutNavHeight(navHeight); }}>
-      <PassengerRideShell trip={flow.trip}
+      <PassengerRideShell trip={flow.trip} mapViewportStyle={styles.mapViewport}
         map={{ ref: nativeMap, onRegionWillChange: locationVisibility.start, onRegionDidChange: event => {
           locationVisibility.settled();
           const target = pendingCenter.current;
@@ -421,10 +423,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
           cameraMode={reviewing || flow.phase === 'confirm' || mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
           topOcclusion={chromeBottom + 12}
+          locationCtaVisible={mapReady && usefulHeight > 130 && (locationVisibility.outside || centered)}
+          layersMenuOpen={layersOpen}
           sheetHeight={interaction ? height - interaction.targetOffset : height * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
         sheet={{ interaction, header, style: styles.sheet, onVisibleHeightChange: setVisibleSheetHeight }} renderPhase={() => content} />
       <View testID="passenger-top-chrome" pointerEvents="box-none" onTouchStart={dismissKeyboard}
-        style={[styles.topChrome, { top: topInset + 8 }]}>
+        style={[styles.topChrome, { top: 8 }]}>
         {flow.phase === 'home' && !flow.field && !reviewing ? <>
           <Image source={require('../../../assets/brand/vima_header_lockup_final.png')} style={styles.headerLockup}
             resizeMode="contain" accessibilityLabel="Vima" />
@@ -526,7 +530,8 @@ const [xs, sm, md, lg, base] = t.spacing.scalePx as [number, number, number, num
 const styles = StyleSheet.create({
   fill: { flex: 1 }, center: { textAlign: 'center' }, muted: { color: t.colors.gray },
   root: { flex: 1, backgroundColor: '#F6F7F8' },
-  primarySurface: { flex: 1, marginHorizontal: 16, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+  primarySurface: { flex: 1 },
+  mapViewport: { marginHorizontal: 4, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     overflow: 'hidden', backgroundColor: '#F6F7F8' },
   topChrome: { position: 'absolute', left: 16, right: 16, minHeight: 48, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },

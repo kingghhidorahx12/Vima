@@ -23,7 +23,7 @@ async function press(tree: ReactTestRenderer, label: string) {
   await act(async () => node.props.onPress()); await settle();
 }
 async function mapLayout(tree: ReactTestRenderer, height = 700) {
-  await act(async () => id(tree, 'passenger-map-surface').props.onLayout({ nativeEvent: { layout: { width: 358, height } } }));
+  await act(async () => id(tree, 'passenger-map-surface').props.onLayout({ nativeEvent: { layout: { width: 390, height } } }));
 }
 async function measure(tree: ReactTestRenderer, content = 250, header = 28) {
   await act(async () => {
@@ -39,7 +39,7 @@ async function measure(tree: ReactTestRenderer, content = 250, header = 28) {
   return visible;
 }
 
-test('shell uses inset-aware floating chrome, rounded inset map and four accessible tabs outside the map', async () => {
+test('status bar and 4 dp gap precede the clipped inset map, while sheet and nav remain full width', async () => {
   for (const [top, bottom] of [[0, 0], [24, 16], [48, 34]]) {
     const h = createHarness({}, { insets: { top, bottom, left: 0, right: 0 } });
     const fixture = createPassengerFixtureGateway(clock); const tree: ReactTestRenderer = await h.render(fixture.gateway);
@@ -47,14 +47,23 @@ test('shell uses inset-aware floating chrome, rounded inset map and four accessi
       await settle();
       assert.equal(style(id(tree, 'passenger-root')).backgroundColor, '#F6F7F8');
       assert.equal(tree.root.findAllByType('SafeAreaView' as never).length, 0);
+      assert.equal(style(id(tree, 'passenger-map-top-gap')).height, top! + 4);
       const surface = id(tree, 'passenger-map-surface');
-      assert.equal(style(surface).marginHorizontal, 16);
-      assert.equal(style(surface).borderTopLeftRadius, 24); assert.equal(style(surface).borderTopRightRadius, 24);
-      assert.equal(style(surface).overflow, 'hidden'); assert.equal(style(surface).borderWidth, undefined);
+      assert.equal(style(surface).marginHorizontal, undefined);
+      assert.equal(style(surface).overflow, undefined);
       assert.equal(surface.props.collapsable, false);
+      const mapViewport = surface.findAllByType('View' as never).find(n => style(n).marginHorizontal === 4);
+      assert.ok(mapViewport);
+      assert.equal(mapViewport!.props.collapsable, false);
+      assert.equal(style(mapViewport!).borderTopLeftRadius, 24); assert.equal(style(mapViewport!).borderTopRightRadius, 24);
+      assert.equal(style(mapViewport!).overflow, 'hidden'); assert.equal(style(mapViewport!).borderWidth, undefined);
+      assert.equal(mapViewport!.findAllByType('NativeMapBoundary' as never).length, 1);
+      assert.equal(mapViewport!.findAllByType('SheetBoundary' as never).length, 0);
+      assert.equal(style(host(tree, 'SheetBoundary')).marginHorizontal, undefined);
       const chrome = id(tree, 'passenger-top-chrome');
-      assert.equal(style(chrome).position, 'absolute'); assert.equal(style(chrome).top, top! + 8);
+      assert.equal(style(chrome).position, 'absolute'); assert.equal(style(chrome).top, 8);
       assert.equal(style(chrome).left, 16); assert.equal(style(chrome).backgroundColor, undefined);
+      assert.equal(host(tree, 'PassengerMapContent').props.topOcclusion, 68);
       const logo = chrome.findByType('Image' as never);
       assert.match(logo.props.source, /vima_header_lockup_final\.png$/);
       assert.equal(style(logo).height, 28); assert.equal(style(logo).backgroundColor, undefined);
@@ -65,6 +74,7 @@ test('shell uses inset-aware floating chrome, rounded inset map and four accessi
       assert.equal(notifications.props.hitSlop, 4);
       const nav = id(tree, 'passenger-bottom-navigation');
       assert.equal(surface.findAll(n => n.props.testID === 'passenger-bottom-navigation').length, 0);
+      assert.equal(style(nav).marginHorizontal, undefined);
       assert.equal(style(nav).paddingBottom, Math.max(8, bottom!));
       assert.equal(style(nav).height, Math.max(72, 56 + bottom!));
       const tabs = nav.findAllByType('Pressable' as never);
