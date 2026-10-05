@@ -47,7 +47,10 @@ test('status bar and 4 dp gap precede the clipped inset map, while sheet and nav
       await settle();
       assert.equal(style(id(tree, 'passenger-root')).backgroundColor, '#F6F7F8');
       assert.equal(tree.root.findAllByType('SafeAreaView' as never).length, 0);
+      assert.equal(host(tree, 'StatusBar').props.style, 'light');
       assert.equal(style(id(tree, 'passenger-map-top-gap')).height, top! + 4);
+      assert.equal(style(id(tree, 'passenger-status-surface')).height, top);
+      assert.equal(style(id(tree, 'passenger-status-surface')).backgroundColor, '#0B0F0E');
       const surface = id(tree, 'passenger-map-surface');
       assert.equal(style(surface).marginHorizontal, undefined);
       assert.equal(style(surface).overflow, undefined);
@@ -64,6 +67,7 @@ test('status bar and 4 dp gap precede the clipped inset map, while sheet and nav
       assert.equal(style(chrome).position, 'absolute'); assert.equal(style(chrome).top, 8);
       assert.equal(style(chrome).left, 16); assert.equal(style(chrome).backgroundColor, undefined);
       assert.equal(host(tree, 'PassengerMapContent').props.topOcclusion, 68);
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
       const logo = chrome.findByType('Image' as never);
       assert.match(logo.props.source, /vima_header_lockup_final\.png$/);
       assert.equal(style(logo).height, 28); assert.equal(style(logo).backgroundColor, undefined);
@@ -87,7 +91,7 @@ test('status bar and 4 dp gap precede the clipped inset map, while sheet and nav
   }
 });
 
-test('nav visibility follows Search/request/matching/assignment while the map, sheet and selection persist', async () => {
+test('bottom nav exists only in normal Home and returns after internal back without remounting map or sheet', async () => {
   const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { reduced: true });
   let finish: () => void = () => {};
   const pending = new Promise<void>(resolve => { finish = resolve; });
@@ -98,17 +102,80 @@ test('nav visibility follows Search/request/matching/assignment while the map, s
     await settle(); assert.equal(hasNav(tree), true);
     await press(tree, '¿A dónde vamos?'); assert.equal(hasNav(tree), false);
     await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
-    assert.equal(hasNav(tree), true); // Reviewing.
+    assert.equal(hasNav(tree), false); // Selection/reviewing has no nav.
     const destination = host(tree, 'PassengerMapContent').props.destination;
     await press(tree, 'Origen'); assert.equal(hasNav(tree), false);
     await act(async () => h.back()); await settle();
-    assert.equal(hasNav(tree), true); assert.equal(host(tree, 'PassengerMapContent').props.destination.id, destination.id);
-    await press(tree, 'Confirmar ubicaciones'); assert.equal(hasNav(tree), true);
+    assert.equal(hasNav(tree), false); assert.equal(host(tree, 'PassengerMapContent').props.destination.id, destination.id);
+    await press(tree, 'Confirmar ubicaciones'); assert.equal(hasNav(tree), false);
+    await press(tree, 'Volver'); assert.equal(hasNav(tree), true);
+    await press(tree, '¿A dónde vamos?'); assert.equal(hasNav(tree), false);
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    await press(tree, 'Confirmar ubicaciones'); assert.equal(hasNav(tree), false);
     await press(tree, 'Solicitar viaje'); assert.equal(hasNav(tree), false); // Request is still pending.
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
     await act(async () => finish()); await settle(); assert.equal(hasNav(tree), false);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
     await act(async () => fixture.controls.advance('assigned')); await settle(); assert.equal(hasNav(tree), false);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.unmountedMap, 0); assert.equal(h.mounted.sheet, 1);
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('confirmation title floats over the persistent map with approved geometry and no duplicate safe-area occlusion', async () => {
+  for (const [reduced, top] of [[false, 0], [false, 48], [true, 48]] as const) {
+    const fixture = createPassengerFixtureGateway(clock);
+    const h = createHarness({}, { reduced, insets: { top, bottom: 34, left: 0, right: 0 } });
+    const tree: ReactTestRenderer = await h.render(fixture.gateway);
+    try {
+      await settle();
+      const surface = id(tree, 'passenger-map-surface');
+      const homeSurface = style(surface);
+      assert.equal(hasNav(tree), true);
+      assert.equal(style(id(tree, 'passenger-sheet-content')).paddingBottom, 20);
+      await press(tree, '¿A dónde vamos?');
+      assert.equal(hasNav(tree), false);
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
+      await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+      assert.equal(hasNav(tree), false);
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
+      await press(tree, 'Confirmar ubicaciones');
+      const pill = id(tree, 'passenger-confirmation-pill');
+      const pillStyle = style(pill);
+      assert.equal(pill.props.pointerEvents, 'none');
+      assert.equal(pillStyle.position, 'absolute');
+      assert.equal(pillStyle.top, 12);
+      assert.equal(pillStyle.alignSelf, 'center');
+      assert.equal(pillStyle.height, 40);
+      assert.equal(pillStyle.paddingHorizontal, 16);
+      assert.equal(pillStyle.width, undefined);
+      assert.equal(pillStyle.borderRadius, 999);
+      assert.equal(pillStyle.backgroundColor, '#FFFFFF');
+      assert.equal(pillStyle.borderWidth, undefined);
+      assert.deepEqual(pillStyle.boxShadow, [{ offsetX: 0, offsetY: 2, blurRadius: 8,
+        spreadDistance: 0, color: 'rgba(11, 15, 14, 0.06)' }]);
+      const label = pill.findByType('Text' as never);
+      assert.equal(label.props.children, 'Confirma tu viaje');
+      assert.equal(label.props.numberOfLines, 1);
+      assert.equal(style(label).fontSize, 16);
+      assert.equal(style(label).fontWeight, '600');
+      assert.match(style(label).fontFamily, /Inter_600SemiBold/);
+      assert.equal(style(label).color, '#0B0F0E');
+      assert.equal(id(tree, 'passenger-top-chrome').findAll(n => n.props.children === 'Confirma tu viaje').length, 0);
+      assert.equal(style(surface).flex, homeSurface.flex);
+      assert.equal(style(surface).height, homeSurface.height);
+      assert.equal(surface.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 1);
+      assert.equal(hasNav(tree), false);
+      assert.equal(style(id(tree, 'passenger-sheet-content')).paddingBottom, 54);
+      assert.equal(host(tree, 'PassengerMapContent').props.topOcclusion, 68);
+      assert.equal(style(id(tree, 'passenger-map-top-gap')).height, top + 4);
+      await press(tree, 'Volver');
+      assert.equal(hasNav(tree), true);
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
+      assert.equal(h.mounted.map, 1);
+      assert.equal(h.mounted.sheet, 1);
+    } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+  }
 });
 
 test('review fit waits for actual phase layout; confirm emits an independent fit only after its new sheet settles', async () => {
@@ -120,7 +187,8 @@ test('review fit waits for actual phase layout; confirm emits an independent fit
     await act(async () => host(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
     assert.equal(fit(), undefined);
     await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
-    assert.equal(fit(), undefined); // Home measurement cannot authorize reviewing.
+    assert.equal(fit(), undefined); // Home measurement and old nav layout cannot authorize reviewing.
+    await mapLayout(tree); // The surface now recovers the bottom-nav space.
     const firstHeight = await measure(tree, 252);
     const first = fit(); assert.ok(first); assert.equal(first.sheetHeight, firstHeight);
     const map = host(tree, 'PassengerMapContent').props;
@@ -144,9 +212,10 @@ test('review fit waits for actual phase layout; confirm emits an independent fit
     const field = host(tree, 'TextInput'); await act(async () => field.props.onChangeText('Centro')); await settle();
     await mapLayout(tree, 772); await measure(tree, 240); assert.equal(fit(), undefined);
     await press(tree, `${fixturePlaces[2]!.name}, ${fixturePlaces[2]!.address}`);
-    await measure(tree, 254); assert.equal(fit(), undefined); // Wait for the surface after nav returns.
+    await measure(tree, 254);
+    const next = fit(); assert.ok(next.sequence > final.sequence); // Search lock ended and nav remains hidden.
     await mapLayout(tree); await measure(tree, 254);
-    assert.ok(fit().sequence > final.sequence);
+    assert.equal(fit().sequence, next.sequence);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });

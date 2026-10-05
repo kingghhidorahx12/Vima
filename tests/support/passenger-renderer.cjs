@@ -29,6 +29,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => insets },
     'react-native-reanimated': { __esModule: true, ...animated },
     'expo-image': { Image: 'ExpoImage' },
+    'expo-status-bar': { StatusBar: 'StatusBar' },
     'expo-router': { useFocusEffect: React.useEffect },
     'expo-sqlite/kv-store': { __esModule: true, default: {
       getItem: async key => kv.get(key) ?? null, setItem: async (key, value) => { kv.set(key, value); },

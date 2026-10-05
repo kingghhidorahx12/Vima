@@ -693,6 +693,8 @@ test('explicit location confirmation still emits a full route fit after its actu
     assert.equal(nativeNode(tree, 'PassengerMapContent').props.fitRoute, undefined);
     await h.act(async () => press(tree, 'Confirmar ubicaciones'));
     await settle(h);
+    // Hiding the nav changes the measured surface height; wait for that layout before fitting.
+    await h.act(async () => layout.props.onLayout({ nativeEvent: { layout: { width: 390, height: 772 } } }));
     const measured = (testID: string) => tree.root.find(n => typeof n.type === 'string' && n.props.testID === testID);
     const measure = async () => {
       await h.act(async () => {
@@ -815,7 +817,7 @@ test('location CTA follows settled projection and actual sheet height without co
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('bottom Inicio reuses returnHome from selection/search and is absent during an active ride', async () => {
+test('bottom Inicio exists only in Home, and internal back returns there from selection/search', async () => {
   const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   try {
@@ -824,6 +826,8 @@ test('bottom Inicio reuses returnHome from selection/search and is absent during
     await h.act(async () => press(tree, 'Origen'));
     assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => n.props.accessibilityLabel === 'Inicio').length, 0);
     await h.act(async () => h.back()); await settle(h);
+    assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => n.props.accessibilityLabel === 'Inicio').length, 0);
+    await h.act(async () => press(tree, 'Volver')); await settle(h);
     await h.act(async () => press(tree, 'Inicio')); await settle(h);
     assert.ok(text(tree).includes('¿A dónde vamos?'));
     assert.equal(tree.root.findAllByType('TextInput' as never).length, 0);
