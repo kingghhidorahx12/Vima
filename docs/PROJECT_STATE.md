@@ -1,9 +1,77 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-04 en `codex/premium-media-pricing-p0`, creada desde el HEAD publicado
-de `codex/motion-pricing-p0`. No se modificaron ramas históricas ni main.
+Actualizado 2026-10-04 en `codex/passenger-shell-route-autofit-p0`, desde el HEAD publicado
+`b2a9c11` de `codex/premium-media-pricing-p0`. Sin reset ni merge a main.
 
 ## IMPLEMENTADO
+
+### Shell persistente y auto-fit reviewing — 2026-10-04
+
+Implementado desde `b2a9c11`. Esta sección sustituye el shell anterior con header blanco,
+SafeAreaView global y navegación Inicio/Favoritos; no cambia pricing ni reglas comerciales.
+
+- Root normal `#F6F7F8`; superficie principal con margen horizontal 16 dp, radios superiores
+  24 dp, sin borde, `overflow: hidden` y contenedor nativo no colapsable. `MapViewportClip`,
+  MapLibre y `VimaRideSheet` siguen montados durante todo el flujo.
+- Chrome flotante sobre mapa: lockup master izquierdo, sin fondo/chip/wordmark runtime;
+  notificaciones 40 dp con icono existente de 24 dp, sombra y hitSlop hasta 48 dp. No existe
+  boundary de notificaciones: está deshabilitado accesiblemente y sin badge ni navegación.
+  El resto de fases conserva back/títulos sobre mapa, sin reservar una barra blanca.
+- `useSafeAreaInsets`: top sólo en chrome; bottom sólo en nav cuando está visible. Al ocultar
+  nav, el contenido del sheet protege sus acciones con el inset inferior. La superficie del
+  mapa no recibe un SafeAreaView global. Insets/medición del chrome se incorporan una vez
+  a la oclusión superior usada por fit y recenter/visibilidad de «Tu ubicación».
+- Bottom nav externo al mapa: Inicio/Viajes/Pagos/Perfil, iconos 24 dp y labels 12 dp Medium.
+  Sólo Inicio es funcional y seleccionado; los otros tres tabs están disabled, sin rutas ni
+  handlers. Altura mínima 72 dp; crece si el inset inferior exige mantener hit targets de
+  48 dp. Favoritos permanece dentro del flujo, sin tab inferior.
+- Nav visible en Home/reviewing/confirm; se retira en cualquier field/Search, requesting,
+  matching y assigned. Fade con timings vigentes, sin trasladar el mapa ni remount de
+  mapa/sheet. Reduced Motion conserva aparición simple y la política de Camera existente.
+- `usePassengerRouteFit` emite un RouteFitIntent por identidad estable de quote/draft al
+  llegar una ruta válida durante reviewing. Incluye origen, todos los puntos LineString o
+  MultiLineString y destino. Sólo valida el candidato de cámara; no modifica route payload.
+- El fit espera mapa listo, layout de la superficie acorde al nav, medición natural de
+  contenido/header y altura visible REAL de la composición actual, al terminar su snap.
+  Las mediciones tienen clave de composición; callbacks obsoletos no autorizan un fit.
+  Sólo se remonta contenido medido, nunca mapa ni sheet; escribir o recibir quote tardía
+  durante Search no reemplaza el input ni roba cámara.
+- Confirmar ubicaciones conserva una intención independiente y espera el layout real de
+  confirmación. No reutiliza altura de reviewing. Cada intención captura su altura real;
+  Camera/fitBounds vigentes consumen una secuencia una sola vez. No hay polling, timers,
+  nuevos cálculos de bounds ni refit por pan, tráfico, sheen, renders o cambios menores de
+  altura. Una nueva quote/draft habilita otro fit temprano; cada pulsación de Confirmar
+  habilita sólo su segundo fit.
+- Padding interno: sheet real y chrome superpuesto, más reserva existente de controles.
+  Ni los 16 dp exteriores ni la barra inferior se suman dentro del mapa. Incidentes se
+  colocan bajo el chrome, y LocationCTA considera la oclusión superior nueva.
+- Sin cambios en PricingEngine/Config, endpoint de quotes, priced/unpriced/TTL/idempotencia,
+  TomTom/routing/route_unavailable, RouteLayer/routeGeometry, matching, ranking, pagos,
+  master assets, tokens Visual/Motion, Camera ni reglas/gestos/snaps de VimaRideSheet.
+
+Validaciones: TypeScript y lint sin errores/warnings; suite completa 134/134; worklets
+18/18; Expo Doctor 21/21; export Hermes Android/iOS e aislamiento de fixtures/servidor
+correctos. Continúan los avisos previos de MODULE_TYPELESS_PACKAGE_JSON y deprecación
+react-test-renderer. Se revisaron siete composiciones mediante proyección HTML local
+con dobles nativos, sin certificar Yoga, rasterización de mapa o Android físico.
+
+No hay cambios nativos, dependencias ni config Expo. No se ejecutó EAS Build ni se generó
+APK; esta tarea no requiere un Development Build nuevo.
+
+PENDIENTE ANDROID FÍSICO (no marcado como probado):
+
+1. Home: logo izquierdo sin chip, notificaciones sin badge, fondo exterior, margen/radio y
+   clipping real de tiles/markers/route/traffic/vehicle.
+2. Search: nav desaparece, recupera espacio, teclado/foco correctos; cerrar restaura nav y
+   selección sin remontar mapa/sheet.
+3. Seleccionar destino y esperar ruta SIN Confirmar: fit reviewing incluye ambos pines y
+   toda la ruta sobre el sheet, con padding real.
+4. Pan/zoom después del fit: cámara no regresa sola; nuevo destino/quote habilita un nuevo fit.
+5. Confirmar ubicaciones: esperar nueva altura; segundo encuadre correcto sin repeticiones.
+6. Recenter/LocationCTA, incident card y back interno en la nueva superficie.
+7. Reduced Motion: mismos encuadres, sin animación espacial prolongada.
+8. Safe areas: status bar, navegación Android de botones/gestos, distintos insets y teclado;
+   landscape únicamente si lo admite la configuración vigente.
 
 ### Refinamiento de composición, ruta y ubicación contextual — 2026-10-04
 

@@ -141,3 +141,19 @@ Inicio expone sólo «¿A dónde vamos?» como acción principal del panel, cons
 interna del origen. «Tu ubicación» reemplaza al recenter circular y aparece sólo fuera del
 viewport útil. Entradas sutiles reutilizan Motion System y respetan Reduced Motion.
 La barra inferior reutiliza acciones existentes; no autoriza nuevos destinos funcionales.
+
+## Shell Passenger y fit temprano — aprobado 2026-10-04
+
+- Sustituir el header blanco/SafeAreaView global por root #F6F7F8, superficie de mapa con
+  margen 16 dp y radios superiores 24 dp, chrome flotante y sheet persistente superpuesto.
+- Conservar lockup master izquierdo sin chip. Notificaciones queda disabled y sin badge
+  hasta que exista un boundary real; no se crea una pantalla ficticia.
+- Navegación inferior: Inicio/Viajes/Pagos/Perfil. Sólo Inicio es funcional P0; los demás
+  módulos son inertes y accesiblemente disabled. Favoritos no es un destino principal.
+- Ocultar nav en Search/requesting/matching/assigned; mantenerlo en Home/reviewing/confirm.
+  El nav absorbe bottom inset fuera del mapa; top inset se aplica una vez al chrome.
+- Nueva quote válida durante reviewing habilita un único fit de origen+ruta completa+destino,
+  después de medir la superficie y el sheet reales. Search siempre conserva camera lock.
+- Confirmar ubicaciones conserva su segundo fit, independiente, tras la nueva medición de
+  confirmación. Pan/zoom no repiten la intención; Camera/Reduced Motion existentes se conservan.
+- Este alcance no modifica decisiones de pricing, contratos, routing, matching ni pagos.
