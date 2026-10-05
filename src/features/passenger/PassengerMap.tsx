@@ -1,7 +1,7 @@
 import type { CircleAppearance } from '../../map/models';
 import { useEffect, useMemo } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
-import { Camera, type CameraMode, type CameraTarget, type RecenterIntent, type RouteFitIntent } from '../../map/Camera';
+import { Camera, type CameraMode, type CameraTarget, type RecenterIntent } from '../../map/Camera';
 import { TrafficFlowLayer } from '../../map/TrafficFlowLayer';
 import { IncidentLayer } from '../../map/IncidentLayer';
 import type { IncidentDetails } from '../../map/incidentDetails';
@@ -12,6 +12,7 @@ import type { VehicleMotionConfig, VehicleSample } from '../../map/vehicleMotion
 import type { Assignment, Place, RideQuote } from './model';
 import { PassengerMapPin, PassengerUserLocation } from './PassengerMapPin';
 import { visualTokens as t } from '../../design/tokens';
+import type { PassengerRouteFitIntent } from './usePassengerRouteFit';
 
 /** Required appearance/viewports are injected. The unfinished map design gets no production defaults. */
 export interface PassengerMapConfig {
@@ -21,11 +22,11 @@ export interface PassengerMapConfig {
   readonly viewport: (quote: RideQuote | undefined, assignment: Assignment | undefined, origin: Place | null) => CameraTarget;
   readonly vehicleMotion: VehicleMotionConfig;
 }
-export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, searchPresentationActive,
+export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, topOcclusion = 0, searchPresentationActive,
   cameraMode = 'automatic', recenter, fitRoute, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
   quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
-  ready: boolean; sheetHeight: number; searchPresentationActive?: boolean; cameraMode?: CameraMode;
-  recenter?: RecenterIntent; fitRoute?: RouteFitIntent; layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
+  ready: boolean; sheetHeight: number; topOcclusion?: number; searchPresentationActive?: boolean; cameraMode?: CameraMode;
+  recenter?: RecenterIntent; fitRoute?: Omit<PassengerRouteFitIntent, 'sheetHeight'> & { sheetHeight?: number }; layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
   onIncidentSelect?: (details: IncidentDetails) => void;
   manualSelection?: { coordinate: Place['coordinate']; kind: 'origin' | 'destination' } | null; config: PassengerMapConfig;
 }) {
@@ -33,14 +34,15 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
   useEffect(() => { sample.set(assignment?.sample ?? null); }, [assignment?.sample, sample]);
   const target = useMemo(() => {
     const view = config.viewport(quote, assignment, origin);
-    // Map bounds already exclude the shell header and SafeAreaView insets.
-    // Only the overlapping sheet is added here, for both fit and explicit recenter.
-    return { ...view, padding: { ...view.padding, bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
-  }, [assignment, config, origin, quote, sheetHeight]);
+    // Outer margins and bottom navigation are outside the measured map. Only overlapping
+    // chrome/sheet enter camera padding; topOcclusion already contains the top safe inset.
+    return { ...view, padding: { ...view.padding, top: Math.max(view.padding?.top ?? 0, topOcclusion), bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
+  }, [assignment, config, origin, quote, sheetHeight, topOcclusion]);
   return <>
     <Camera target={ready ? target : undefined} mode={searchPresentationActive ? 'search-locked' : cameraMode}
       recenter={ready ? recenter : undefined} fitRoute={ready && fitRoute ? {
-        ...fitRoute, padding: { ...target.padding, right: Math.max(target.padding.right ?? 0,
+        ...fitRoute, padding: { ...target.padding,
+          bottom: (target.padding.bottom ?? 0) - sheetHeight + (fitRoute.sheetHeight ?? sheetHeight), right: Math.max(target.padding.right ?? 0,
           t.spacing.mobileHorizontalMarginPx + t.spacing.scalePx[8]! + t.spacing.scalePx[2]!) },
       } : undefined} />
     {displayKeyAvailable ? <TrafficFlowLayer enabled={!!layers?.traffic} /> : null}

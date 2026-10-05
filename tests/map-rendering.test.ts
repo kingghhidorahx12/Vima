@@ -318,3 +318,38 @@ test('launch starts exit as soon as ready and reduced motion only crossfades', a
     await h.act(async () => tree.unmount());
   }
 });
+
+test('both passenger fit intents use measured occlusion and exclude exterior margins/nav under either motion policy', async () => {
+  for (const reduced of [false, true]) {
+    const h = createMapHarness({ reduced }); const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+    const origin = { id: 'o', coordinate: [-99, 19] }; const destination = { id: 'd', coordinate: [-98, 20] };
+    const coordinates = [origin.coordinate, [-100, 22], [-97, 21], destination.coordinate];
+    const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } };
+    const config = { viewport: () => ({ center: [-99, 19], padding: { top: 24, bottom: 20, left: 20, right: 20 } }),
+      route: { width: 4, opacity: 1 }, vehicle: { radius: 12, color: '#000' } };
+    const scene = (sequence: number, measuredHeight: number, search = false, estimatedHeight = 500) => React.createElement(PassengerMap, {
+      quote: { origin, destination, route }, origin, destination, home: false, ready: true, sheetHeight: estimatedHeight,
+      topOcclusion: 92, config, cameraMode: 'user-controlled', searchPresentationActive: search,
+      fitRoute: { sequence, sheetHeight: measuredHeight, coordinates },
+    });
+    const tree: ReactTestRenderer = await h.render(scene(1, 280));
+    const stops = () => h.calls.filter((call: unknown[]) => call[0] === 'setStop');
+    try {
+      assert.equal(stops().length, 1);
+      const first = stops()[0][1];
+      assert.deepEqual(first.bounds, [-100, 19, -97, 22]);
+      assert.deepEqual(first.padding, { top: 92, bottom: 300, left: 20, right: 80 });
+      assert.equal(first.duration, reduced ? 0 : 420);
+      await h.act(async () => tree.update(scene(1, 282, false, 550)));
+      assert.equal(stops().length, 1); // Height/target recomposition is not a fit trigger.
+      await h.act(async () => tree.update(scene(2, 390, true)));
+      assert.equal(stops().length, 1); // Search rejects even a new sequence.
+      await h.act(async () => tree.update(scene(2, 390)));
+      assert.equal(stops().length, 2);
+      assert.equal(stops()[1][1].padding.bottom, 410);
+      assert.equal(stops()[1][1].duration, reduced ? 0 : 420);
+      await h.act(async () => tree.update(scene(2, 392)));
+      assert.equal(stops().length, 2);
+    } finally { await h.act(async () => tree.unmount()); }
+  }
+});
