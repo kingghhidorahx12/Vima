@@ -7,7 +7,7 @@ const renderer = require('react-test-renderer');
 const query = require('@tanstack/react-query');
 
 // Native boundaries are test doubles. This tests React identity/interaction, not native rendering.
-function createHarness(boundaryOverrides = {}, { reduced = false } = {}) {
+function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top: 24, bottom: 16, left: 0, right: 0 } } = {}) {
   const animations = [];
   const projection = { point: [190, 120], project: undefined };
   const modules = new Map();
@@ -19,13 +19,14 @@ function createHarness(boundaryOverrides = {}, { reduced = false } = {}) {
   let back;
   native.BackHandler = { addEventListener: (_event, fn) => { back = fn; return { remove() { back = undefined; } }; } };
   native.Keyboard = { dismiss() { mounted.keyboardDismiss++; mounted.inputFocused = false; } };
-  const animated = { default: { View: 'AnimatedView' }, cancelAnimation() {}, ReduceMotion: { System: 'system', Never: 'never' },
+  const fade = { duration() { return this; }, easing() { return this; }, reduceMotion() { return this; } };
+  const animated = { FadeIn: fade, FadeOut: fade, default: { View: 'AnimatedView' }, cancelAnimation() {}, ReduceMotion: { System: 'system', Never: 'never' },
     useSharedValue: (initial) => { const value = React.useRef(initial); return React.useMemo(() => ({ get: () => value.current, set: (next) => { value.current = next; } }), []); },
     useAnimatedStyle: (fn) => fn(), withTiming: (value, config) => { animations.push({ value, ...config }); return value; }, withRepeat: (value) => value,
     withSequence: (...values) => values.at(-1), withDelay: (_duration, value) => value };
   const kv = new Map();
   const overrides = {
-    'react-native': native, 'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+    'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => insets },
     'react-native-reanimated': { __esModule: true, ...animated },
     'expo-image': { Image: 'ExpoImage' },
     'expo-router': { useFocusEffect: React.useEffect },

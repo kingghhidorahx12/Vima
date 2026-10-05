@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Image, Keyboard, Pressable, ScrollView, StyleSheet, TextInput, View, type ImageSourcePropType } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import type { VimaMapRef } from '../../map/VimaMap';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph';
 import { VimaButton } from '../../design/components/VimaButton';
@@ -20,6 +20,8 @@ import { VimaLaunchSurface } from '../../motion/VimaLaunchSurface';
 import { motionTimings } from '../../motion/timing';
 import { PassengerMap, type PassengerMapConfig } from './PassengerMap';
 import { PassengerRideShell } from './PassengerRideShell';
+import { PassengerBottomNavigation, bottomNavigationHeight } from './PassengerBottomNavigation';
+import { usePassengerRouteFit } from './usePassengerRouteFit';
 import { isMatching, validDraft, type Assignment, type OriginStatus, type PassengerGateway, type Place, type RideQuote } from './model';
 import { usePassengerFlow } from './usePassengerFlow';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
@@ -51,6 +53,11 @@ export interface PassengerScreenProps {
 
 export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }: PassengerScreenProps) {
   const flow = usePassengerFlow(gateway);
+  const safeArea = useSafeAreaInsets();
+  const topInset = inset ? safeArea.top : 0;
+  const bottomInset = inset ? safeArea.bottom : 0;
+  const chromeBottom = topInset + 8 + 48;
+  const [mapLayoutNavHeight, setMapLayoutNavHeight] = useState<number>();
   const [focused, setFocused] = useState(false);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const [height, setHeight] = useState(0);
@@ -88,7 +95,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [pulseVisible, setPulseVisible] = useState(true);
   const [reviewedDraft, setReviewedDraft] = useState<string>();
   const [contentMeasure, setContentMeasure] = useState<{ key: string; height: number }>();
-  const [headerHeight, setHeaderHeight] = useState(0);
+  const [headerMeasure, setHeaderMeasure] = useState<{ key: string; height: number }>();
+  const [viewportMeasure, setViewportMeasure] = useState<{ key: string; height: number }>();
   const pulseHeight = useRef(0);
   const scrollOffset = useRef(0);
   const scroll = useRef<ScrollView>(null);
@@ -96,21 +104,21 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const dismissKeyboard = useCallback(() => { input.current?.blur(); Keyboard.dismiss(); }, []);
   const matching = isMatching(flow.phase);
   const assignment = flow.phase === 'assigned' ? flow.trip?.assignment : undefined;
+  const navVisible = flow.field === null && flow.phase !== 'requesting' && !matching && flow.phase !== 'assigned';
+  const navHeight = navVisible ? bottomNavigationHeight(bottomInset) : 0;
   const draftKey = `${flow.origin?.id ?? ''}:${flow.destination?.id ?? ''}:${flow.quote?.pricing ? flow.quote.id : ''}`;
   const reviewing = (flow.phase === 'confirm' && reviewedDraft !== draftKey) || (flow.phase === 'home' && !!flow.destination);
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
-  const measureKey = `${flow.phase}:${flow.field ?? ''}:${searchAction}:${reviewing}`;
-  const naturalHeight = contentMeasure?.key === measureKey ? contentMeasure.height + headerHeight : 0;
-  const routeFit = useMemo(() => {
-    if (!routeFitRequestId || reviewing || flow.phase !== 'confirm' || flow.field || !naturalHeight || !flow.quote ||
-      !flow.origin || !flow.destination) return undefined;
-    const geometry = flow.quote.route.geometry;
-    const line = geometry.type === 'LineString' ? geometry.coordinates : geometry.coordinates.flat();
-    const coordinates = [flow.origin.coordinate, ...line.map(normalizeCoordinate), flow.destination.coordinate];
-    if (coordinates.length < 2) return undefined;
-    return { coordinates, sequence: routeFitRequestId };
-  }, [routeFitRequestId, reviewing, flow.phase, flow.field, flow.quote, flow.origin, flow.destination, naturalHeight]);
+  // Key only the measured content, never the persistent map/sheet. Search typing and late
+  // quotes do not replace the input; review and confirm get independent native layouts.
+  const measureKey = JSON.stringify(flow.field ? ['search', flow.field, searchAction] :
+    [flow.phase, reviewing, flow.quote?.id, flow.origin?.id, flow.destination?.id, flow.quote?.route.geometry]);
+  const currentMeasureKey = useRef(measureKey);
+  useLayoutEffect(() => { currentMeasureKey.current = measureKey; }, [measureKey]);
+  const headerHeight = headerMeasure?.key === measureKey ? headerMeasure.height : 0;
+  const naturalHeight = contentMeasure?.key === measureKey && headerMeasure?.key === measureKey
+    ? contentMeasure.height + headerHeight : 0;
   const interaction = useMemo(() => {
     if (height <= 0) return undefined;
     const base = rideSheetGeometry(height, snap);
@@ -121,9 +129,18 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const targetOffset = height - visibleHeight;
     return createRideSheetInteraction(height, targetOffset, [targetOffset]);
   }, [height, snap, flow.field, flow.phase, reviewing, naturalHeight]);
+  const actualSheetHeight = viewportMeasure?.key === measureKey && headerMeasure?.key === measureKey
+    ? viewportMeasure.height + headerHeight : undefined;
+  const settledSheetHeight = naturalHeight && interaction && actualSheetHeight !== undefined &&
+    Math.abs(actualSheetHeight - (height - interaction.targetOffset)) < 1 ? actualSheetHeight : undefined;
+  const routeFit = usePassengerRouteFit({ quote: flow.quote, origin: flow.origin, destination: flow.destination,
+    reviewing, confirming: flow.phase === 'confirm' && !reviewing, searchActive: flow.field !== null,
+    ready: mapReady && !mapFailed && focused && mapWidth > 0 && mapLayoutNavHeight === navHeight &&
+      height - (settledSheetHeight ?? height) > chromeBottom + 12,
+    measuredSheetHeight: settledSheetHeight, confirmationRequest: routeFitRequestId });
   const contentOpacity = useSharedValue(1);
   const usefulHeight = visibleSheetHeight === undefined ? interaction?.targetOffset ?? height : Math.max(0, height - visibleSheetHeight);
-  const locationVisibility = useLocationVisibility(nativeMap, flow.currentLocation?.coordinate, mapWidth, usefulHeight, mapReady && focused);
+  const locationVisibility = useLocationVisibility(nativeMap, flow.currentLocation?.coordinate, mapWidth, usefulHeight, mapReady && focused, chromeBottom);
   const announcedAssignment = useRef<string | undefined>(undefined);
   useEffect(() => {
     scrollOffset.current = 0;
@@ -144,7 +161,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const sheetTitle = flow.field ? pickingMap ? 'Elegir en el mapa' : searchAction === 'contribute-form' ? 'Agregar lugar' :
     searchAction === 'contribute-done' ? '' : flow.field === 'origin' ? '¿Desde dónde?' : '¿A dónde vamos?'
     : assignment ? `Llegará en ${assignment.etaMinutes} min` : '';
-  const header = <View onTouchStart={dismissKeyboard} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)} style={styles.sheetHeader}>
+  const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
+    onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }} style={styles.sheetHeader}>
     <View style={styles.handle} />
     {sheetTitle ? <VimaText variant={flow.phase === 'home' || assignment ? 'h3' : 'bodyMedium'} style={[styles.center, !!assignment && styles.eta]}
       accessibilityRole="header">{sheetTitle}</VimaText> : null}
@@ -210,7 +228,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   }, []));
   const quotePrice = flow.quote?.pricing?.status === 'priced' ? { amount: flow.quote.pricing.quote.price.totalMinor / 100, currency: 'MXN' } : flow.quote?.price;
   const money = (amount: number, currency: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
-  const content = <Animated.View style={[styles.fill, animatedContent]}>
+  const content = <Animated.View key={measureKey} testID="passenger-sheet-viewport" style={[styles.fill, animatedContent]}
+    onLayout={(event) => { if (currentMeasureKey.current === measureKey) setViewportMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
     {flow.connection !== 'online' ? <StatusNotice>Sin conexión · Intentando reconectar</StatusNotice> : null}
     {flow.quoteExpired ? <StatusNotice>La cotización venció. Revisa y confirma la nueva cotización.</StatusNotice> : null}
     {flow.error ? <Pressable onPress={flow.retry} accessibilityRole="button" accessibilityLabel={flow.error.message}>
@@ -218,10 +237,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     </Pressable> : null}
     <ScrollView ref={scroll} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets
       onTouchStart={() => { dismissKeyboard(); setIncident(null); }} onScrollBeginDrag={dismissKeyboard}
-      contentContainerStyle={styles.content}
-      onContentSizeChange={(_width, contentHeight) => setContentMeasure((previous) => previous?.key === measureKey && previous.height === contentHeight
-        ? previous : { key: measureKey, height: contentHeight })}
       onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
+      <View testID="passenger-sheet-content" style={[styles.content, !navVisible && { paddingBottom: base + bottomInset }]}
+        onLayout={(event) => { if (currentMeasureKey.current === measureKey) setContentMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
       {flow.field && pickingMap ? <>
         <VimaText variant="bodySmall" style={styles.center}>Toca el mapa para elegir la ubicación</VimaText>
         <VimaButton label={searchAction === 'map' ? 'Confirmar ubicación' : 'Continuar'}
@@ -378,30 +396,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           <VimaButton secondary compact danger label="Cancelar" onPress={() => { void flow.act('cancel'); }} disabled={blocked} />
         </View>}
       </> : null}
+      </View>
     </ScrollView>
   </Animated.View>;
-  return <SafeAreaView edges={inset ? undefined : []} style={styles.fill}>
-    <View onTouchStart={dismissKeyboard} style={styles.top}>
-      {flow.phase === 'home' && !flow.field && !reviewing ? <>
-        <View style={[styles.headerSide, styles.headerControl]}><VimaGlyph name="menu" /></View>
-        <View pointerEvents="none" style={styles.headerLockupSlot}>
-          <Image source={require('../../../assets/brand/vima_header_lockup_final.png')} style={styles.headerLockup}
-            resizeMode="contain" accessibilityLabel="Vima" />
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Origen" accessibilityHint="Editar ubicación de salida"
-          onPress={() => openField('origin')} style={({ pressed }) => [styles.headerSide, styles.headerControl, pressed && surfaces.pressed]}>
-          <VimaGlyph name="recenter" color={flow.originStatus === 'unavailable' ? t.colors.amber : t.colors.graphite} />
-        </Pressable>
-      </>
-        : <>{matching ? <View style={[styles.headerSide, styles.headerControl]}><VimaGlyph name="menu" /></View>
-          : <Pressable accessibilityRole="button" accessibilityLabel="Volver" disabled={flow.phase === 'requesting' || !!assignment}
-            onPress={goBack} style={({ pressed }) => [styles.headerSide, styles.headerControl,
-              (flow.phase === 'requesting' || !!assignment) && styles.controlUnavailable, pressed && surfaces.pressed]}><VimaGlyph name="back" /></Pressable>}
-          <VimaText variant={assignment || matching ? 'bodyMedium' : 'h3'} style={styles.headerTitle} accessibilityRole="header">
-            {assignment ? 'Tu conductor va en camino' : matching ? 'Buscando un conductor' : reviewing ? '' : flow.field ? '' : 'Confirma tu viaje'}
-          </VimaText><View style={[styles.headerSide, matching && styles.headerControl]}>{matching ? <VimaGlyph name="profile" /> : null}</View></>}
-    </View>
-    <View style={styles.fill} onLayout={(event) => { setHeight(event.nativeEvent.layout.height); setMapWidth(event.nativeEvent.layout.width); }}>
+  return <View testID="passenger-root" style={styles.root}>
+    <View testID="passenger-map-surface" collapsable={false} style={styles.primarySurface}
+      onLayout={(event) => { setHeight(event.nativeEvent.layout.height); setMapWidth(event.nativeEvent.layout.width); setMapLayoutNavHeight(navHeight); }}>
       <PassengerRideShell trip={flow.trip}
         map={{ ref: nativeMap, onRegionWillChange: locationVisibility.start, onRegionDidChange: event => {
           locationVisibility.settled();
@@ -420,8 +420,26 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           manualSelection={pickingMap && selectedCoordinate ? { coordinate: selectedCoordinate,
             kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
           cameraMode={reviewing || flow.phase === 'confirm' || mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
+          topOcclusion={chromeBottom + 12}
           sheetHeight={interaction ? height - interaction.targetOffset : height * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
         sheet={{ interaction, header, style: styles.sheet, onVisibleHeightChange: setVisibleSheetHeight }} renderPhase={() => content} />
+      <View testID="passenger-top-chrome" pointerEvents="box-none" onTouchStart={dismissKeyboard}
+        style={[styles.topChrome, { top: topInset + 8 }]}>
+        {flow.phase === 'home' && !flow.field && !reviewing ? <>
+          <Image source={require('../../../assets/brand/vima_header_lockup_final.png')} style={styles.headerLockup}
+            resizeMode="contain" accessibilityLabel="Vima" />
+          <Pressable accessibilityRole="button" accessibilityLabel="Notificaciones" accessibilityHint="Módulo no disponible"
+            accessibilityState={{ disabled: true }} disabled hitSlop={4} style={styles.notification}>
+            <VimaGlyph name="notifications" />
+          </Pressable>
+        </> : <>
+          {!matching && !assignment && flow.phase !== 'requesting' ? <Pressable accessibilityRole="button" accessibilityLabel="Volver"
+            onPress={goBack} style={({ pressed }) => [styles.headerSide, pressed && surfaces.pressed]}><VimaGlyph name="back" /></Pressable> : null}
+          <VimaText variant={assignment || matching ? 'bodyMedium' : 'h3'} style={styles.headerTitle} accessibilityRole="header">
+            {assignment ? 'Tu conductor va en camino' : matching ? 'Buscando un conductor' : reviewing || flow.field ? '' : 'Confirma tu viaje'}
+          </VimaText>
+        </>}
+      </View>
       {mapReady && (interaction?.targetOffset ?? height) > 130 ? <View pointerEvents="box-none"
         style={[styles.mapControls, { bottom: height - (interaction?.targetOffset ?? height) + t.spacing.scalePx[2]! }]}>
         <MapControls available={hasDisplayKey} layers={mapLayers}
@@ -431,26 +449,17 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <View pointerEvents="box-none" style={[styles.locationCTA, { bottom: height - usefulHeight + t.spacing.scalePx[2]! }]}>
           {centered ? <CenteredToast /> : <LocationCTA busy={recentering} onPress={recenterMap} />}
         </View> : null}
-      {incident && (interaction?.targetOffset ?? height) > 100 ? <IncidentCard details={incident}
-        maxHeight={Math.min(200, (interaction?.targetOffset ?? height) - 24)} onClose={() => setIncident(null)} /> : null}
+      {incident && (interaction?.targetOffset ?? height) > chromeBottom + 100 ? <IncidentCard details={incident}
+        topOffset={chromeBottom + 12} maxHeight={Math.min(200, (interaction?.targetOffset ?? height) - chromeBottom - 24)} onClose={() => setIncident(null)} /> : null}
       {!mapFailed && flow.phase === 'home' && !flow.field && !reviewing && (flow.originStatus === 'loading' || flow.originStatus === 'unavailable') ?
-        <ElementEntrance style={styles.mapStatus}><VimaGlyph name="info" color={t.colors.accentBluePressed} /><VimaText variant="caption" accessibilityLiveRegion="polite">
-          {flow.originStatus === 'loading' ? 'Obteniendo tu ubicación...' : 'No se pudo obtener tu ubicación'}</VimaText></ElementEntrance> : null}
-      {mapFailed ? <View style={styles.mapStatus}><VimaGlyph name="warning" color={t.colors.amber} />
+        <ElementEntrance style={[styles.mapStatus, { top: chromeBottom + 12 }]}><Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={() => openField('origin')} style={styles.row}><VimaGlyph name="info" color={t.colors.accentBluePressed} /><VimaText variant="caption" accessibilityLiveRegion="polite">
+          {flow.originStatus === 'loading' ? 'Obteniendo tu ubicación...' : 'No se pudo obtener tu ubicación'}</VimaText></Pressable></ElementEntrance> : null}
+      {mapFailed ? <View style={[styles.mapStatus, { top: chromeBottom + 12 }]}><VimaGlyph name="warning" color={t.colors.amber} />
         <VimaText variant="caption">No se pudo cargar el mapa</VimaText></View> : null}
     </View>
-    {!matching && !assignment && flow.phase !== 'requesting' ? <View style={styles.bottomBar}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Inicio" accessibilityState={{ selected: flow.phase === 'home' && !flow.field && !reviewing }}
-        onPress={goHome} style={({ pressed }) => [styles.bottomItem, pressed && surfaces.pressed]}>
-        <VimaGlyph name="home" color={flow.phase === 'home' && !flow.field && !reviewing ? t.colors.greenDark : t.colors.gray} /><VimaText variant="caption">Inicio</VimaText>
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Favoritos" onPress={() => openSearch()}
-        style={({ pressed }) => [styles.bottomItem, pressed && surfaces.pressed]}>
-        <VimaGlyph name="favorite" color={t.colors.gray} /><VimaText variant="caption">Favoritos</VimaText>
-      </Pressable>
-    </View> : null}
+    <PassengerBottomNavigation visible={navVisible} bottomInset={bottomInset} onHome={goHome} />
     <VimaLaunchSurface active={focused} ready={mapReady || mapFailed} />
-  </SafeAreaView>;
+  </View>;
 }
 
 function SmallPin({ color }: { color: string }) {
@@ -516,15 +525,17 @@ function TextAction({ label, onPress, disabled, danger = false }: { label: strin
 const [xs, sm, md, lg, base] = t.spacing.scalePx as [number, number, number, number, number];
 const styles = StyleSheet.create({
   fill: { flex: 1 }, center: { textAlign: 'center' }, muted: { color: t.colors.gray },
-  top: { height: t.components.buttonPrimary.heightPx, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', position: 'relative',
-    paddingHorizontal: t.spacing.mobileHorizontalMarginPx, backgroundColor: t.colors.white,
-    borderBottomWidth: t.borders.standardWidthPx, borderBottomColor: t.colors.background },
-  headerLockupSlot: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
-  // Uniform scaling of the v2 master's visible bounds (672 × 200 raster derivative).
+  root: { flex: 1, backgroundColor: '#F6F7F8' },
+  primarySurface: { flex: 1, marginHorizontal: 16, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    overflow: 'hidden', backgroundColor: '#F6F7F8' },
+  topChrome: { position: 'absolute', left: 16, right: 16, minHeight: 48, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
   headerLockup: { width: 672 * 28 / 200, height: 28 },
-  headerSide: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-  headerControl: { borderRadius: t.radii.pillPx, backgroundColor: t.colors.background },
-  controlUnavailable: { opacity: 0.4 },
+  headerSide: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center',
+    borderRadius: t.radii.pillPx, backgroundColor: t.colors.white },
+  notification: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
+    borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
+    boxShadow: [{ offsetX: 0, offsetY: 4, blurRadius: 16, color: 'rgba(0,0,0,0.12)' }] },
   headerTitle: { flex: 1, textAlign: 'center', color: t.colors.carbon },
   sheet: { overflow: 'hidden' },
   sheetHeader: { paddingHorizontal: base, alignItems: 'center', paddingTop: sm, paddingBottom: md, gap: sm },
@@ -596,7 +607,4 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: sm, borderRadius: t.radii.pillPx },
   mapControls: { position: 'absolute', right: t.spacing.mobileHorizontalMarginPx },
   locationCTA: { position: 'absolute', alignSelf: 'center' },
-  bottomBar: { flexDirection: 'row', justifyContent: 'space-evenly', backgroundColor: t.colors.white,
-    borderTopWidth: t.borders.standardWidthPx, borderTopColor: surfaceColors.border, paddingVertical: sm },
-  bottomItem: { minHeight: 48, minWidth: 96, alignItems: 'center', justifyContent: 'center', gap: xs, borderRadius: t.radii.fieldPx },
 });

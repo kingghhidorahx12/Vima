@@ -39,3 +39,10 @@ test('location visibility excludes covered sheet, uses local dp and tolerates ed
   assert.equal(locationOutsideViewport([NaN, 100], viewport, true), true);
   assert.equal(locationOutsideViewport([195, 100], { width: NaN, height: 280 }, false), false);
 });
+
+test('current location hidden behind floating chrome is outside the usable viewport', () => {
+  const viewport = { width: 358, height: 300, top: 80 };
+  assert.equal(locationOutsideViewport([179, 60], viewport, false), true);
+  assert.equal(locationOutsideViewport([179, 120], viewport, true), false);
+  assert.equal(locationOutsideViewport([179, 95], viewport, true), true);
+});

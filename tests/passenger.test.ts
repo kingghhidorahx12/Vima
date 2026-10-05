@@ -679,7 +679,7 @@ test('recenter acknowledges only the native completion at the requested coordina
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('only explicit location confirmation emits a full route fit after the sheet is measured', async () => {
+test('explicit location confirmation still emits a full route fit after its actual sheet is measured', async () => {
   const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   try {
@@ -693,15 +693,25 @@ test('only explicit location confirmation emits a full route fit after the sheet
     assert.equal(nativeNode(tree, 'PassengerMapContent').props.fitRoute, undefined);
     await h.act(async () => press(tree, 'Confirmar ubicaciones'));
     await settle(h);
-    const scroll = tree.root.findAllByType('ScrollView' as never).find(node => node.props.onContentSizeChange)!;
-    await h.act(async () => scroll.props.onContentSizeChange(400, 280));
+    const measured = (testID: string) => tree.root.find(n => typeof n.type === 'string' && n.props.testID === testID);
+    const measure = async () => {
+      await h.act(async () => {
+        measured('passenger-sheet-content').props.onLayout({ nativeEvent: { layout: { height: 280 } } });
+        measured('passenger-sheet-header').props.onLayout({ nativeEvent: { layout: { height: 28 } } });
+      });
+      const interaction = nativeNode(tree, 'SheetBoundary').props.interaction;
+      await h.act(async () => measured('passenger-sheet-viewport').props.onLayout({ nativeEvent: {
+        layout: { height: interaction.height - interaction.targetOffset - 28 } } }));
+    };
+    await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+    await measure();
     const fit = nativeNode(tree, 'PassengerMapContent').props.fitRoute;
     assert.ok(fit);
     assert.equal(fit.coordinates[0][0], fixturePlaces[0]!.coordinate[0]);
     assert.equal(fit.coordinates.at(-1)[0], fixturePlaces[1]!.coordinate[0]);
     assert.ok(fit.coordinates.length >= 3);
     const sequence = fit.sequence;
-    await h.act(async () => scroll.props.onContentSizeChange(400, 280));
+    await measure();
     assert.equal(nativeNode(tree, 'PassengerMapContent').props.fitRoute.sequence, sequence);
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
@@ -812,6 +822,8 @@ test('bottom Inicio reuses returnHome from selection/search and is absent during
     await settle(h);
     await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`)); await settle(h);
     await h.act(async () => press(tree, 'Origen'));
+    assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => n.props.accessibilityLabel === 'Inicio').length, 0);
+    await h.act(async () => h.back()); await settle(h);
     await h.act(async () => press(tree, 'Inicio')); await settle(h);
     assert.ok(text(tree).includes('¿A dónde vamos?'));
     assert.equal(tree.root.findAllByType('TextInput' as never).length, 0);

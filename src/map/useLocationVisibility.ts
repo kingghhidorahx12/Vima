@@ -5,7 +5,7 @@ import { locationOutsideViewport } from './locationVisibility';
 
 /** Observe settled native projection, without issuing any camera command or polling. */
 export function useLocationVisibility(map: RefObject<MapRef | null>, coordinate: Coordinate | undefined,
-  width: number, visibleHeight: number, enabled: boolean) {
+  width: number, visibleHeight: number, enabled: boolean, topOcclusion = 0) {
   const [outside, setOutside] = useState(false);
   const serial = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -17,10 +17,10 @@ export function useLocationVisibility(map: RefObject<MapRef | null>, coordinate:
     const version = serial.current;
     timer.current = setTimeout(() => {
       void map.current?.project([...coordinate]).then(point => {
-        if (version === serial.current) setOutside(previous => locationOutsideViewport(point, { width, height: visibleHeight }, previous));
+        if (version === serial.current) setOutside(previous => locationOutsideViewport(point, { width, height: visibleHeight, top: topOcclusion }, previous));
       }).catch(() => { /* A failed projection is not evidence that the user is offscreen. */ });
     }, 150);
-  }, [coordinate, enabled, invalidate, map, visibleHeight, width]);
+  }, [coordinate, enabled, invalidate, map, visibleHeight, width, topOcclusion]);
   const start = useCallback(() => { moving.current = true; invalidate(); }, [invalidate]);
   const settled = useCallback(() => { moving.current = false; sample(); }, [sample]);
   useEffect(() => { sample(); return invalidate; }, [sample, invalidate]);

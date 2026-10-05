@@ -6,10 +6,10 @@ import { VimaGlyph } from '../../design/components/VimaGlyph';
 import { passengerSurfaces as surfaces, surfaceColors } from '../../design/presentation';
 import { ElementEntrance } from '../../motion/ElementEntrance';
 
-export function IncidentCard({ details, onClose, maxHeight }: {
-  details: IncidentDetails; onClose: () => void; maxHeight: number;
+export function IncidentCard({ details, onClose, maxHeight, topOffset }: {
+  details: IncidentDetails; onClose: () => void; maxHeight: number; topOffset?: number;
 }) {
-  return <ElementEntrance style={[styles.card, { maxHeight }]}>
+  return <ElementEntrance style={[styles.card, { maxHeight }, topOffset !== undefined && { top: topOffset }]}>
     <View style={styles.row}>
       {details.icon ? <View style={styles.icon}><VimaGlyph name={details.icon} color={t.colors.amber} /></View> : null}
       <VimaText variant="bodyMedium" style={styles.title}>{details.category || 'Incidente vial'}</VimaText>

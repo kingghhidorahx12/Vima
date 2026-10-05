@@ -1,7 +1,7 @@
 /** Material Symbols regular, shared across platforms. Codepoints match the bundled font. */
 export const glyphFamily = 'MaterialSymbols_400Regular';
 export const glyphCodepoints = {
-  menu: 0xe5d2, profile: 0xe7fd, back: 0xe5cb, chevron: 0xe5cc,
+  notifications: 0xe7f4, menu: 0xe5d2, profile: 0xe7fd, back: 0xe5cb, chevron: 0xe5cc,
   search: 0xe8b6, home: 0xe88a, work: 0xe8f9, favorite: 0xe87d,
   car: 0xe531, clock: 0xe8b5, route: 0xeacd, payment: 0xe870,
   recenter: 0xe55c, layers: 0xe53b, commerce: 0xea12, education: 0xe80c,
