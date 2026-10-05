@@ -1,9 +1,69 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-04 en `codex/passenger-shell-route-autofit-p0`, desde el HEAD publicado
-`b2a9c11` de `codex/premium-media-pricing-p0`. Sin reset ni merge a main.
+Actualizado 2026-10-05 en `codex/passenger-safearea-routefit-p0`, desde el HEAD publicado
+`941dbb2` de `codex/passenger-shell-route-autofit-p0`. Sin reset ni merge a main.
 
 ## IMPLEMENTADO
+
+### Safe area, viewport y movimiento del fit — 2026-10-05
+
+Esta decisión sustituye el margen de mapa de 16 dp descrito en la sección histórica siguiente.
+El video Android `51842.mp4` sirvió para identificar el mapa bajo la status bar, el sheet
+inset y el salto de cámara; no es una prueba física de los cambios de esta rama.
+
+- El root conserva `#F6F7F8`. Un espacio real de `insets.top + 4 dp` antecede la superficie:
+  MapLibre ya no ocupa la status bar. Dentro de la superficie, sólo `MapViewportClip` aplica
+  4 dp a cada lado y radios superiores 24 dp, con clipping y contenedor nativo no colapsable.
+  No hay gap inferior equivalente.
+- `VimaRideSheet` queda superpuesto a ancho completo y mantiene sus gestos, snaps y reglas
+  de altura. La bottom nav permanece fuera del mapa y a ancho completo, con visibilidad e
+  inset inferior anteriores. Logo y notificaciones flotan a 8 dp del nuevo comienzo del
+  mapa; la safe area superior no se suma nuevamente a su posición ni al padding de Camera.
+- `topOcclusion` representa sólo chrome dentro del mapa más su separación. El fit añade
+  clearance derivado del tamaño, rotación y entrada del pin existente para conservar
+  completos origen y destino. Su padding inferior toma el sheet medido; reserva la CTA
+  «Tu ubicación» sólo cuando aparece, y la reserva lateral incluye el control del mapa o
+  su menú expandido sólo cuando está abierto, más el ancho del pin. Margen externo, gap
+  superior, safe area y nav no son padding interno.
+- La intención temprana sigue siendo única por quote/draft válida, espera la medición real
+  y respeta Search y pan manual. Confirmar ubicaciones conserva una segunda intención tras
+  el nuevo layout. No cambia geometría, bounds, routing ni RouteLayer.
+- Diagnóstico del salto: `Camera` enviaba 420 ms a `setStop(bounds)` sin `easing`. En el
+  código Android de MapLibre 11.4, `CameraStop` deja el easing en `NONE` cuando se omite y
+  `CameraUpdateItem` llama `moveCamera` (inmediato) si `easing == NONE`, aunque la duración
+  sea positiva. El fit y recenter normales ahora envían `easing: 'ease'`, opción nativa
+  soportada; Reduced Motion sigue enviando `duration: 0`. No se cambió el token de 420 ms.
+
+VERIFICADO AUTOMÁTICAMENTE: TypeScript y lint limpios; suite completa 135/135; worklets
+18/18; Expo Doctor 21/21; export Hermes Android/iOS, aislamiento de fixtures y de
+pricing/servidor correctos. Las pruebas de componentes y dobles MapLibre comprueban
+separación de superficies, insets sin duplicación, padding medido/footprint, una sola
+intención y políticas normal/Reduced Motion. No certifican clipping, duración percibida,
+teclado ni encuadre real en Android.
+
+PENDIENTE ANDROID FÍSICO (sobre esta rama):
+
+1. Status bar completamente fuera del mapa.
+2. Gap superior visible de 4 dp.
+3. Gaps laterales visibles de 4 dp.
+4. Radio superior de 24 dp y clipping de tiles/ruta/markers/traffic/vehicle.
+5. Sheet hasta ambos extremos de pantalla.
+6. Bottom nav hasta ambos extremos de pantalla.
+7. Seleccionar destino.
+8. Esperar la quote y la ruta.
+9. Comprobar desplazamiento perceptible de cámara con los 420 ms vigentes.
+10. Origen completo dentro del viewport útil.
+11. Destino completo dentro del viewport útil.
+12. Ruta completa visible sobre el sheet, sin oclusión de controles/CTA.
+13. Pan/zoom manual: no vuelve a encuadrar la misma quote.
+14. Nuevo destino/quote: nuevo fit automático.
+15. Confirmar ubicaciones: segundo fit tras la nueva medición.
+16. Reduced Motion: mismo encuadre final mediante snap.
+17. Search/teclado: nav se oculta y el layout sigue utilizable.
+Comprobar también status/navigation bar con botones y gestos y distintos insets.
+
+Sin cambios nativos, dependencias ni configuración Expo. No se ejecutó EAS Build; esta
+tarea no exige reconstruir el Development Build.
 
 ### Shell persistente y auto-fit reviewing — 2026-10-04
 

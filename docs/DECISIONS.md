@@ -157,3 +157,17 @@ La barra inferior reutiliza acciones existentes; no autoriza nuevos destinos fun
 - Confirmar ubicaciones conserva su segundo fit, independiente, tras la nueva medición de
   confirmación. Pan/zoom no repiten la intención; Camera/Reduced Motion existentes se conservan.
 - Este alcance no modifica decisiones de pricing, contratos, routing, matching ni pagos.
+
+## Viewport físico y fit Passenger — aprobado 2026-10-05
+
+- La superficie MapLibre empieza después de `safeArea.top + 4 dp`, con inset lateral 4 dp,
+  radios superiores 24 dp y clipping nativo. Sustituye el margen de 16 dp anterior.
+  `VimaRideSheet` y bottom nav quedan a ancho completo, fuera de ese inset/clipping.
+- Chrome y controles se posicionan respecto al nuevo viewport. Camera no vuelve a incluir
+  safe area, gap exterior ni bottom nav como padding interno.
+- El fit por nueva quote y el segundo fit tras Confirmar usan sheet medido y reservan el
+  footprint del pin y las superficies flotantes presentes. La identidad de cada intención,
+  Search lock, pan manual y Reduced Motion conservan su semántica.
+- En Android MapLibre necesita un easing nativo explícito para animar `setStop` con duración
+  positiva. Se usa `ease` con los 420 ms ya aprobados; Reduced Motion mantiene duración 0.
+  No se aprueba un nuevo timing ni se modifica Motion System.
