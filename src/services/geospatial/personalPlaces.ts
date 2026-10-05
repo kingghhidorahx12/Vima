@@ -8,12 +8,15 @@ export interface SavedPlace {
   readonly coordinate: Coordinate; readonly regionId?: string; readonly category?: string; readonly savedAt: number;
   readonly image?: PlaceImageRef;
 }
+export type SavedSlot = 'home' | 'work';
+export interface SavedSlots { readonly home: SavedPlace | null; readonly work: SavedPlace | null }
 export interface PersonalPlaceStore {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
 }
 export const RECENT_PLACE_LIMIT = 16;
-const keys = { favorites: 'vima.favorite-places.v1', recents: 'vima.recent-destinations.v1' } as const;
+const keys = { favorites: 'vima.favorite-places.v1', recents: 'vima.recent-destinations.v1',
+  slots: 'vima.saved-slots.v1' } as const;
 function sanitize(value: unknown): SavedPlace | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
@@ -45,9 +48,33 @@ export function createPersonalPlaces(store: PersonalPlaceStore, now = Date.now) 
     } catch { return []; }
   }
   const write = (key: string, places: readonly SavedPlace[]) => store.setItem(key, JSON.stringify({ version: 1, places }));
+  async function slots(): Promise<SavedSlots> {
+    try {
+      const raw = await store.getItem(keys.slots);
+      if (raw) {
+        const document = JSON.parse(raw) as { version?: unknown; home?: unknown; work?: unknown };
+        if (document.version === 1) {
+          const home = sanitize(document.home); const work = sanitize(document.work);
+          return { home: home?.address.trim() ? home : null, work: work?.address.trim() ? work : null };
+        }
+      }
+    } catch { /* Corrupt slot data cannot invalidate existing favorites or recents. */ }
+    return { home: null, work: null };
+  }
+  const writeSlots = (value: SavedSlots) => store.setItem(keys.slots, JSON.stringify({ version: 1, ...value }));
   return {
     favorites: () => read(keys.favorites, 100),
     recents: () => read(keys.recents, RECENT_PLACE_LIMIT),
+    slots,
+    async saveSlot(slot: SavedSlot, place: ResolvedPlace) {
+      if (!place.address.trim()) throw new Error('invalid_personal_place');
+      const current = await slots();
+      await writeSlots({ ...current, [slot]: fromPlace(place, now()) });
+    },
+    async removeSlot(slot: SavedSlot) {
+      const current = await slots();
+      await writeSlots({ ...current, [slot]: null });
+    },
     async saveFavorite(place: ResolvedPlace) {
       const item = fromPlace(place, now()); const current = await read(keys.favorites, 100);
       await write(keys.favorites, [item, ...current.filter(saved => saved.canonicalId !== item.canonicalId)].slice(0, 100));

@@ -18,12 +18,12 @@ function fallback(place: PlaceSuggestion): { icon: VimaGlyphName; color: string 
 }
 
 /** Media never participates in Search; the fixed container remains while the photo loads or fails. */
-export function PlaceThumbnail({ place, resolveMedia }: { place: PlaceSuggestion; resolveMedia?: PlaceMediaResolver }) {
+export function PlaceThumbnail({ place, resolveMedia, size = 48 }: { place: PlaceSuggestion; resolveMedia?: PlaceMediaResolver; size?: number }) {
   const canonicalPlaceId = place.canonicalId ?? place.id;
   const media = place.image && resolveMedia?.(canonicalPlaceId, place.image);
   const [failedKey, setFailedKey] = useState<string>();
   const category = fallback(place);
-  return <View accessible={false} style={styles.container}>
+  return <View accessible={false} style={[styles.container, { width: size, height: size }]}>
     <VimaGlyph name={category.icon} color={category.color} />
     {media && failedKey !== media.cacheKey ? <Image key={media.cacheKey}
       source={{ uri: media.uri, cacheKey: media.cacheKey }} cachePolicy="memory-disk"

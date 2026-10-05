@@ -21,6 +21,12 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
     saveFavorite: personal ? place => personal.saveFavorite(place) : undefined,
     removeFavorite: personal ? id => personal.removeFavorite(id) : undefined,
     recordConfirmedDestination: personal ? place => personal.recordConfirmedDestination(place) : undefined,
+    savedSlots: personal ? async () => {
+      const slots = await personal.slots();
+      return { home: slots.home ? toPlace(slots.home) : null, work: slots.work ? toPlace(slots.work) : null };
+    } : undefined,
+    saveSavedSlot: personal ? (slot, place) => personal.saveSlot(slot, place) : undefined,
+    removeSavedSlot: personal ? slot => personal.removeSlot(slot) : undefined,
     suggestPlaces: search.suggest, searchPlaces: search.search, followPlaceAction: search.followUp,
     resolvePlace: search.resolve, closePlaces: search.close,
     reversePlace: client.reverseGeocode,

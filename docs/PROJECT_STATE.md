@@ -1,9 +1,36 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-landcover-detail-p0`, creada sobre
-`codex/passenger-basemap-topchrome-p0` @ `39f3341`. Sin reset ni merge a main.
+Actualizado 2026-10-05 en `codex/passenger-saved-places-home-p0`, creada sobre
+`codex/passenger-landcover-detail-p0` @ `4cf68d3`. Sin reset ni merge a main.
 
 ## IMPLEMENTADO
+
+### Home con Lugares guardados y Recientes reales — 2026-10-05
+
+- Home mantiene «¿A dónde vamos?» como acción principal. «Lugares guardados»
+  muestra Casa, Trabajo y Favoritos en una fila compacta de 56 dp; los slots
+  vacíos ofrecen agregar, los configurados seleccionan su destino directamente.
+  Favoritos abre la colección real. No hay favoritos individuales ni Frecuentes
+  dentro de Home.
+- «Ver todos» abre subestados de gestión en el sheet existente: configurar,
+  cambiar y eliminar Casa/Trabajo; ver, agregar y eliminar Favoritos. La elección
+  reutiliza Search/resolve y selección de mapa. Volver conserva mapa/shell.
+- `personalPlaces` añade una clave v1 independiente para Home/Work; persiste
+  `SavedPlace` sanitizado completo, incluida imagen/categoría/región cuando
+  existen, sin reescribir claves previas de Favoritos y Recientes.
+- «Viajes recientes» muestra hasta tres destinos según el espacio útil. Su lista
+  completa abre fuera del contenido Home. Cada fila usa media aprobada resoluble
+  o el fallback semántico de `PlaceThumbnail`, sin imagen inventada. Tocar un
+  reciente selecciona destino directamente. La confirmación sigue conservando
+  imagen, categoría y metadatos disponibles.
+- Sin cambios en mapa/basemap, top chrome, cámara/route-fit, sheet/snaps,
+  bottom nav, pricing, TomTom/routing, matching ni Motion System.
+- TypeScript, lint, suite 148/148, worklets 19/19, Expo Doctor 21/21,
+  export Hermes Android/iOS y checks de splash, fixtures, release, paths y
+  credenciales correctos. No hay cambio nativo ni EAS Build.
+- PENDIENTE ANDROID FÍSICO: revisar densidad y scroll en tamaños útiles,
+  media/fallback, persistencia entre reinicios y retorno desde gestión.
+
 
 ### Detalle cercano de landcover/landuse Passenger — 2026-10-05
 

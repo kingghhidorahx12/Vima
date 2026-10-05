@@ -6,6 +6,7 @@ import { createPassengerFixtureGateway, type FixtureClock } from '../src/dev/pas
 import { fixturePlaces, fixtureQuote } from '../src/dev/passenger/fixtures.ts';
 import { canRequest, passengerPhase, type PassengerGateway, type PassengerTrip, type Place, type RideQuote } from '../src/features/passenger/model.ts';
 import { matchingPolicy } from '../src/features/passenger/matchingPolicy.ts';
+import { createPlaceMediaResolver } from '../src/services/geospatial/placeMedia.ts';
 import { manualClock } from './support/manualClock.ts';
 import { requestPassengerRide } from '../src/features/passenger/requests.ts';
 import { executeConfirmedCommand, tripKey } from '../src/features/trip/queries.ts';
@@ -839,5 +840,96 @@ test('bottom Inicio exists only in Home, and internal back returns there from se
     await h.act(async () => press(tree, 'Solicitar viaje')); await settle(h);
     assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => n.props.accessibilityLabel === 'Inicio').length, 0);
     assert.equal(h.mounted.map, 1);
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('Home keeps three rich recents, empty and configured slots, and direct destination selection', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  let slots: { home: Place | null; work: Place | null } = { home: null, work: null };
+  let searches = 0;
+  const recent = [{ ...fixturePlaces[1]!, image: { source: 'vima' as const, assetId: 'recent-one', version: 1 } },
+    ...fixturePlaces.slice(2), { ...fixturePlaces[1]!, id: 'fourth', name: 'Cuarto reciente' }];
+  const gateway: PassengerGateway = { ...fixture.gateway,
+    recentPlaces: async () => recent,
+    resolvePlaceMedia: createPlaceMediaResolver('https://vima.example'),
+    savedSlots: async () => slots,
+    saveSavedSlot: async (slot, place) => { slots = { ...slots, [slot]: place }; },
+    removeSavedSlot: async slot => { slots = { ...slots, [slot]: null }; },
+    findPlaces: async (query, signal) => { searches++; return fixture.gateway.findPlaces(query, signal); },
+  };
+  const tree: ReactTestRenderer = await h.render(gateway);
+  try {
+    await settle(h);
+    await h.act(async () => tree.root.findByProps({ testID: 'passenger-map-surface' }).props.onLayout({ nativeEvent: { layout: { height: 1000, width: 390 } } }));
+    assert.ok(text(tree).includes('Lugares guardados'));
+    assert.ok(text(tree).includes('Viajes recientes'));
+    assert.equal(text(tree).includes('Frecuentes'), false);
+    assert.equal(text(tree).includes('Cuarto reciente'), false);
+    assert.equal(tree.root.findAllByType('ExpoImage' as never).length, 1);
+    assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => n.props.accessibilityLabel === 'Favoritos').length, 1);
+    const all = tree.root.findAllByType('Pressable' as never).filter(n =>
+      n.findAll(c => String(c.type) === 'Text' && c.props.children === 'Ver todos').length > 0);
+    await h.act(async () => all[1]!.props.onPress()); await settle(h);
+    assert.ok(text(tree).includes('Cuarto reciente'));
+    await h.act(async () => h.back()); await settle(h);
+    await h.act(async () => press(tree, `${recent[0]!.name}, ${recent[0]!.address}`)); await settle(h);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination.id, recent[0]!.id);
+    assert.equal(searches, 0);
+    await h.act(async () => h.back()); await settle(h);
+    assert.ok(tree.root.findAllByType('Pressable' as never).some(n => n.props.accessibilityLabel === '+ Casa'));
+    await h.act(async () => press(tree, '+ Casa')); await settle(h);
+    assert.equal(searches, 0); // Opening the slot picker never searches for the word "Casa".
+    await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`)); await settle(h);
+    assert.equal(slots.home?.id, fixturePlaces[1]!.id);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination, null);
+    assert.ok(tree.root.findAllByType('Pressable' as never).some(n => n.props.accessibilityLabel === 'Casa'));
+    await h.act(async () => press(tree, 'Casa')); await settle(h);
+    assert.equal(searches, 0);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination.id, fixturePlaces[1]!.id);
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('saved-place management changes and deletes slots, manages real favorites, and back returns Home', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  let slots: { home: Place | null; work: Place | null } = { home: fixturePlaces[1]!, work: null };
+  const readHome = () => slots.home;
+  let favorites: Place[] = [];
+  const gateway: PassengerGateway = { ...fixture.gateway,
+    savedSlots: async () => slots,
+    saveSavedSlot: async (slot, place) => { slots = { ...slots, [slot]: place }; },
+    removeSavedSlot: async slot => { slots = { ...slots, [slot]: null }; },
+    favoritePlaces: async () => favorites,
+    saveFavorite: async place => { favorites = [place, ...favorites]; },
+    removeFavorite: async id => { favorites = favorites.filter(place => (place.canonicalId ?? place.id) !== id); },
+  };
+  const tree: ReactTestRenderer = await h.render(gateway);
+  try {
+    await settle(h);
+    await h.act(async () => press(tree, 'Favoritos')); await settle(h);
+    assert.ok(text(tree).includes('Agregar favorito'));
+    await h.act(async () => press(tree, 'Agregar favorito')); await settle(h);
+    await h.act(async () => press(tree, `${fixturePlaces[2]!.name}, ${fixturePlaces[2]!.address}`)); await settle(h);
+    assert.equal(favorites[0]?.id, fixturePlaces[2]!.id);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination, null);
+    await h.act(async () => press(tree, `Eliminar ${fixturePlaces[2]!.name}`)); await settle(h);
+    assert.deepEqual(favorites, []);
+    await h.act(async () => h.back()); await settle(h);
+    assert.ok(text(tree).includes('Lugares guardados'));
+    const all = tree.root.findAllByType('Pressable' as never).filter(n =>
+      n.findAll(c => String(c.type) === 'Text' && c.props.children === 'Ver todos').length > 0);
+    await h.act(async () => all[0]!.props.onPress()); await settle(h);
+    assert.ok(text(tree).includes('Configurar'));
+    await h.act(async () => press(tree, 'Eliminar')); await settle(h);
+    assert.equal(slots.home, null);
+    await h.act(async () => press(tree, 'Configurar')); await settle(h);
+    await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`)); await settle(h);
+    assert.equal(readHome()?.id, fixturePlaces[1]!.id);
+    await h.act(async () => press(tree, 'Cambiar')); await settle(h);
+    await h.act(async () => press(tree, `${fixturePlaces[2]!.name}, ${fixturePlaces[2]!.address}`)); await settle(h);
+    assert.equal(readHome()?.id, fixturePlaces[2]!.id);
+    await h.act(async () => press(tree, 'Volver')); await settle(h);
+    assert.ok(text(tree).includes('¿A dónde vamos?'));
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });

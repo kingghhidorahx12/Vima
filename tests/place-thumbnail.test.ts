@@ -21,8 +21,8 @@ test('thumbnail keeps its footprint and Vima icon when media is absent or fails'
   await renderer.act(async () => { tree = renderer.create(React.createElement(PlaceThumbnail, { place, resolveMedia })); });
   try {
     const container = tree.root.findAllByType('View' as never)[0]!;
-    assert.equal(container.props.style.width, 48);
-    assert.equal(container.props.style.height, 48);
+    assert.equal(container.props.style[1].width, 48);
+    assert.equal(container.props.style[1].height, 48);
     assert.equal(tree.root.findAllByType('ExpoImage' as never).length, 1);
     const photo = tree.root.findByType('ExpoImage' as never);
     assert.equal(photo.props.cachePolicy, 'memory-disk');
@@ -38,6 +38,8 @@ test('thumbnail keeps its footprint and Vima icon when media is absent or fails'
     await renderer.act(async () => tree.update(React.createElement(PlaceThumbnail, {
       place: { ...place, image: undefined }, resolveMedia })));
     assert.equal(tree.root.findAllByType('ExpoImage' as never).length, 0);
-    assert.equal(tree.root.findAllByType('View' as never)[0]!.props.style.width, 48);
+    assert.equal(tree.root.findAllByType('View' as never)[0]!.props.style[1].width, 48);
+    await renderer.act(async () => tree.update(React.createElement(PlaceThumbnail, { place, resolveMedia, size: 64 })));
+    assert.equal(tree.root.findAllByType('View' as never)[0]!.props.style[1].width, 64);
   } finally { await renderer.act(async () => tree.unmount()); }
 });

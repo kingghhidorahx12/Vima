@@ -101,7 +101,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [contributionName, setContributionName] = useState('');
   const [contributionReference, setContributionReference] = useState('');
   const [contributedPlace, setContributedPlace] = useState<Place | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const [homePanel, setHomePanel] = useState<'home' | 'saved' | 'favorites' | 'recents'>('home');
   const [pulseVisible, setPulseVisible] = useState(true);
   const [reviewedDraft, setReviewedDraft] = useState<string>();
   const [contentMeasure, setContentMeasure] = useState<{ key: string; height: number }>();
@@ -123,12 +123,14 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const topOcclusion = topFrameShift + Math.max(chromeBottom,
     confirmationPillVisible ? confirmationPillTop + confirmationPillHeight : 0) + 12;
   const sheetFrameHeight = Math.max(0, height - topFrameShift);
+  // Reserve the Home search/section footprint; each media row costs roughly 88 dp including spacing.
+  const homeRecentLimit = Math.max(1, Math.min(3, Math.floor((sheetFrameHeight * 0.60 - 240) / 88)));
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
   // Key only the measured content, never the persistent map/sheet. Search typing and late
   // quotes do not replace the input; review and confirm get independent native layouts.
   const measureKey = JSON.stringify(flow.field ? ['search', flow.field, searchAction] :
-    [flow.phase, reviewing, flow.quote?.id, flow.origin?.id, flow.destination?.id, flow.quote?.route.geometry]);
+    [flow.phase, homePanel, reviewing, flow.quote?.id, flow.origin?.id, flow.destination?.id, flow.quote?.route.geometry]);
   const currentMeasureKey = useRef(measureKey);
   useLayoutEffect(() => { currentMeasureKey.current = measureKey; }, [measureKey]);
   const headerHeight = headerMeasure?.key === measureKey ? headerMeasure.height : 0;
@@ -177,7 +179,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     transform: [{ translateY: reducedMotion ? 0 : (1 - contentOpacity.get()) * 6 }] }));
   const sheetTitle = flow.field ? pickingMap ? 'Elegir en el mapa' : searchAction === 'contribute-form' ? 'Agregar lugar' :
     searchAction === 'contribute-done' ? '' : flow.field === 'origin' ? '¿Desde dónde?' : '¿A dónde vamos?'
-    : assignment ? `Llegará en ${assignment.etaMinutes} min` : '';
+    : assignment ? `Llegará en ${assignment.etaMinutes} min` : homePanel === 'saved' ? 'Lugares guardados'
+      : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
   const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }} style={styles.sheetHeader}>
     <View style={styles.handle} />
@@ -196,6 +199,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     setIncident(null); setMapUserControlled(false); setSearchAction('results'); setSelectedCoordinate(null); flow.openField(target);
   };
   const openSearch = (query = '') => { dismissKeyboard(); openField('destination'); flow.setSearch(query); };
+  const openSavedPicker = (target: 'home' | 'work' | 'favorite') => {
+    dismissKeyboard(); setRouteFitRequestId(undefined); setIncident(null); setMapUserControlled(false);
+    setSearchAction('results'); setSelectedCoordinate(null); flow.openSavedPicker(target);
+  };
   const toggleMapLayer = (layer: keyof TrafficLayerPreferences) => {
     const next = { ...mapLayers, [layer]: !mapLayers[layer] };
     if (layer === 'incidents') setIncident(null);
@@ -210,6 +217,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const choosePlace = (place: Place | PlaceSuggestion, target?: 'origin' | 'destination') => {
     setRouteFitRequestId(undefined);
     void semanticHaptics('buttonChip');
+    if (!flow.field && homePanel !== 'home') setHomePanel('home');
     dismissKeyboard(); setMapUserControlled(false); setSearchAction('results'); void flow.choosePlace(place, target);
   };
   const confirmMapSelection = () => {
@@ -226,7 +234,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const goHome = () => {
     setRouteFitRequestId(undefined); dismissKeyboard(); setIncident(null); setLayersOpen(false);
     setSearchAction('results'); setSelectedCoordinate(null);
-    flow.returnHome(); setReviewedDraft(undefined); setMapUserControlled(false);
+    flow.returnHome(); setHomePanel('home'); setReviewedDraft(undefined); setMapUserControlled(false);
   };
   const goBack = () => {
     setRouteFitRequestId(undefined);
@@ -234,6 +242,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     if (incident) { setIncident(null); return; }
     if (layersOpen) { setLayersOpen(false); return; }
     if (flow.field) { setSearchAction('results'); setSelectedCoordinate(null); flow.closeField(); return; }
+    if (homePanel !== 'home') { setHomePanel('home'); return; }
     flow.returnHome(); setReviewedDraft(undefined); setMapUserControlled(false);
   };
   // Scope Android back to the focused shell; active rides keep explicit cancellation.
@@ -334,20 +343,49 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             void flow.confirmLocations();
             if (flow.phase === 'home' && flow.destination) flow.choosePlace(flow.destination, 'destination');
           }} />
+      </> : flow.phase === 'home' && homePanel === 'saved' ? <>
+        <TextAction label="Volver" onPress={() => setHomePanel('home')} />
+        <SavedSlotEntry label="Casa" place={flow.savedSlots.home} onChange={() => openSavedPicker('home')}
+          onRemove={() => { void flow.removeSavedSlot('home'); }} />
+        <SavedSlotEntry label="Trabajo" place={flow.savedSlots.work} onChange={() => openSavedPicker('work')}
+          onRemove={() => { void flow.removeSavedSlot('work'); }} />
+        <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Favoritos</VimaText></View>
+        {flow.favorites.map(place => <View key={place.id}>
+          <PlaceRow place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place, 'destination')} />
+          <TextAction danger label={`Eliminar ${place.name}`} onPress={() => { void flow.removeFavorite(place.canonicalId ?? place.id); }} />
+        </View>)}
+        <VimaButton secondary label="Agregar favorito" onPress={() => openSavedPicker('favorite')} />
+      </> : flow.phase === 'home' && homePanel === 'favorites' ? <>
+        <TextAction label="Volver" onPress={() => setHomePanel('home')} />
+        {flow.favorites.map(place => <View key={place.id}>
+          <PlaceRow place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place, 'destination')} />
+          <TextAction danger label={`Eliminar ${place.name}`} onPress={() => { void flow.removeFavorite(place.canonicalId ?? place.id); }} />
+        </View>)}
+        <VimaButton secondary label="Agregar favorito" onPress={() => openSavedPicker('favorite')} />
+      </> : flow.phase === 'home' && homePanel === 'recents' ? <>
+        <TextAction label="Volver" onPress={() => setHomePanel('home')} />
+        {flow.recents.map(place => <PlaceRow key={place.id} place={place} rich resolveMedia={gateway.resolvePlaceMedia}
+          onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'home' ? <>
         <Pressable onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
           style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed]}>
           <VimaGlyph name="search" color={t.colors.graphite} />
-          <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
+          <VimaText variant="h3">¿A dónde vamos?</VimaText>
         </Pressable>
+        <View style={styles.recentHeader}><VimaText variant="h3" style={styles.fill}>Lugares guardados</VimaText>
+          <TextAction label="Ver todos" onPress={() => setHomePanel('saved')} /></View>
         <View style={styles.quickRow}>
-          <QuickPlace label="Casa" icon="home" onPress={() => openSearch('Casa')} />
-          <QuickPlace label="Trabajo" icon="work" onPress={() => openSearch('Trabajo')} />
-          <QuickPlace label="Favoritos" icon="favorite" onPress={() => openSearch()} />
+          <QuickPlace label={flow.savedSlots.home ? 'Casa' : '+ Casa'} icon="home"
+            onPress={() => flow.savedSlots.home ? choosePlace(flow.savedSlots.home, 'destination') : openSavedPicker('home')} />
+          <View style={styles.quickDivider} />
+          <QuickPlace label={flow.savedSlots.work ? 'Trabajo' : '+ Trabajo'} icon="work"
+            onPress={() => flow.savedSlots.work ? choosePlace(flow.savedSlots.work, 'destination') : openSavedPicker('work')} />
+          <View style={styles.quickDivider} />
+          <QuickPlace label="Favoritos" icon="favorite" onPress={() => setHomePanel('favorites')} />
         </View>
-        <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Viajes recientes</VimaText>
-          <TextAction label="Ver todos" onPress={() => setShowAll(true)} /></View>
-        {(showAll ? flow.recents : flow.recents.slice(0, 2)).map((place) => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia}
+        <View style={styles.recentHeader}><VimaText variant="h3" style={styles.fill}>Viajes recientes</VimaText>
+          <TextAction label="Ver todos" onPress={() => setHomePanel('recents')} /></View>
+        {flow.recents.slice(0, homeRecentLimit).map((place) => <PlaceRow key={place.id} place={place} rich resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
         <View style={[styles.addressGroup, styles.confirmAddressGroup]}>
@@ -526,17 +564,27 @@ function AddressField({ label, place, color, onPress, disabled }: { label: strin
       {place ? <VimaText variant="caption" style={styles.muted} numberOfLines={1}>{place.address}</VimaText> : null}</View>
   </Pressable>;
 }
-function PlaceRow({ place, onPress, resolveMedia }: { place: PlaceSuggestion; onPress: () => void; resolveMedia?: PassengerGateway['resolvePlaceMedia'] }) {
+function PlaceRow({ place, onPress, resolveMedia, rich = false }: { place: PlaceSuggestion; onPress: () => void;
+  resolveMedia?: PassengerGateway['resolvePlaceMedia']; rich?: boolean }) {
   return <ElementEntrance><Pressable accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress}
-    style={({ pressed }) => [styles.recent, pressed && surfaces.pressed]}>
-    <PlaceThumbnail place={place} resolveMedia={resolveMedia} />
+    style={({ pressed }) => [styles.recent, rich && styles.richRecent, pressed && surfaces.pressed]}>
+    <PlaceThumbnail place={place} resolveMedia={resolveMedia} size={rich ? 64 : 48} />
     <View style={styles.fill}><VimaText variant="bodyMedium">{place.name}</VimaText>
-      <VimaText variant="bodySmall" style={styles.muted} numberOfLines={1}>{place.address}</VimaText></View>
+      <VimaText variant="bodySmall" style={styles.muted} numberOfLines={rich ? 2 : 1}>{place.address}</VimaText></View>
     <VimaGlyph name="chevron" color={t.colors.gray} />
   </Pressable></ElementEntrance>;
 }
+function SavedSlotEntry({ label, place, onChange, onRemove }: { label: string; place: Place | null;
+  onChange: () => void; onRemove: () => void }) {
+  return <View style={styles.savedEntry}>
+    <VimaText variant="bodyMedium">{label}</VimaText>
+    <VimaText variant="bodySmall" style={styles.muted} numberOfLines={2}>{place ? `${place.name} · ${place.address}` : 'Sin configurar'}</VimaText>
+    <View style={styles.row}><TextAction label={place ? 'Cambiar' : 'Configurar'} onPress={onChange} />
+      {place ? <TextAction danger label="Eliminar" onPress={onRemove} /> : null}</View>
+  </View>;
+}
 function QuickPlace({ label, icon, onPress }: { label: string; icon: VimaGlyphName; onPress?: () => void }) {
-  const content = <><VimaGlyph name={icon} color={t.colors.graphite} /><VimaText variant="caption">{label}</VimaText></>;
+  const content = <><VimaGlyph name={icon} color={t.colors.graphite} /><VimaText variant="bodySmall" numberOfLines={1}>{label}</VimaText></>;
   return <ElementEntrance style={styles.fill}>{onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
     style={({ pressed }) => [styles.quickPlace, pressed && surfaces.pressed]}>{content}</Pressable>
     : <View accessible accessibilityLabel={label} style={styles.quickPlace}>{content}</View>}</ElementEntrance>;
@@ -584,12 +632,16 @@ const styles = StyleSheet.create({
   homeSearch: { ...surfaces.card, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.pillPx,
     flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md,
     ...elevationStyle('level1', t.colors.carbon) },
-  quickRow: { flexDirection: 'row', gap: sm },
-  quickPlace: { ...surfaces.card, flex: 1, minHeight: t.components.buttonPrimary.heightPx + t.spacing.scalePx[2]!, alignItems: 'center', justifyContent: 'center',
-    paddingVertical: sm, gap: sm, backgroundColor: t.colors.background, ...elevationStyle('level1', t.colors.carbon) },
+  quickRow: { ...surfaces.card, height: 56, flexDirection: 'row', alignItems: 'center',
+    borderRadius: t.radii.pillPx, ...elevationStyle('level1', t.colors.carbon) },
+  quickPlace: { flex: 1, height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: xs, gap: xs },
+  quickDivider: { width: t.borders.standardWidthPx, height: 24, backgroundColor: surfaceColors.border },
+  savedEntry: { ...surfaces.card, gap: sm, padding: md, ...elevationStyle('level1', t.colors.carbon) },
   recentHeader: { flexDirection: 'row', alignItems: 'center', marginTop: xs },
   recent: { ...surfaces.card, minHeight: t.components.buttonPrimary.heightPx + sm, flexDirection: 'row', alignItems: 'center', gap: md,
     paddingVertical: sm, paddingHorizontal: md, ...elevationStyle('level1', t.colors.carbon) },
+  richRecent: { minHeight: 80 },
   recentIcon: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[7], alignItems: 'center', justifyContent: 'center',
     borderRadius: t.radii.smallPx, backgroundColor: t.colors.background },
   pinBox: { width: t.components.iconSizesPx[1], height: t.components.iconSizesPx[1], alignItems: 'center', justifyContent: 'center' },

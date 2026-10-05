@@ -5,6 +5,7 @@ import type { AuthoritativeTrip, TripGateway } from '../trip/contracts.ts';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts.ts';
 import type { QuoteResponse } from '../../services/pricing/contracts.ts';
 import type { PlaceImageRef, PlaceMediaResolver } from '../../services/geospatial/placeMedia.ts';
+import type { SavedSlot } from '../../services/geospatial/personalPlaces.ts';
 
 export interface Place {
   readonly id: string;
@@ -62,6 +63,9 @@ export interface PassengerGateway extends TripGateway, RealtimeTransport {
   saveFavorite?(place: Place): Promise<void>;
   removeFavorite?(canonicalId: string): Promise<void>;
   recordConfirmedDestination?(place: Place): Promise<void>;
+  savedSlots?(signal?: AbortSignal): Promise<{ home: Place | null; work: Place | null }>;
+  saveSavedSlot?(slot: SavedSlot, place: Place): Promise<void>;
+  removeSavedSlot?(slot: SavedSlot): Promise<void>;
   findPlaces(query: string, signal?: AbortSignal): Promise<readonly Place[]>;
   suggestPlaces?(query: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;
   searchPlaces?(query: string, signal?: AbortSignal, bias?: Coordinate): Promise<readonly PlaceSuggestion[]>;

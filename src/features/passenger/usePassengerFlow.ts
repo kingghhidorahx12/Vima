@@ -9,6 +9,7 @@ import { approvedLocalPlaces } from '../../services/geospatial/localPlaces';
 import { createSearchCoordinator } from '../../services/geospatial/searchCoordinator';
 import { geospatialClientConfig } from '../../services/geospatial/config';
 import { isGeographicQuery } from '../../services/geospatial/regionalRanking';
+import type { SavedSlot } from '../../services/geospatial/personalPlaces';
 
 let operationSequence = 0;
 function operationId() { return `passenger-${Date.now()}-${++operationSequence}`; }
@@ -23,6 +24,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const [editing, setEditing] = useState(false);
   const [tripId, setTripId] = useState<string>();
   const [field, setField] = useState<'origin' | 'destination' | null>(null);
+  const [savedPicker, setSavedPicker] = useState<SavedSlot | 'favorite' | null>(null);
   const [search, setSearch] = useState('');
   const [searchCoordinator] = useState(() => createSearchCoordinator(approvedLocalPlaces));
   const [followUpResults, setFollowUpResults] = useState<{ query: string; results: readonly PlaceSuggestion[] }>();
@@ -40,6 +42,9 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const favorites = useQuery({ queryKey: ['passenger', gateway.scope, 'favorites'],
     queryFn: ({ signal }) => gateway.favoritePlaces?.(signal) ?? Promise.resolve([]), retry: false,
     enabled: !!gateway.favoritePlaces });
+  const savedSlots = useQuery({ queryKey: ['passenger', gateway.scope, 'saved-slots'],
+    queryFn: ({ signal }) => gateway.savedSlots?.(signal) ?? Promise.resolve({ home: null, work: null }),
+    enabled: !!gateway.savedSlots, retry: false });
   // A late geolocation result can update its query, never an explicit selection.
   const origin = originChoice?.place ?? location.data ?? null;
   const discoveryRegion = origin?.regionId ?? 'atlacomulco';
@@ -111,9 +116,25 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     setField(null); setSearch(''); searchCoordinator.clear();
     gateway.closePlaces?.();
   };
+  const completeSavedSelection = async (value: Place) => {
+    if (!savedPicker) return false;
+    try {
+      if (savedPicker === 'favorite') {
+        if (!gateway.saveFavorite) throw new Error('favorites_unavailable');
+        await gateway.saveFavorite(value);
+        await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'favorites'] });
+      } else {
+        if (!gateway.saveSavedSlot) throw new Error('saved_slots_unavailable');
+        await gateway.saveSavedSlot(savedPicker, value);
+        await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'saved-slots'] });
+      }
+      setSavedPicker(null); setField(null); setSearch(''); searchCoordinator.clear(); gateway.closePlaces?.();
+    } catch { setSelectionError(new Error('No se pudo guardar el lugar')); }
+    return true;
+  };
   const choosePlace = async (value: Place | PlaceSuggestion, target = field ?? 'destination') => {
     if (pending || isMatching(phase) || phase === 'assigned') return;
-    if ('coordinate' in value) { applyPlace(value, target); return; }
+    if ('coordinate' in value) { if (!await completeSavedSelection(value)) applyPlace(value, target); return; }
     if (!gateway.resolvePlace) return;
     cancelSelection();
     const controller = new AbortController(); selection.current = controller; setResolving(true);
@@ -125,7 +146,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
         return;
       }
       const resolved = await gateway.resolvePlace(value.id, controller.signal);
-      if (!controller.signal.aborted) applyPlace(resolved, target);
+      if (!controller.signal.aborted && !await completeSavedSelection(resolved)) applyPlace(resolved, target);
     } catch (error) {
       if (!controller.signal.aborted) setSelectionError(error instanceof Error ? error : new Error('search_unavailable'));
     } finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
@@ -148,8 +169,15 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       let resolved: Place | null = null;
       try { resolved = await gateway.reversePlace?.(coordinate, controller.signal) ?? null; }
       catch { /* The touched coordinate remains authoritative when Reverse is unavailable. */ }
-      if (!controller.signal.aborted) applyPlace({ id: `manual:${coordinate.join(',')}`, name: resolved?.name || 'Ubicación en el mapa',
-        address: resolved?.address ?? '', coordinate }, target);
+      if (!controller.signal.aborted) {
+        if (savedPicker && !resolved?.address) setSelectionError(new Error('No se pudo obtener la dirección del lugar'));
+        else {
+          const chosen = savedPicker && resolved ? { ...resolved, coordinate } :
+            { id: `manual:${coordinate.join(',')}`, name: resolved?.name || 'Ubicación en el mapa',
+              address: resolved?.address ?? '', coordinate };
+          if (!await completeSavedSelection(chosen)) applyPlace(chosen, target);
+        }
+      }
     } finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
   };
   const contributePlace = async (input: { name: string; coordinate: Place['coordinate']; reference?: string }) => {
@@ -231,7 +259,12 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'favorites'] });
     } catch { setSelectionError(new Error('No se pudo actualizar Favoritos')); }
   };
-  const error = selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? favorites.error ?? places.error;
+  const removeSavedSlot = async (slot: SavedSlot) => {
+    try { await gateway.removeSavedSlot?.(slot);
+      await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'saved-slots'] });
+    } catch { setSelectionError(new Error('No se pudo eliminar el lugar')); }
+  };
+  const error = selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? favorites.error ?? savedSlots.error ?? places.error;
   const visiblePlaces = search.trim() ? searchCoordinator.visible(search, favorites.data ?? [],
     [...(geography.data ?? []), ...(recents.data ?? [])],
     followUpResults?.query === search ? followUpResults.results : places.data,
@@ -244,9 +277,9 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     },
     places: visiblePlaces, settledQuery: search.trim().length >= geospatialClientConfig.noResultMinLength &&
       !places.isFetching && !geography.isFetching && (places.isSuccess || places.isError),
-    recents: recents.data ?? [], favorites: favorites.data ?? [],
+    recents: recents.data ?? [], favorites: favorites.data ?? [], savedSlots: savedSlots.data ?? { home: null, work: null },
     popular: discovery.data?.popular ?? [], featured: discovery.data?.featured ?? [],
-    saveFavorite, removeFavorite, confirmLocations,
+    saveFavorite, removeFavorite, removeSavedSlot, confirmLocations,
     loadingPlaces: !!search.trim() && (places.isFetching || resolving), loadingQuote: quote.isFetching, error,
     canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending, gateway), choosePlace, chooseMapCoordinate,
     contributePlace, submitSearch, submit, act, edit, schedule,
@@ -255,6 +288,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       if (locked.current || request.isPending || command.isPending || isMatching(phase) || phase === 'assigned') return;
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear();
       setField(null); setSearch(''); setFollowUpResults(undefined);
+      setSavedPicker(null);
       setDestination(null); setStops([]); setConfirming(false); setEditing(false); setTripId(undefined);
       setQuoteExpired(false);
       requestId.current = null; request.reset();
@@ -262,8 +296,14 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     openField: (target: 'origin' | 'destination') => {
       if (pending || isMatching(phase) || phase === 'assigned') return;
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined); setField(target); setSearch('');
+      setSavedPicker(null);
     },
-    closeField: () => { cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setField(null); },
+    openSavedPicker: (target: SavedSlot | 'favorite') => {
+      if (pending || isMatching(phase) || phase === 'assigned') return;
+      cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined);
+      setSavedPicker(target); setField('destination'); setSearch('');
+    },
+    closeField: () => { cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setField(null); setSavedPicker(null); },
     retry: () => { if (quote.data) quoteOperation.current = undefined; cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
       if (tripId) void trip.refetch(); },
   };
