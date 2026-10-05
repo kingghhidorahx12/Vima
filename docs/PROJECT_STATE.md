@@ -1,9 +1,29 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-basemap-topchrome-p0`, creada sobre
-`codex/passenger-map-polish-p0` @ `fb2159c`. Sin reset ni merge a main.
+Actualizado 2026-10-05 en `codex/passenger-landcover-detail-p0`, creada sobre
+`codex/passenger-basemap-topchrome-p0` @ `39f3341`. Sin reset ni merge a main.
 
 ## IMPLEMENTADO
+
+### Detalle cercano de landcover/landuse Passenger — 2026-10-05
+
+- El estilo local Positron conserva el aspecto hasta z12. `landcover_wood` pasa
+  gradualmente de `#ECF6EF` a `#D8EEDB` entre z13 y z16; se añaden fills para
+  `class=grass`, `farmland` y `wetland`, con intensidad 35/55/75/100% en
+  z13/14/15/16. Farmland y wetland conservan opacidad menor. Desde z14, grass
+  distingue las subclasses documentadas `garden`, `park`, `recreation_ground`
+  y `golf_course` con el verde principal. Desde z15, `landuse` aplica un wash
+  tenue a `pitch`, `playground`, `stadium`, `theme_park`, `zoo` y `cemetery`.
+- Las capas nuevas se insertan debajo de agua, vías y labels. Las capas originales
+  mantienen orden, filtros y geometría; agua, vías, edificios, labels, ruta,
+  Traffic, incidentes, pins y todo el shell no cambiaron. La selección de style
+  custom y la exigencia de style productivo permanecen intactas.
+- TypeScript, lint, suite 144/144, schema MapLibre, worklets 19/19, Expo Doctor
+  21/21, export Hermes Android/iOS y checks de splash, fixtures, release,
+  paths y credenciales pasaron. No hay cambio nativo ni EAS Build.
+- PENDIENTE ANDROID FÍSICO: comparar z13, z14, z15 y z16+ con tiles reales;
+  comprobar riqueza de vegetación/recreación sin pérdida de legibilidad de agua,
+  vías, labels, ruta, Traffic y pins. No se marca como validado en dispositivo.
 
 ### Cierre de basemap y top chrome Passenger — 2026-10-05
 
