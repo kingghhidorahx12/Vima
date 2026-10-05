@@ -13,7 +13,7 @@ import type { Place } from './model';
 
 /** Native Vima marker with the approved origin/destination color semantics. */
 export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' | 'destination' }) {
-  const color = kind === 'origin' ? t.colors.carbon : t.colors.red;
+  const color = kind === 'origin' ? t.colors.green : t.colors.red;
   const { reducedMotion } = useMotionPolicy();
   const entrance = pinEntrance(reducedMotion);
   const translateY = useSharedValue(entrance.fromY);
@@ -71,9 +71,9 @@ const styles = StyleSheet.create({
     borderRadius: t.radii.pillPx },
   locationArea: { width: t.spacing.scalePx[8], height: t.spacing.scalePx[8], alignItems: 'center', justifyContent: 'center' },
   locationHalo: { position: 'absolute', width: t.spacing.scalePx[8], height: t.spacing.scalePx[8], borderRadius: t.radii.pillPx,
-    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.accentBlue, backgroundColor: t.colors.accentBlueGlow, alignItems: 'center', justifyContent: 'center' },
+    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.blue, backgroundColor: t.colors.accentBlueGlow, alignItems: 'center', justifyContent: 'center' },
   locationRing: { width: t.spacing.scalePx[6], height: t.spacing.scalePx[6], borderRadius: t.radii.pillPx,
     backgroundColor: t.colors.accentBlueGlow, alignItems: 'center', justifyContent: 'center' },
   locationDot: { opacity: 1, width: t.components.iconSizesPx[0], height: t.components.iconSizesPx[0], borderRadius: t.radii.pillPx,
-    backgroundColor: t.colors.accentBlue, borderWidth: t.borders.standardWidthPx * 2, borderColor: t.colors.white },
+    backgroundColor: t.colors.blue, borderWidth: t.borders.standardWidthPx * 2, borderColor: t.colors.white },
 });

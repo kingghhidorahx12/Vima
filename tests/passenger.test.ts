@@ -486,7 +486,7 @@ test('rendered passenger flow preserves the actual shell/map instance across mat
       String(node.props.source).endsWith('vima_header_lockup_final.png'));
     assert.equal(lockup.length, 1);
     assert.match(String(lockup[0]!.props.source), /vima_header_lockup_final\.png$/);
-    assert.equal(lockup[0]!.props.style.height, 28);
+    assert.equal(lockup[0]!.props.style.height, 32);
     assert.ok(!text(tree).includes('Vima'));
     assert.ok(text(tree).includes('Casa'));
     assert.ok(text(tree).includes('Trabajo'));
@@ -764,8 +764,8 @@ test('map control press feedback and layer switches use approved timing and obey
       const button = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Capas del mapa')!;
       const paint = (node: ReactTestInstance, pressed: boolean) => Object.assign({}, ...node.props.style({ pressed }).filter(Boolean));
       assert.equal(paint(button, false).backgroundColor, '#FFFFFF');
-      assert.equal(paint(button, true).backgroundColor, '#EAF3FF');
-      assert.equal(paint(button, false).width, 48);
+      assert.equal(paint(button, true).backgroundColor, '#F7F8F7');
+      assert.equal(paint(button, false).width, 44);
       const before = h.animations.length;
       await h.act(async () => button.props.onPressIn());
       assert.equal(h.animations.length > before, !reduced);
@@ -775,8 +775,9 @@ test('map control press feedback and layer switches use approved timing and obey
       assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Capas del mapa')!
         .props.accessibilityState.expanded, true);
       const layersButton = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Capas del mapa')!;
-      assert.equal(paint(layersButton, false).backgroundColor, '#2F80FF');
-      assert.equal(paint(layersButton, true).backgroundColor, '#1E6FE8');
+      assert.equal(paint(layersButton, false).backgroundColor, '#FFFFFF');
+      assert.equal(paint(layersButton, false).borderColor, '#00D68F');
+      assert.equal(paint(layersButton, true).backgroundColor, '#F7F8F7');
       assert.ok(text(tree).includes('Tráfico')); assert.ok(text(tree).includes('Incidentes'));
       assert.ok(!text(tree).includes('Siniestros'));
     } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }

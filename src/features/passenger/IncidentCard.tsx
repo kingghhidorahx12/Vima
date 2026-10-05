@@ -34,9 +34,9 @@ const styles = StyleSheet.create({
   detail: { gap: t.spacing.scalePx[1] },
   detailSeparated: { marginTop: t.spacing.scalePx[1], paddingTop: t.spacing.scalePx[2],
     borderTopWidth: t.borders.standardWidthPx, borderTopColor: surfaceColors.border },
-  secondary: { color: t.colors.graphite, backgroundColor: t.colors.accentBlueSoft, borderRadius: t.radii.smallPx,
+  secondary: { color: t.colors.graphite, backgroundColor: surfaceColors.warningWash, borderRadius: t.radii.smallPx,
     paddingHorizontal: t.spacing.scalePx[1], paddingVertical: t.spacing.scalePx[0], alignSelf: 'flex-start' },
   title: { flex: 1 },
   close: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: t.radii.pillPx },
-  closePressed: { backgroundColor: t.colors.accentBlueSoft },
+  closePressed: { backgroundColor: t.colors.background },
 });

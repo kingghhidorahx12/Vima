@@ -23,8 +23,8 @@ export function PassengerBottomNavigation({ visible, bottomInset, onHome }: { vi
       accessibilityState={{ selected: tab.enabled, disabled: !tab.enabled }} disabled={!tab.enabled}
       accessibilityHint={tab.enabled ? undefined : 'Módulo no disponible'} onPress={tab.enabled ? onHome : undefined}
       style={({ pressed }) => [styles.tab, pressed && tab.enabled && passengerSurfaces.pressed]}>
-      <VimaGlyph name={tab.icon} color={tab.enabled ? t.colors.greenDark : t.colors.graphite} />
-      <VimaText variant="caption" style={[styles.label, { color: tab.enabled ? t.colors.greenDark : t.colors.graphite }]}>{tab.label}</VimaText>
+      <VimaGlyph name={tab.icon} color={tab.enabled ? t.colors.green : t.colors.graphite} />
+      <VimaText variant="caption" style={[styles.label, { color: tab.enabled ? t.colors.green : t.colors.graphite }]}>{tab.label}</VimaText>
     </Pressable>)}
   </Animated.View> : null;
 }

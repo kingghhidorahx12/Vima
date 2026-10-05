@@ -39,9 +39,16 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
     // outside the map; the sheet contributes only its visible height.
     return { ...view, padding: { ...view.padding, top: Math.max(view.padding?.top ?? 0, topOcclusion), bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
   }, [assignment, config, origin, quote, sheetHeight, topOcclusion]);
+  // Padding is expressed around the visible map viewport: 28 dp more below
+  // moves the centered coordinate 14 dp up. Route fits keep `target` unchanged.
+  const centeredPadding = useMemo(() => ({ ...target.padding,
+    bottom: (target.padding.bottom ?? 0) + 28 }), [target]);
+  const homeTarget = useMemo(() => home ? { ...target, padding: centeredPadding } : target,
+    [home, target, centeredPadding]);
   const horizontalFitPadding = Math.max(target.padding.left ?? 0, target.padding.right ?? 0, passengerPinClearance.side);
   return <>
-    <Camera target={ready ? target : undefined} mode={searchPresentationActive ? 'search-locked' : cameraMode}
+    <Camera target={ready ? homeTarget : undefined} recenterPadding={ready ? centeredPadding : undefined}
+      mode={searchPresentationActive ? 'search-locked' : cameraMode}
       recenter={ready ? recenter : undefined} fitRoute={ready && fitRoute ? {
         ...fitRoute, padding: { ...target.padding,
           top: (target.padding.top ?? 0) + passengerPinClearance.top,

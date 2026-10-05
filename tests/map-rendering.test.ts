@@ -38,7 +38,7 @@ test('MapLibre owns one persistent map, camera fit, Vima pins and route layers',
   assert.equal(pins.length, 3);
   assert.equal(pins[0]!.props.anchor, 'bottom');
   assert.deepEqual(pins[0]!.props.lngLat, [-99, 19]);
-  assert.equal(pins[0]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#0B0F0E');
+  assert.equal(pins[0]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#00D68F');
   assert.equal(pins[1]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#FF3830');
   const line = tree.root.findAllByType('MapLibreLayer' as never).find(layer => layer.props.id === 'r')!.props;
   assert.equal(line.type, 'line');
@@ -156,6 +156,38 @@ test('explicit Recenter works during Search lock without automatic refit', async
   await h.act(async () => tree.update(scene(1, 450)));
   assert.deepEqual(h.calls.filter((call: unknown[]) => call[0] === 'setStop').at(-1)?.[1],
     { center: [-99.5, 19.5], padding: { bottom: 450 }, duration: 0 });
+  await h.act(async () => tree.unmount());
+});
+
+test('Home and recenter move the visible center 14 dp up without changing route-fit padding', async () => {
+  const h = createMapHarness({ reduced: true });
+  const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+  const origin = { id: 'origin', name: 'Origen', address: '', coordinate: [-99, 19] };
+  const destination = { id: 'destination', name: 'Destino', address: '', coordinate: [-98, 20] };
+  const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [origin.coordinate, destination.coordinate] } };
+  const config = { viewport: () => ({ center: origin.coordinate, padding: { top: 16, bottom: 20 } }),
+    route: { width: 4, opacity: 1 }, vehicle: { radius: 12, color: '#000' } };
+  const scene = (home: boolean, sequence?: number, fit = false) => React.createElement(PassengerMap, {
+    origin, destination: home ? null : destination, quote: fit ? { origin, destination, route } : undefined,
+    home, ready: true, sheetHeight: 300, topOcclusion: 72, config,
+    cameraMode: fit ? 'user-controlled' : 'automatic',
+    recenter: sequence ? { coordinate: origin.coordinate, sequence } : undefined,
+    fitRoute: fit ? { sequence: 1, coordinates: [origin.coordinate, destination.coordinate] } : undefined,
+  });
+  const tree: ReactTestRenderer = await h.render(scene(true));
+  const stops = () => h.calls.filter((call: unknown[]) => call[0] === 'setStop').map((call: unknown[]) => call[1] as {
+    padding: { top: number; bottom: number; left?: number; right?: number }; bounds?: number[] });
+  assert.equal(stops()[0]!.padding.top, 72);
+  assert.equal(stops()[0]!.padding.bottom, 348); // Base 20 + sheet 300 + 28 gives a 14 dp upward shift.
+  await h.act(async () => tree.update(scene(true, 1)));
+  assert.equal(stops().at(-1)!.padding.bottom, 348);
+  await h.act(async () => tree.update(scene(false, 2)));
+  assert.equal(stops().at(-1)!.padding.bottom, 348); // Recenter also shifts outside Home.
+  await h.act(async () => tree.update(scene(false, undefined, true)));
+  const fitted = stops().at(-1)!;
+  assert.ok(fitted.bounds);
+  assert.equal(fitted.padding.bottom, 20 + 300 +  // No 28 dp center offset in route-fit.
+    h.load('src/features/passenger/mapCameraFootprint.ts').passengerPinClearance.bottom);
   await h.act(async () => tree.unmount());
 });
 
@@ -286,7 +318,7 @@ test('location animates only its outer ring, stops in background and remains opa
     const h = createMapHarness({ reduced }); const { PassengerUserLocation } = h.load('src/features/passenger/PassengerMapPin.tsx');
     const place = { id: 'p', coordinate: [0, 0] };
     const tree: ReactTestRenderer = await h.render(React.createElement(PassengerUserLocation, { place }));
-    const core = tree.root.findAllByType('View' as never).find(node => node.props.style?.backgroundColor === '#2F80FF');
+    const core = tree.root.findAllByType('View' as never).find(node => node.props.style?.backgroundColor === '#3B82F6');
     assert.ok(core); assert.equal(core.props.style.opacity, 1);
     assert.equal(h.calls.some((c: unknown[]) => c[0] === 'repeat'), !reduced);
     const repeats = h.calls.filter((c: unknown[]) => c[0] === 'repeat').length;

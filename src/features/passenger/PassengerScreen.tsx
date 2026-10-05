@@ -334,7 +334,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       </> : flow.phase === 'home' ? <>
         <Pressable onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
           style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed]}>
-          <VimaGlyph name="search" color={t.colors.greenDark} />
+          <VimaGlyph name="search" color={t.colors.graphite} />
           <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
         </Pressable>
         <View style={styles.quickRow}>
@@ -348,7 +348,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
         <View style={[styles.addressGroup, styles.confirmAddressGroup]}>
-          <AddressField label="Origen" place={flow.origin} color={t.colors.carbon} onPress={() => openField('origin')} disabled={blocked} />
+          <AddressField label="Origen" place={flow.origin} color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />
           {flow.quote?.stops.map((place) => <AddressField key={place.id} label={place.name} place={place} color={t.colors.gray} disabled />)}
           <View style={styles.addressRule} />
           <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} disabled={blocked} />
@@ -447,11 +447,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             resizeMode="contain" accessibilityLabel="Vima" />
           <Pressable accessibilityRole="button" accessibilityLabel="Notificaciones" accessibilityHint="Módulo no disponible"
             accessibilityState={{ disabled: true }} disabled hitSlop={4} style={styles.notification}>
-            <VimaGlyph name="notifications" />
+            <VimaGlyph name="notifications" color={t.colors.graphite} />
           </Pressable>
         </> : <>
           {!matching && !assignment && flow.phase !== 'requesting' ? <Pressable accessibilityRole="button" accessibilityLabel="Volver"
-            onPress={goBack} style={({ pressed }) => [styles.headerSide, pressed && surfaces.pressed]}><VimaGlyph name="back" /></Pressable> : null}
+            onPress={goBack} style={({ pressed }) => [styles.headerSide, pressed && surfaces.pressed]}><VimaGlyph name="back" color={t.colors.graphite} /></Pressable> : null}
           {!confirmationPillVisible ? <VimaText variant={assignment || matching ? 'bodyMedium' : 'h3'} style={styles.headerTitle} accessibilityRole="header">
             {assignment ? 'Tu conductor va en camino' : matching ? 'Buscando un conductor' : ''}
           </VimaText> : null}
@@ -473,7 +473,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       {incident && (interaction?.targetOffset ?? sheetFrameHeight) > chromeBottom + 100 ? <IncidentCard details={incident}
         topOffset={topFrameShift + chromeBottom + 12} maxHeight={Math.min(200, (interaction?.targetOffset ?? sheetFrameHeight) - chromeBottom - 24)} onClose={() => setIncident(null)} /> : null}
       {!mapFailed && flow.phase === 'home' && !flow.field && !reviewing && (flow.originStatus === 'loading' || flow.originStatus === 'unavailable') ?
-        <ElementEntrance style={[styles.mapStatus, { top: topFrameShift + chromeBottom + 12 }]}><Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={() => openField('origin')} style={styles.row}><VimaGlyph name="info" color={t.colors.accentBluePressed} /><VimaText variant="caption" accessibilityLiveRegion="polite">
+        <ElementEntrance style={[styles.mapStatus, { top: topFrameShift + chromeBottom + 12 }]}><Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={() => openField('origin')} style={styles.row}><VimaGlyph name="info" color={t.colors.blue} /><VimaText variant="caption" accessibilityLiveRegion="polite">
           {flow.originStatus === 'loading' ? 'Obteniendo tu ubicación...' : 'No se pudo obtener tu ubicación'}</VimaText></Pressable></ElementEntrance> : null}
       {mapFailed ? <View style={[styles.mapStatus, { top: topFrameShift + chromeBottom + 12 }]}><VimaGlyph name="warning" color={t.colors.amber} />
         <VimaText variant="caption">No se pudo cargar el mapa</VimaText></View> : null}
@@ -487,7 +487,7 @@ function SmallPin({ color }: { color: string }) {
   return <View accessible={false} style={styles.pinBox}><View style={[styles.pinShape, { backgroundColor: color }]} /><View style={styles.pinCore} /></View>;
 }
 function StatusNotice({ children, retry = false }: { children: string; retry?: boolean }) {
-  return <View style={styles.notice}><VimaGlyph name={retry ? 'refresh' : 'info'} color={t.colors.accentBluePressed} />
+  return <View style={styles.notice}><VimaGlyph name={retry ? 'refresh' : 'info'} color={t.colors.blue} />
     <VimaText variant="caption" accessibilityLiveRegion="polite" style={styles.fill}>{children}</VimaText></View>;
 }
 function MatchingProgress() {
@@ -528,7 +528,7 @@ function PlaceRow({ place, onPress, resolveMedia }: { place: PlaceSuggestion; on
   </Pressable></ElementEntrance>;
 }
 function QuickPlace({ label, icon, onPress }: { label: string; icon: VimaGlyphName; onPress?: () => void }) {
-  const content = <><VimaGlyph name={icon} color={t.colors.greenDark} /><VimaText variant="caption">{label}</VimaText></>;
+  const content = <><VimaGlyph name={icon} color={t.colors.graphite} /><VimaText variant="caption">{label}</VimaText></>;
   return <ElementEntrance style={styles.fill}>{onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
     style={({ pressed }) => [styles.quickPlace, pressed && surfaces.pressed]}>{content}</Pressable>
     : <View accessible accessibilityLabel={label} style={styles.quickPlace}>{content}</View>}</ElementEntrance>;
@@ -552,12 +552,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden', backgroundColor: '#F6F7F8' },
   topChrome: { position: 'absolute', left: 16, right: 16, minHeight: 48, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
-  headerLockup: { width: 672 * 28 / 200, height: 28 },
+  headerLockup: { width: 672 * 32 / 200, height: 32, ...elevationStyle('level1', t.colors.carbon) },
   headerSide: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center',
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.white },
   notification: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
-    boxShadow: [{ offsetX: 0, offsetY: 4, blurRadius: 16, color: 'rgba(0,0,0,0.12)' }] },
+    ...elevationStyle('level2', t.colors.carbon) },
   headerTitle: { flex: 1, textAlign: 'center', color: t.colors.carbon },
   confirmationPill: { position: 'absolute', alignSelf: 'center', height: confirmationPillHeight,
     paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center', borderRadius: t.radii.pillPx,
@@ -569,39 +569,41 @@ const styles = StyleSheet.create({
   handle: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[0], borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   content: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingBottom: base, gap: md },
   originField: { ...surfaces.field, minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md,
-    paddingHorizontal: md, paddingVertical: sm },
-  originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.carbon },
+    paddingHorizontal: md, paddingVertical: sm, ...elevationStyle('level1', t.colors.carbon) },
+  originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
   row: { flexDirection: 'row', alignItems: 'center', gap: md },
   homeSearch: { ...surfaces.card, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.pillPx,
     flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md,
     ...elevationStyle('level1', t.colors.carbon) },
   quickRow: { flexDirection: 'row', gap: sm },
   quickPlace: { ...surfaces.card, flex: 1, minHeight: t.components.buttonPrimary.heightPx + t.spacing.scalePx[2]!, alignItems: 'center', justifyContent: 'center',
-    paddingVertical: sm, gap: sm, backgroundColor: t.colors.background },
+    paddingVertical: sm, gap: sm, backgroundColor: t.colors.background, ...elevationStyle('level1', t.colors.carbon) },
   recentHeader: { flexDirection: 'row', alignItems: 'center', marginTop: xs },
   recent: { ...surfaces.card, minHeight: t.components.buttonPrimary.heightPx + sm, flexDirection: 'row', alignItems: 'center', gap: md,
-    paddingVertical: sm, paddingHorizontal: md },
+    paddingVertical: sm, paddingHorizontal: md, ...elevationStyle('level1', t.colors.carbon) },
   recentIcon: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[7], alignItems: 'center', justifyContent: 'center',
     borderRadius: t.radii.smallPx, backgroundColor: t.colors.background },
   pinBox: { width: t.components.iconSizesPx[1], height: t.components.iconSizesPx[1], alignItems: 'center', justifyContent: 'center' },
   pinShape: { width: t.components.iconSizesPx[0], height: t.components.iconSizesPx[0], borderRadius: t.radii.pillPx,
     borderBottomRightRadius: t.radii.smallPx / 2, transform: [{ rotate: '45deg' }] },
   pinCore: { position: 'absolute', width: xs, height: xs, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white, top: sm, left: sm },
-  addressGroup: { ...surfaces.field, borderRadius: t.radii.cardPx, overflow: 'hidden' },
+  addressGroup: { ...surfaces.field, borderRadius: t.radii.cardPx, overflow: 'hidden', ...elevationStyle('level1', t.colors.carbon) },
   confirmAddressGroup: { marginHorizontal: 0 },
   address: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md, paddingVertical: md, paddingHorizontal: md },
   addressRule: { marginLeft: t.components.iconSizesPx[1]! + md * 2, marginRight: md, height: t.borders.standardWidthPx, backgroundColor: surfaceColors.border },
   addressLabel: { color: t.colors.graphite },
   metrics: { flexDirection: 'row', alignItems: 'stretch', gap: xs },
-  metric: { ...surfaces.field, flex: 1, justifyContent: 'center', alignItems: 'center', gap: xs, paddingHorizontal: xs, paddingVertical: md },
+  metric: { ...surfaces.field, flex: 1, justifyContent: 'center', alignItems: 'center', gap: xs, paddingHorizontal: xs, paddingVertical: md,
+    ...elevationStyle('level1', t.colors.carbon) },
   metricEmphasis: { borderColor: t.colors.greenDark, backgroundColor: surfaceColors.brandWash },
   priceValue: { ...textStyle({ variant: 'h3' }), color: t.colors.greenDark },
   paymentRow: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md,
-    paddingHorizontal: md, paddingVertical: sm, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background },
+    paddingHorizontal: md, paddingVertical: sm, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
+    ...elevationStyle('level1', t.colors.carbon) },
   paymentIcon: { width: 32, height: 32, borderRadius: t.radii.smallPx, backgroundColor: t.colors.white, alignItems: 'center', justifyContent: 'center' },
   searchFocused: surfaces.focus,
   searchField: { ...surfaces.card, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.pillPx,
-    paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm },
+    paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm, ...elevationStyle('level1', t.colors.carbon) },
   searchInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, height: t.components.inputPrimary.heightPx, color: t.colors.carbon },
   contributionInput: { ...surfaces.field, ...textStyle({ variant: 'body', weight: 400 }), height: t.components.inputPrimary.heightPx,
     paddingHorizontal: md, color: t.colors.carbon },

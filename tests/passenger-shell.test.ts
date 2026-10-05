@@ -73,7 +73,15 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
       const logo = chrome.findByType('Image' as never);
       assert.match(logo.props.source, /vima_header_lockup_final\.png$/);
-      assert.equal(style(logo).height, 28); assert.equal(style(logo).backgroundColor, undefined);
+      assert.equal(style(logo).height, 32); assert.equal(style(logo).width, 672 * 32 / 200);
+      assert.equal(style(logo).backgroundColor, undefined);
+      assert.deepEqual(style(logo).boxShadow, [{ offsetX: 0, offsetY: 2, blurRadius: 8,
+        spreadDistance: 0, color: 'rgba(11, 15, 14, 0.06)' }]);
+      for (const label of ['¿A dónde vamos?', 'Casa']) {
+        const control = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label)!;
+        const resting = Object.assign({}, ...control.props.style({ pressed: false }).filter(Boolean));
+        assert.deepEqual(resting.boxShadow, style(logo).boxShadow);
+      }
       const notifications = chrome.findByType('Pressable' as never);
       assert.equal(notifications.props.accessibilityLabel, 'Notificaciones');
       assert.equal(notifications.props.accessibilityState.disabled, true); assert.equal(notifications.props.onPress, undefined);

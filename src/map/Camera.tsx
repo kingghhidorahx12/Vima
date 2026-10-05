@@ -8,14 +8,15 @@ export type CameraMode = 'automatic' | 'search-locked' | 'user-controlled';
 export interface RecenterIntent { readonly coordinate: readonly [number, number]; readonly sequence: number }
 export interface RouteFitIntent { readonly coordinates: readonly (readonly [number, number])[]; readonly sequence: number; readonly padding?: MapPadding }
 
-export function Camera({ target, motion, mode = 'automatic', recenter, fitRoute }: {
-  target?: CameraTarget; motion?: ApprovedCameraMotion; mode?: CameraMode; recenter?: RecenterIntent; fitRoute?: RouteFitIntent;
+export function Camera({ target, motion, mode = 'automatic', recenter, recenterPadding, fitRoute }: {
+  target?: CameraTarget; motion?: ApprovedCameraMotion; mode?: CameraMode; recenter?: RecenterIntent;
+  recenterPadding?: MapPadding; fitRoute?: RouteFitIntent;
 }) {
   const ref = useRef<CameraRef>(null);
   const { allowCameraAnimation } = useMotionPolicy();
   // Read the latest viewport at an explicit recenter without refitting on sheet changes during Search.
-  const currentPadding = useRef(target?.padding);
-  useEffect(() => { currentPadding.current = target?.padding; }, [target]);
+  const currentPadding = useRef(recenterPadding ?? target?.padding);
+  useEffect(() => { currentPadding.current = recenterPadding ?? target?.padding; }, [target, recenterPadding]);
   useEffect(() => {
     if (!target || mode !== 'automatic') return;
     const { padding, zoom, pitch, bearing } = target;

@@ -31,7 +31,7 @@ export function MapControls({ available, layers, open, onOpen, onToggle }: {
         onPress={() => tap(() => onToggle(layer))}
         style={({ pressed }) => [styles.menuRow, layer === 'incidents' && styles.menuDivider, pressed && styles.rowPressed]}>
         <VimaGlyph name={layer === 'traffic' ? 'traffic' : 'warning'}
-          color={available && layers[layer] ? t.colors.accentBluePressed : t.colors.gray} />
+          color={available && layers[layer] ? t.colors.green : t.colors.graphite} />
         <VimaText variant="bodySmall" style={styles.menuLabel}>{layer === 'traffic' ? 'Tráfico' : 'Incidentes'}</VimaText>
         <LayerSwitch checked={layers[layer] && available} />
       </Pressable>)}
@@ -45,9 +45,9 @@ export function LocationCTA({ busy, onPress }: { busy: boolean; onPress: () => v
   const { reducedMotion } = useMotionPolicy();
   return <ElementEntrance><Pressable accessibilityRole="button" accessibilityLabel="Tu ubicación"
     accessibilityState={{ busy }} onPress={() => { void semanticHaptics('toggle'); onPress(); }}
-    style={({ pressed }) => [styles.location, pressed && surfaces.pressed]}>
-    {busy && !reducedMotion ? <ActivityIndicator size="small" color={t.colors.accentBlue} />
-      : <VimaGlyph name="recenter" color={t.colors.accentBluePressed} />}
+    style={({ pressed }) => [styles.location, pressed && styles.buttonPressed]}>
+    {busy && !reducedMotion ? <ActivityIndicator size="small" color={t.colors.blue} />
+      : <VimaGlyph name="recenter" color={t.colors.blue} />}
     <VimaText variant="bodySmall">Tu ubicación</VimaText>
     <VimaGlyph name="chevron" color={t.colors.gray} />
   </Pressable></ElementEntrance>;
@@ -62,7 +62,7 @@ export function CenteredToast() {
   }, [opacity, reducedMotion]);
   const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   return <Animated.View pointerEvents="none" style={[styles.toast, style]}>
-    <VimaGlyph name="check" color={t.colors.accentBluePressed} />
+    <VimaGlyph name="check" color={t.colors.blue} />
     <VimaText variant="caption" accessibilityLiveRegion="polite">Ubicación centrada</VimaText>
   </Animated.View>;
 }
@@ -90,34 +90,35 @@ function MapControl({ label, icon, onPress, disabled = false, active = false, ex
       onPressOut={() => progress.set(reducedMotion ? 0 : fadeTo(0, mapPersonality.control))}
       onPress={() => { if (!reducedMotion) progress.set(withSequence(fadeTo(1, mapPersonality.control), fadeTo(0, mapPersonality.control))); onPress(); }}
       style={({ pressed }) => [styles.button, active && styles.buttonActive,
-        pressed && (active ? styles.buttonActivePressed : styles.buttonPressed), disabled && styles.buttonDisabled]}>
-      {busy && !reducedMotion ? <ActivityIndicator size="small" color={t.colors.white} />
-        : <VimaGlyph name={icon === 'layers' && expanded ? 'close' : icon} color={active ? t.colors.white : t.colors.graphite} />}
+        pressed && styles.buttonPressed, disabled && styles.buttonDisabled]}>
+      {busy && !reducedMotion ? <ActivityIndicator size="small" color={t.colors.green} />
+        : <VimaGlyph name={icon === 'layers' && expanded ? 'close' : icon}
+          color={active ? t.colors.green : t.colors.graphite} />}
     </Pressable>
   </Animated.View>;
 }
 const styles = StyleSheet.create({
   location: { ...surfaces.floating, borderRadius: t.radii.pillPx, minHeight: locationCtaHeight, flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: t.spacing.scalePx[2], gap: t.spacing.scalePx[1] },
-  controlHalo: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, backgroundColor: t.colors.accentBlue },
-  buttonActive: { backgroundColor: t.colors.accentBlue, borderColor: t.colors.accentBlue },
-  buttonActivePressed: { backgroundColor: t.colors.accentBluePressed, borderColor: t.colors.accentBluePressed },
-  buttonPressed: { backgroundColor: t.colors.accentBlueSoft, borderColor: t.colors.accentBlue },
+  controlHalo: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
+  buttonActive: { borderColor: t.colors.green },
+  buttonPressed: { backgroundColor: t.colors.background },
   buttonDisabled: { opacity: 0.5 },
   stack: { alignItems: 'flex-end', gap: t.spacing.scalePx[1] },
   button: { width: mapControlSize, height: mapControlSize, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border,
-    ...elevationStyle('level1', t.colors.carbon) },
+    ...elevationStyle('level2', t.colors.carbon) },
   toast: { minWidth: 170, paddingHorizontal: t.spacing.scalePx[2], paddingVertical: t.spacing.scalePx[1],
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.accentBlueSoft, borderWidth: t.borders.standardWidthPx,
     borderColor: t.colors.white, ...elevationStyle('level1', t.colors.carbon), flexDirection: 'row', gap: t.spacing.scalePx[1], alignItems: 'center' },
   menu: { ...surfaces.floating, minWidth: mapLayersMenuWidth, padding: t.spacing.scalePx[2] },
-  menuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[2] },
+  menuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[2],
+    backgroundColor: t.colors.white, borderRadius: t.radii.fieldPx, ...elevationStyle('level1', t.colors.carbon) },
   menuDivider: { borderTopWidth: t.borders.standardWidthPx, borderTopColor: surfaceColors.border },
-  rowPressed: { backgroundColor: t.colors.accentBlueSoft },
+  rowPressed: { backgroundColor: t.colors.background },
   menuLabel: { flex: 1 }, unavailable: { color: t.colors.gray },
   switch: { width: 36, height: 22, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight,
     padding: 2, justifyContent: 'center' },
-  switchOn: { backgroundColor: t.colors.accentBlue },
+  switchOn: { backgroundColor: t.colors.green },
   knob: { width: 18, height: 18, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white },
 });

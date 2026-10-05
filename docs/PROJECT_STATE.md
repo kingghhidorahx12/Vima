@@ -1,9 +1,36 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-map-edge-to-edge-p0`, desde el HEAD publicado
-`0b1e4b8` de `codex/passenger-confirm-chrome-p0`. Sin reset ni merge a main.
+Actualizado 2026-10-05 en `codex/passenger-map-polish-p0`, desde `7b470ac` de
+`codex/passenger-map-edge-to-edge-p0`. Sin reset ni merge a main.
 
 ## IMPLEMENTADO
+
+### Pulido visual Home/map shell — 2026-10-05
+
+- Home centra la ubicación actual 14 dp más arriba mediante 28 dp de padding inferior
+  adicional en el encuadre automático. Recenter usa el mismo desplazamiento respecto al
+  viewport útil; route-fit conserva sus bounds y padding anteriores. No cambiaron la
+  geometría edge-to-edge, safe area, clipping/radios, snaps ni navegación.
+- El lockup oficial mide 32 dp de alto visible, conserva su ancho proporcional y posición,
+  permanece sin chip/fondo y usa `level1`. Campos, chips y filas internas del pasajero usan
+  `level1`; VimaRideSheet conserva `level2` y los controles flotantes usan `level2`.
+- El control compacto de capas mide 44×44 dp con icono de 24 dp, fondo blanco y pressed
+  `#F7F8F7`. El press scale aprobado sigue en 0.98 y Reduced Motion lo deja estático.
+  El CTA flotante de ubicación conserva su geometría y también usa ese fondo pressed.
+- Acción primaria, estado activo y origen usan verde `#00D68F`; ubicación/recenter y
+  mensajes informativos del mapa usan azul `#3B82F6`; alertas continúan ámbar
+  `#F59E0B`; controles neutros y tabs inactivas usan graphite `#2A2E2D`; destino y
+  peligro conservan rojo `#FF3830`. Bottom nav sólo pinta Inicio activo en verde.
+  El renderer, RouteLayer, Traffic, TomTom y contratos no cambiaron.
+
+VERIFICACIÓN AUTOMÁTICA: TypeScript y lint limpios; suite 139/139; worklets 18/18;
+Expo Doctor 21/21; export Hermes Android/iOS, splash y aislamiento de fixtures y
+pricing/servidor correctos. La validación visual en dispositivo sigue PENDIENTE.
+
+PENDIENTE: verificar en Android físico el centrado visual de Home/recenter (+14 dp), la
+presencia y separación del lockup, la interactividad de controles, la profundidad de
+superficies, la lectura semántica de iconos y Reduced Motion. No se ejecutó EAS Build;
+los cambios son JavaScript/estilos y no exigen reconstruir el Development Build.
 
 ### Mapa Passenger edge-to-edge y fit horizontal simétrico — 2026-10-05
 

@@ -40,7 +40,7 @@ export const lightTheme = {
 } as const;
 
 /** Shadow color is not specified by the handoff; require an explicit approved color. */
-export function elevationStyle(level: keyof typeof visualTokens.elevation, color: string): ViewStyle {
+export function elevationStyle(level: keyof typeof visualTokens.elevation, color: string): Pick<ViewStyle, 'boxShadow'> {
   if (level === 'level0') return { boxShadow: [] };
   const token = visualTokens.elevation[level];
   if (!/^#[\da-f]{6}$/i.test(color)) throw new Error('Elevation requires an explicit opaque hex color.');

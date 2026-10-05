@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.9, boxShadow: [] },
   compact: { paddingHorizontal: t.spacing.scalePx[1] },
   button: { minHeight: t.components.buttonPrimary.heightPx, borderRadius: t.components.buttonPrimary.radiusPx,
-    backgroundColor: t.colors.greenDark, ...elevationStyle('level1', t.colors.greenDark), justifyContent: 'center', alignItems: 'center',
+    backgroundColor: t.colors.green, ...elevationStyle('level1', t.colors.carbon), justifyContent: 'center', alignItems: 'center',
     paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingVertical: t.spacing.scalePx[2] },
   gradient: { experimental_backgroundImage: `linear-gradient(90deg, ${primaryGradient.stops.map((stop) => `${stop.color} ${stop.position * 100}%`).join(', ')})` },
   secondary: { backgroundColor: t.colors.background, borderWidth: t.borders.standardWidthPx,
