@@ -182,8 +182,8 @@ test('confirmed route fit includes full geometry and useful viewport padding wit
     assert.ok(stop.bounds.every((value, index) => Math.abs(value - [-99.4, 19, -98, 20.2][index]!) < 1e-9));
     assert.ok(stop.padding.top > 16); // Bottom-anchored pin and its entrance stay below top chrome.
     assert.ok(stop.padding.bottom > 330); // Pin tip remains above the sheet.
-    assert.ok(stop.padding.left >= 20);
-    assert.ok(stop.padding.right > 80); // Right map controls plus pin width.
+    assert.ok(stop.padding.left >= 20); // Pin clearance remains protected.
+    assert.equal(stop.padding.left, stop.padding.right);
     assert.equal(stop.duration, reduced ? 0 : 420);
     assert.equal(stop.easing, reduced ? undefined : 'ease');
     await h.act(async () => tree.update(scene(1)));
@@ -348,12 +348,12 @@ test('both passenger fit intents use measured occlusion and exclude exterior mar
     const origin = { id: 'o', coordinate: [-99, 19] }; const destination = { id: 'd', coordinate: [-98, 20] };
     const coordinates = [origin.coordinate, [-100, 22], [-97, 21], destination.coordinate];
     const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } };
-    const config = { viewport: () => ({ center: [-99, 19], padding: { top: 24, bottom: 20, left: 20, right: 20 } }),
+    const config = { viewport: () => ({ center: [-99, 19], padding: { top: 24, bottom: 20, left: 20, right: 40 } }),
       route: { width: 4, opacity: 1 }, vehicle: { radius: 12, color: '#000' } };
     const scene = (sequence: number, measuredHeight: number, search = false, estimatedHeight = 500,
-      layersMenuOpen = false) => React.createElement(PassengerMap, {
+      layersMenuOpen = false, locationCtaVisible = true) => React.createElement(PassengerMap, {
       quote: { origin, destination, route }, origin, destination, home: false, ready: true, sheetHeight: estimatedHeight,
-      topOcclusion: 68, locationCtaVisible: true, layersMenuOpen, config, cameraMode: 'user-controlled', searchPresentationActive: search,
+      topOcclusion: 96, locationCtaVisible, layersMenuOpen, config, cameraMode: 'user-controlled', searchPresentationActive: search,
       fitRoute: { sequence, sheetHeight: measuredHeight, coordinates },
     });
     const tree: ReactTestRenderer = await h.render(scene(1, 280));
@@ -362,9 +362,9 @@ test('both passenger fit intents use measured occlusion and exclude exterior mar
       assert.equal(stops().length, 1);
       const first = stops()[0][1];
       assert.deepEqual(first.bounds, [-100, 19, -97, 22]);
-      assert.deepEqual(first.padding, { top: 68 + passengerPinClearance.top,
+      assert.deepEqual(first.padding, { top: 96 + passengerPinClearance.top,
         bottom: 20 + 280 + passengerPinClearance.bottom + locationCtaHeight + 12,
-        left: Math.max(20, passengerPinClearance.side), right: 80 + passengerPinClearance.side });
+        left: Math.max(40, passengerPinClearance.side), right: Math.max(40, passengerPinClearance.side) });
       assert.equal(first.duration, reduced ? 0 : 420);
       assert.equal(first.easing, reduced ? undefined : 'ease');
       await h.act(async () => tree.update(scene(1, 282, false, 550)));
@@ -373,12 +373,21 @@ test('both passenger fit intents use measured occlusion and exclude exterior mar
       assert.equal(stops().length, 1); // Search rejects even a new sequence.
       await h.act(async () => tree.update(scene(2, 390)));
       assert.equal(stops().length, 2);
+      assert.equal(stops()[1][1].padding.left, first.padding.left);
+      assert.equal(stops()[1][1].padding.right, first.padding.right);
+      assert.equal(stops()[1][1].padding.top, first.padding.top);
       assert.equal(stops()[1][1].padding.bottom - first.padding.bottom, 110);
       assert.equal(stops()[1][1].duration, reduced ? 0 : 420);
       await h.act(async () => tree.update(scene(2, 392)));
       assert.equal(stops().length, 2);
       await h.act(async () => tree.update(scene(3, 390, false, 500, true)));
-      assert.equal(stops()[2][1].padding.right, 20 + mapLayersMenuWidth + 12 + passengerPinClearance.side);
+      assert.equal(stops()[2][1].padding.left, first.padding.left);
+      assert.equal(stops()[2][1].padding.right, first.padding.right);
+      assert.ok(stops()[2][1].padding.right < mapLayersMenuWidth);
+      await h.act(async () => tree.update(scene(4, 390, false, 500, true, false)));
+      assert.equal(stops()[3][1].padding.left, first.padding.left);
+      assert.equal(stops()[3][1].padding.right, first.padding.right);
+      assert.equal(stops()[3][1].padding.bottom, first.padding.bottom + 110 - locationCtaHeight - 12);
     } finally { await h.act(async () => tree.unmount()); }
   }
 });
