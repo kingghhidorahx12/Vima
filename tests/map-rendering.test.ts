@@ -30,7 +30,7 @@ test('MapLibre owns one persistent map, camera fit, Vima pins and route layers',
   const tree: ReactTestRenderer = await h.render(scene());
   const nativeMap = tree.root.findByType('MapLibreMap' as never).instance;
   assert.equal(tree.root.findByType('MapLibreMap' as never).props.mapStyle,
-    'https://tiles.openfreemap.org/styles/positron');
+    h.load('src/map/basemap.ts').passengerBasemap);
   assert.deepEqual(h.calls.find((call: unknown[]) => call[0] === 'setStop')?.[1],
     { bounds: [-99, 19, -96, 22], padding: { bottom: 320, top: 20 }, zoom: undefined,
       pitch: undefined, bearing: undefined, duration: 0 });
@@ -67,6 +67,24 @@ test('approved camera motion reaches MapLibre while Reduced Motion stays immedia
     { center: [-99, 19], padding: undefined, zoom: 14, pitch: undefined, bearing: undefined,
       duration: 300, easing: 'ease' });
   await h.act(async () => tree.unmount());
+});
+
+test('compass resets only bearing, without center/zoom/padding commands or replay', async () => {
+  for (const reduced of [false, true]) {
+    const h = createMapHarness({ reduced });
+    const { Camera } = h.load('src/map/Camera.tsx');
+    const scene = (northRequest?: number) => React.createElement(Camera, {
+      mode: 'user-controlled', target: { center: [-99, 19], zoom: 15, padding: { top: 72, bottom: 320 } }, northRequest,
+    });
+    const tree: ReactTestRenderer = await h.render(scene());
+    assert.equal(h.calls.filter((c: unknown[]) => c[0] === 'setStop').length, 0);
+    await h.act(async () => tree.update(scene(1)));
+    assert.deepEqual(h.calls.filter((c: unknown[]) => c[0] === 'setStop').map((c: unknown[]) => c[1]),
+      [reduced ? { bearing: 0, duration: 0 } : { bearing: 0, duration: 420, easing: 'ease' }]);
+    await h.act(async () => tree.update(scene(1)));
+    assert.equal(h.calls.filter((c: unknown[]) => c[0] === 'setStop').length, 1);
+    await h.act(async () => tree.unmount());
+  }
 });
 
 test('a reviewing fit is the only camera stop and supplies Android easing with the approved 420 ms', async () => {

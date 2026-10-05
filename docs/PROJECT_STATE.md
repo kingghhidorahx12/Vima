@@ -1,9 +1,41 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-map-polish-p0`, desde `7b470ac` de
-`codex/passenger-map-edge-to-edge-p0`. Sin reset ni merge a main.
+Actualizado 2026-10-05 en `codex/passenger-basemap-topchrome-p0`, creada sobre
+`codex/passenger-map-polish-p0` @ `fb2159c`. Sin reset ni merge a main.
 
 ## IMPLEMENTADO
+
+### Cierre de basemap y top chrome Passenger — 2026-10-05
+
+- Home mantiene mapa detrás de la status bar transparente con contenido oscuro. El
+  lockup aprobado conserva 32 dp, proporción, ausencia de fondo y `level1`; su posición
+  es left 16 dp y top `safeAreaTop + 14 dp`. Notificaciones conserva su comportamiento
+  deshabilitado actual, sin badge, con 44×44 dp, right 16 dp, top `safeAreaTop + 8 dp`
+  y `level2`. No cambian las posiciones del chrome de otras fases.
+- La brújula de presentación Vima sustituye al ornamento nativo no personalizable:
+  44×44 dp, right 16 dp, top `safeAreaTop + 64 dp` (12 dp bajo notificaciones), `level1`.
+  Lee el bearing real y sólo aparece fuera del norte con fade de 160 ms. Reduced Motion
+  conserva únicamente el fade permitido; orientar al norte usa el movimiento de cámara
+  existente y se vuelve inmediato con reducción de movimiento. La acción sólo envía
+  bearing 0, sin center, zoom, pitch, bounds ni padding.
+- El Positron de OpenFreeMap que ya se utilizaba se incorpora localmente con sus licencias.
+  `basemap.ts` cambia sólo colores de paint: urbano `#F7F8F7`, secundarias `#F5F6F7`,
+  principales `#EBEBEB`, verdes secundarios `#ECF6EF`, parques `#D8EEDB`, agua `#BFDDF9`.
+  Se conservan orden de capas, fuentes, filtros, etiquetas, opacidades y anchos. No hay
+  overlays que tinten el mapa; ruta, pins y tráfico mantienen su estilo y prioridad.
+  Otros estilos explícitos siguen siendo autoritativos y producción sigue requiriendo
+  `EXPO_PUBLIC_MAP_STYLE_URL`; no se cambia proveedor ni se activa un fallback productivo.
+- Sin cambios en sheet, bottom nav, clipping/radios/márgenes, oclusión de cámara,
+  route-fit, navegación, matching o pricing. Sin dependencias ni configuración nativa nueva.
+
+VERIFICACIÓN AUTOMÁTICA: TypeScript y lint limpios; suite 143/143; worklets 19/19;
+Expo Doctor 21/21; schema de estilo MapLibre válido; export Hermes Android/iOS,
+aislamiento de fixtures, pricing/servidor/paths y límite de credenciales del bundle
+correctos. No requiere reconstruir el Development Build ni se ejecutó EAS.
+
+PENDIENTE ANDROID FÍSICO: comprobar posiciones reales sobre status bar/notch, columna
+notificaciones/brújula al rotar, fade con y sin Reduced Motion, legibilidad de verdes/agua
+y contraste de ruta/pins/tráfico con tiles reales. No se marca como validado en dispositivo.
 
 ### Pulido visual Home/map shell — 2026-10-05
 

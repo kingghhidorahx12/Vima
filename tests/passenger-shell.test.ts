@@ -67,13 +67,15 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       assert.equal(mapViewport!.findAllByType('SheetBoundary' as never).length, 0);
       assert.equal(style(host(tree, 'SheetBoundary')).marginHorizontal, undefined);
       const chrome = id(tree, 'passenger-top-chrome');
-      assert.equal(style(chrome).position, 'absolute'); assert.equal(style(chrome).top, top! + 12);
+      assert.equal(style(chrome).position, 'absolute'); assert.equal(style(chrome).top, top! + 8);
+      assert.equal(style(chrome).minHeight, 44); assert.equal(style(chrome).right, 16);
       assert.equal(style(chrome).left, 16); assert.equal(style(chrome).backgroundColor, undefined);
       assert.equal(host(tree, 'PassengerMapContent').props.topOcclusion, top! + 72);
       assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
       const logo = chrome.findByType('Image' as never);
       assert.match(logo.props.source, /vima_header_lockup_final\.png$/);
       assert.equal(style(logo).height, 32); assert.equal(style(logo).width, 672 * 32 / 200);
+      assert.equal(style(chrome).top + (style(chrome).minHeight - style(logo).height) / 2, top! + 14);
       assert.equal(style(logo).backgroundColor, undefined);
       assert.deepEqual(style(logo).boxShadow, [{ offsetX: 0, offsetY: 2, blurRadius: 8,
         spreadDistance: 0, color: 'rgba(11, 15, 14, 0.06)' }]);
@@ -85,7 +87,13 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       const notifications = chrome.findByType('Pressable' as never);
       assert.equal(notifications.props.accessibilityLabel, 'Notificaciones');
       assert.equal(notifications.props.accessibilityState.disabled, true); assert.equal(notifications.props.onPress, undefined);
-      assert.equal(style(notifications).width, 40); assert.equal(style(notifications).height, 40);
+      assert.equal(style(notifications).width, 44); assert.equal(style(notifications).height, 44);
+      assert.deepEqual(style(notifications).boxShadow, [{ offsetX: 0, offsetY: 8, blurRadius: 24,
+        spreadDistance: 0, color: 'rgba(11, 15, 14, 0.1)' }]);
+      const compass = id(tree, 'passenger-compass');
+      assert.equal(style(compass).right, 16);
+      assert.equal(style(compass).top - (style(chrome).top + style(notifications).height), 12);
+      assert.equal(host(tree, 'NativeMapBoundary').props.compass, false);
       assert.equal(notifications.props.hitSlop, 4);
       const nav = id(tree, 'passenger-bottom-navigation');
       assert.equal(surface.findAll(n => n.props.testID === 'passenger-bottom-navigation').length, 0);
@@ -131,6 +139,39 @@ test('bottom nav exists only in normal Home and returns after internal back with
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.unmountedMap, 0); assert.equal(h.mounted.sheet, 1);
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('rotating reveals the compass below notifications with only a 160 ms fade under either motion policy', async () => {
+  for (const reduced of [false, true]) {
+    const h = createHarness({}, { reduced });
+    const fixture = createPassengerFixtureGateway(clock);
+    const tree: ReactTestRenderer = await h.render(fixture.gateway);
+    try {
+      await settle();
+      await act(async () => host(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+      assert.equal(id(tree, 'passenger-compass').props.pointerEvents, 'none');
+      const before = h.animations.length;
+      await act(async () => host(tree, 'NativeMapBoundary').props.onRegionIsChanging({ nativeEvent: { bearing: 90 } }));
+      const compass = id(tree, 'passenger-compass');
+      assert.equal(compass.props.pointerEvents, 'auto');
+      assert.equal(style(compass).top, 24 + 64); assert.equal(style(compass).right, 16);
+      assert.equal(style(compass).transform, undefined); // Appearance adds no translation or scale.
+      assert.ok(h.animations.slice(before).some((a: { value: number; duration: number }) => a.value === 1 && a.duration === 160));
+      const button = compass.findByType('Pressable' as never);
+      const resting = Object.assign({}, ...button.props.style({ pressed: false }).filter(Boolean));
+      assert.equal(resting.width, 44); assert.equal(resting.height, 44);
+      assert.deepEqual(resting.boxShadow, [{ offsetX: 0, offsetY: 2, blurRadius: 8,
+        spreadDistance: 0, color: 'rgba(11, 15, 14, 0.06)' }]);
+      await act(async () => button.props.onPress());
+      assert.equal(host(tree, 'PassengerMapContent').props.northRequest, 1);
+      assert.equal(host(tree, 'PassengerMapContent').props.fitRoute, undefined);
+      const beforeHide = h.animations.length;
+      await act(async () => host(tree, 'NativeMapBoundary').props.onRegionIsChanging({ nativeEvent: { bearing: 360 } }));
+      assert.equal(id(tree, 'passenger-compass').props.pointerEvents, 'none');
+      assert.ok(h.animations.slice(beforeHide).some((a: { value: number; duration: number }) => a.value === 0 && a.duration === 160));
+      assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+    } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+  }
 });
 
 test('confirmation title floats over the persistent map with approved geometry and no duplicate safe-area occlusion', async () => {

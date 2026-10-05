@@ -30,6 +30,7 @@ import { normalizeCoordinate, type Coordinate } from '../../map/models';
 import { defaultTrafficLayers, displayKeyAvailable, type TrafficLayerPreferences } from '../../map/traffic';
 import { mapLayerStorage } from '../../services/storage/mapLayers';
 import { MapControls, LocationCTA, CenteredToast } from './MapControls';
+import { MapCompass } from './MapCompass';
 import { useLocationVisibility } from '../../map/useLocationVisibility';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { ElementEntrance } from '../../motion/ElementEntrance';
@@ -75,6 +76,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const [mapUserControlled, setMapUserControlled] = useState(false);
+  const [mapBearing, setMapBearing] = useState(0);
+  const [northRequest, setNorthRequest] = useState<number>();
   const [mapLayers, setMapLayers] = useState<TrafficLayerPreferences>(defaultTrafficLayers);
   const [layersOpen, setLayersOpen] = useState(false);
   const [incident, setIncident] = useState<IncidentDetails | null>(null);
@@ -418,7 +421,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     <View testID="passenger-map-surface" collapsable={false} style={styles.primarySurface}
       onLayout={(event) => { setHeight(event.nativeEvent.layout.height); setMapWidth(event.nativeEvent.layout.width); setMapLayoutNavHeight(navHeight); }}>
       <PassengerRideShell trip={flow.trip} mapViewportStyle={styles.mapViewport}
-        map={{ ref: nativeMap, onRegionWillChange: locationVisibility.start, onRegionDidChange: event => {
+        map={{ ref: nativeMap, compass: false,
+          onRegionIsChanging: event => { if (Number.isFinite(event.nativeEvent.bearing)) setMapBearing(event.nativeEvent.bearing); },
+          onRegionWillChange: locationVisibility.start, onRegionDidChange: event => {
+          if (Number.isFinite(event.nativeEvent.bearing)) setMapBearing(event.nativeEvent.bearing);
           locationVisibility.settled();
           const target = pendingCenter.current;
           if (target && !event.nativeEvent.userInteraction && event.nativeEvent.center.every((value, i) => Math.abs(value - target[i]!) < 0.00001)) {
@@ -431,7 +437,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           currentLocation={flow.currentLocation} onIncidentSelect={pickingMap ? undefined : setIncident}
           home={flow.phase === 'home' && !flow.destination}
           ready={mapReady} searchPresentationActive={flow.field !== null}
-          recenter={recenter} fitRoute={routeFit} layers={mapLayers} displayKeyAvailable={hasDisplayKey} active={focused}
+          recenter={recenter} fitRoute={routeFit} northRequest={northRequest} layers={mapLayers} displayKeyAvailable={hasDisplayKey} active={focused}
           manualSelection={pickingMap && selectedCoordinate ? { coordinate: selectedCoordinate,
             kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
           cameraMode={reviewing || flow.phase === 'confirm' || mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
@@ -441,7 +447,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           sheetHeight={interaction ? sheetFrameHeight - interaction.targetOffset : sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
         sheet={{ interaction, header, style: styles.sheet, onVisibleHeightChange: setVisibleSheetHeight }} renderPhase={() => content} />
       <View testID="passenger-top-chrome" pointerEvents="box-none" onTouchStart={dismissKeyboard}
-        style={[styles.topChrome, { top: topFrameShift + 8 }]}>
+        style={[styles.topChrome, homeNormal && styles.homeTopChrome, { top: homeNormal ? topInset + 8 : topFrameShift + 8 }]}>
         {homeNormal ? <>
           <Image source={require('../../../assets/brand/vima_header_lockup_final.png')} style={styles.headerLockup}
             resizeMode="contain" accessibilityLabel="Vima" />
@@ -457,6 +463,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           </VimaText> : null}
         </>}
       </View>
+      <MapCompass bearing={mapBearing} ready={mapReady && !mapFailed} topInset={topInset}
+        onPress={() => setNorthRequest(value => (value ?? 0) + 1)} />
       {confirmationPillVisible ? <View testID="passenger-confirmation-pill" pointerEvents="none"
         style={[styles.confirmationPill, { top: topFrameShift + confirmationPillTop }]}>
         <VimaText variant="bodyMedium" numberOfLines={1} accessibilityRole="header" style={styles.confirmationPillText}>Confirma tu viaje</VimaText>
@@ -552,10 +560,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden', backgroundColor: '#F6F7F8' },
   topChrome: { position: 'absolute', left: 16, right: 16, minHeight: 48, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
+  homeTopChrome: { minHeight: 44 },
   headerLockup: { width: 672 * 32 / 200, height: 32, ...elevationStyle('level1', t.colors.carbon) },
   headerSide: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center',
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.white },
-  notification: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
+  notification: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
     ...elevationStyle('level2', t.colors.carbon) },
   headerTitle: { flex: 1, textAlign: 'center', color: t.colors.carbon },

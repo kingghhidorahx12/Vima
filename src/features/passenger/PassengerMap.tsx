@@ -24,10 +24,11 @@ export interface PassengerMapConfig {
   readonly vehicleMotion: VehicleMotionConfig;
 }
 export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, topOcclusion = 0, locationCtaVisible = false, searchPresentationActive,
-  cameraMode = 'automatic', recenter, fitRoute, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
+  cameraMode = 'automatic', recenter, fitRoute, northRequest, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
   quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
   ready: boolean; sheetHeight: number; topOcclusion?: number; locationCtaVisible?: boolean; layersMenuOpen?: boolean; searchPresentationActive?: boolean; cameraMode?: CameraMode;
-  recenter?: RecenterIntent; fitRoute?: Omit<PassengerRouteFitIntent, 'sheetHeight'> & { sheetHeight?: number }; layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
+  recenter?: RecenterIntent; fitRoute?: Omit<PassengerRouteFitIntent, 'sheetHeight'> & { sheetHeight?: number }; northRequest?: number;
+  layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
   onIncidentSelect?: (details: IncidentDetails) => void;
   manualSelection?: { coordinate: Place['coordinate']; kind: 'origin' | 'destination' } | null; config: PassengerMapConfig;
 }) {
@@ -47,7 +48,7 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
     [home, target, centeredPadding]);
   const horizontalFitPadding = Math.max(target.padding.left ?? 0, target.padding.right ?? 0, passengerPinClearance.side);
   return <>
-    <Camera target={ready ? homeTarget : undefined} recenterPadding={ready ? centeredPadding : undefined}
+    <Camera target={ready ? homeTarget : undefined} recenterPadding={ready ? centeredPadding : undefined} northRequest={ready ? northRequest : undefined}
       mode={searchPresentationActive ? 'search-locked' : cameraMode}
       recenter={ready ? recenter : undefined} fitRoute={ready && fitRoute ? {
         ...fitRoute, padding: { ...target.padding,

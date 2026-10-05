@@ -1,5 +1,5 @@
 // Urban basemap for development only; production must provide its own URL.
-const developmentDemoStyle = 'https://tiles.openfreemap.org/styles/positron';
+export const developmentDemoStyle = 'https://tiles.openfreemap.org/styles/positron';
 
 export function resolveMapStyle(value: string | undefined, development: boolean): string {
   const configured = value?.trim();

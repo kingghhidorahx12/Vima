@@ -8,9 +8,9 @@ export type CameraMode = 'automatic' | 'search-locked' | 'user-controlled';
 export interface RecenterIntent { readonly coordinate: readonly [number, number]; readonly sequence: number }
 export interface RouteFitIntent { readonly coordinates: readonly (readonly [number, number])[]; readonly sequence: number; readonly padding?: MapPadding }
 
-export function Camera({ target, motion, mode = 'automatic', recenter, recenterPadding, fitRoute }: {
+export function Camera({ target, motion, mode = 'automatic', recenter, recenterPadding, fitRoute, northRequest }: {
   target?: CameraTarget; motion?: ApprovedCameraMotion; mode?: CameraMode; recenter?: RecenterIntent;
-  recenterPadding?: MapPadding; fitRoute?: RouteFitIntent;
+  recenterPadding?: MapPadding; fitRoute?: RouteFitIntent; northRequest?: number;
 }) {
   const ref = useRef<CameraRef>(null);
   const { allowCameraAnimation } = useMotionPolicy();
@@ -39,5 +39,13 @@ export function Camera({ target, motion, mode = 'automatic', recenter, recenterP
     void ref.current?.setStop({ bounds: fitBounds(fitRoute.coordinates), padding: fitRoute.padding ?? target?.padding,
       ...(allowCameraAnimation ? { duration: motionTimings.map.duration, easing: 'ease' as const } : { duration: 0 }) });
   }, [fitRoute, target, mode, allowCameraAnimation]);
+  const appliedNorthRequest = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (northRequest === undefined || appliedNorthRequest.current === northRequest) return;
+    appliedNorthRequest.current = northRequest;
+    // Compass action only: preserve center, zoom, pitch and both kinds of fit padding.
+    void ref.current?.setStop({ bearing: 0,
+      ...(allowCameraAnimation ? { duration: motionTimings.map.duration, easing: 'ease' as const } : { duration: 0 }) });
+  }, [northRequest, allowCameraAnimation]);
   return <NativeCamera ref={ref} />;
 }
