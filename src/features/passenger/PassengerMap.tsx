@@ -67,7 +67,7 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
     {!searchPresentationActive && quote ? <RouteLayer id="passenger-route" data={assignment?.routeToOrigin ?? quote.route}
       activeTone="accentBlue" state="active" appearance={config.route} active={active} /> : null}
     {!searchPresentationActive ? <VehicleLayer id="passenger-assigned-vehicle" kind="circle" sample={sample}
-      appearance={config.vehicle} motion={config.vehicleMotion} /> : null}
+      appearance={config.vehicle} motion={config.vehicleMotion} assignmentId={assignment?.id} /> : null}
     {currentLocation ? <PassengerUserLocation place={currentLocation} active={active} /> : null}
     {!searchPresentationActive && !home && (quote?.origin ?? origin) ? <PassengerMapPin place={(quote?.origin ?? origin)!} kind="origin" /> : null}
     {!searchPresentationActive && (quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}

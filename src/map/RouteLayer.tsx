@@ -1,6 +1,6 @@
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useEffect, useMemo, useRef } from 'react';
-import Animated, { cancelAnimation, useAnimatedProps, useSharedValue, withDelay, withRepeat } from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedProps, useSharedValue } from 'react-native-reanimated';
 import { useMotionPolicy } from '../motion/ReducedMotion';
 import { fadeTo } from '../motion/helpers';
 import { motionTimings } from '../motion/timing';
@@ -25,17 +25,24 @@ export function RouteLayer({ id, data, appearance, state, activeTone, reveal = t
   const running = useMotionActive(active);
   const flow = useSharedValue(0);
   const index = useMemo(() => indexRoute(data), [data]);
+  const geometryKey = JSON.stringify(data.geometry);
+  const sweptGeometry = useRef<string | undefined>(undefined);
   useEffect(() => {
+    if (state !== 'active') { sweptGeometry.current = undefined; cancelAnimation(flow); flow.set(1); return; }
+    if (sweptGeometry.current === geometryKey) {
+      if (!running || reducedMotion) { cancelAnimation(flow); flow.set(1); }
+      return;
+    }
+    sweptGeometry.current = geometryKey;
     cancelAnimation(flow); flow.set(0);
-    if (running && !reducedMotion && state === 'active') flow.set(withDelay(mapPersonality.pulse.duration,
-      withRepeat(fadeTo(1, { ...motionTimings.map, duration: mapPersonality.routeCycleMs }), -1, false)));
+    flow.set(running && !reducedMotion ? fadeTo(1, { ...motionTimings.map,
+      duration: motionTimings.map.duration + motionTimings.sheetEnter.duration }) : 1);
     return () => cancelAnimation(flow);
-  }, [flow, index, running, reducedMotion, state]);
+  }, [flow, geometryKey, running, reducedMotion, state]);
   const flowProps = useAnimatedProps(() => ({ data: JSON.stringify(routeWindow(index,
     running && !reducedMotion ? flow.get() : 0, mapPersonality.routeWindow)) }));
   const progress = useSharedValue(reveal ? 0 : 1);
   const mounted = useRef(false);
-  const geometryKey = JSON.stringify(data.geometry);
   const color = routeColor(state, activeTone);
   const channels = [1, 3, 5].map((offset) => parseInt(color.slice(offset, offset + 2), 16));
   const red = useSharedValue(channels[0]!);
@@ -66,9 +73,6 @@ export function RouteLayer({ id, data, appearance, state, activeTone, reveal = t
     <Layer id={`${id}-shadow`} type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }}
       paint={{ 'line-width': appearance.width + 6, 'line-blur': 3,
         'line-opacity': ['*', appearance.opacity * 0.18, ['get', 'vimaRevealOpacity']], 'line-color': visualTokens.colors.carbon }} />
-    <Layer id={`${id}-halo`} type="line" layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-      paint={{ 'line-width': appearance.width + 4, 'line-blur': 2,
-        'line-opacity': ['*', appearance.opacity * 0.24, ['get', 'vimaRevealOpacity']], 'line-color': color }} />
     <Layer id={id} type="line" layout={{ 'line-cap': appearance.cap, 'line-join': appearance.join }}
       paint={{ 'line-width': appearance.width, 'line-opacity': appearance.opacity,
         'line-color': ['rgba', ['get', 'vimaRed'], ['get', 'vimaGreen'], ['get', 'vimaBlue'], ['get', 'vimaRevealOpacity']] }} />

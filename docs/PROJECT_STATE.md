@@ -1,12 +1,41 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-layers-close-glitch-p0`, creada desde
-`codex/passenger-motion-1-2-p0` @ `bccd7fe`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-direction-c-premium-p0`, creada desde
+`codex/passenger-layers-close-glitch-p0` @ `8c13b4e`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Dirección C Passenger: efectos puntuales y basemap local — 2026-10-06
+
+- La ruta conserva su reveal y geometría; el highlight recorre una ruta activa
+  nueva una sola vez durante 720 ms (420 ms mapa + 300 ms sheet). Un rerender
+  con la misma geometría no lo reinicia. Se retiró el halo luminoso permanente
+  y quedó la sombra neutral. Reduced Motion muestra la ruta sin barrido espacial.
+- Home y Search mantienen halo visible estático; sólo el cambio de foco hace un
+  fade de 160 ms. El ciclo aprobado de 1900 ms queda reservado a SearchPulse en
+  matching. El halo de cada pin queda detrás del núcleo y conserva su entrada
+  one-shot, sin nuevos loops.
+- Una assignment nueva dispara un bloom verde de 480 ms bajo el vehículo,
+  identificado por `assignment.id`; nuevos samples de posición no lo reinician.
+  Reduced Motion usa énfasis/fade sin expansión. La aguja norte de la brújula
+  pasa a rojo `#FF3830`; el sur y contorno permanecen graphite.
+- Sólo el `passengerBasemap` local sobre el Positron DEV empaquetado usa base
+  `#F6F7F7`, park/recreation `#BFE7C5`, wood `#A8DBB0`, grass `#D0EECE`,
+  farmland `#DFEBCF`, water `#8CCBF3` y waterways `#B8DDF6`. Landcover real
+  empieza en z10 y recreation en z13, con opacidad 0.75/0.90/1.0 en z12/13/14.
+  Roads, labels, source y custom/production styles conservan su configuración.
+  Sin `EXPO_PUBLIC_MAP_STYLE_URL` en el entorno local/EAS development, la
+  resolución DEV aplica ese Positron. No se conoce el env del APK Android físico
+  ya instalado, por lo que la fidelidad de este basemap y los efectos sigue
+  PENDIENTE de validar allí. No se generó EAS Build ni se añadieron dependencias
+  o cambios nativos.
+- TypeScript, lint, suite completa (168/168), gateway (28/28), worklets,
+  splash, schema MapLibre, export Hermes Android/iOS y aislamiento de fixtures,
+  release, paths y credenciales pasaron. Expo Doctor quedó en 20/21 únicamente
+  por los mismos cinco patches SDK 57; las dependencias no se actualizaron.
 
 ### Cierre estable del menú Capas — 2026-10-06
 

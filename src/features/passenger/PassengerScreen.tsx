@@ -145,10 +145,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const detachedPanel = homeFloatingSearch || destinationSearchFloating;
   const roundedPassengerSheet = flow.phase === 'home' || flow.field !== null ||
     flow.phase === 'confirm' || flow.phase === 'requesting';
-  // Home, a live Search field and matching are mutually exclusive. One clock
-  // follows the active surface and stops when none is visible.
-  const searchCycle = useSearchCycle(focused && (homeFloatingSearch ||
-    !!flow.field && searchAction === 'results' || matching && pulseVisible));
+  // Home and Search halos are static; only matching owns the approved clock.
+  const searchCycle = useSearchCycle(focused && matching && pulseVisible);
   const searchBorder = useSearchFocusBorder(searchFocused);
   const homeRecentLimit = 3;
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
@@ -228,7 +226,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     : assignment ? `Llegará en ${assignment.etaMinutes} min` : homePanel === 'saved' ? 'Lugares guardados'
       : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
   const blocked = flow.pending || flow.connection !== 'online';
-  const searchField = <View style={styles.searchFieldFrame}><SearchInputGlow cycle={searchCycle} focused={searchFocused} />
+  const searchField = <View style={styles.searchFieldFrame}><SearchInputGlow focused={searchFocused} />
     <Animated.View testID="passenger-search-field" style={[styles.searchField, styles.brandBorder, searchBorder]}><SmallPin color={t.colors.red} />
       <TextInput ref={input} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus
         onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección"
@@ -261,7 +259,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       <View style={styles.handle} />
       {homeFloatingSearch ? <Animated.View testID="passenger-home-search-frame"
         style={[styles.homeSearchFrame, homeSearchPress.style]}>
-        <SearchInputGlow cycle={searchCycle} home /><Pressable testID="passenger-home-search"
+        <SearchInputGlow home /><Pressable testID="passenger-home-search"
         onPressIn={homeSearchPress.onPressIn} onPressOut={homeSearchPress.onPressOut}
         onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
         style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed,

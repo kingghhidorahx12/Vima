@@ -33,9 +33,9 @@ export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' 
   const halo = useAnimatedStyle(() => locationRingFrame(accent.get(), !reducedMotion));
   return <Marker id={`passenger-${kind}-pin`} coordinate={place.coordinate} anchor="bottom">
     <Animated.View accessible={false} style={[styles.footprint, animated]}>
-      <View style={[styles.pin, { backgroundColor: color }]} />
+      <Animated.View testID={`passenger-${kind}-halo`} pointerEvents="none" style={[styles.pinHalo, { borderColor: color }, halo]} />
+      <View testID={`passenger-${kind}-core`} style={[styles.pin, { backgroundColor: color }]} />
       <View style={[styles.inner, { backgroundColor: t.colors.white }]} />
-      <Animated.View pointerEvents="none" style={[styles.pinHalo, { borderColor: color }, halo]} />
     </Animated.View>
   </Marker>;
 }

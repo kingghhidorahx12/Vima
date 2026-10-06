@@ -4,12 +4,12 @@ import { developmentDemoStyle } from './style.ts';
 
 /** Approved Passenger palette, applied only to the bundled Positron style. */
 const paintById: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  background: { 'background-color': '#F7F8F7' },
-  landuse_residential: { 'fill-color': '#F7F8F7' },
-  building: { 'fill-color': '#F7F8F7', 'fill-outline-color': '#EBEBEB' },
-  park: { 'fill-color': '#CFE9D3' },
-  water: { 'fill-color': '#AFD6FA' },
-  waterway: { 'line-color': '#AFD6FA' },
+  background: { 'background-color': '#F6F7F7' },
+  landuse_residential: { 'fill-color': '#F6F7F7' },
+  building: { 'fill-color': '#F6F7F7', 'fill-outline-color': '#EBEBEB' },
+  park: { 'fill-color': '#BFE7C5' },
+  water: { 'fill-color': '#8CCBF3' },
+  waterway: { 'line-color': '#B8DDF6' },
   road_area_pier: { 'fill-color': '#F7F8F7' },
   road_pier: { 'line-color': '#F7F8F7' },
   highway_path: { 'line-color': '#F5F6F7' },
@@ -26,45 +26,38 @@ const paintById: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   tunnel_motorway_inner: { 'line-color': '#EBEBEB' },
 };
 
-// OpenMapTiles landcover has class/subclass; landuse has class. Keep the distant
-// appearance and add detail only as the actual vector tiles reveal it.
-const zoomStrength = (factor = 1) => [
+// OpenMapTiles landcover has class/subclass; landuse has class. The bundled
+// tiles already expose these features at ordinary zoom, without inferred areas.
+const zoomStrength = [
   'interpolate', ['linear'], ['zoom'],
-  12, 0, 13, 0.45 * factor, 14, 0.8 * factor,
-  15, 0.95 * factor, 16, factor,
-] as const;
-
-const woodColor = [
-  'interpolate', ['linear'], ['zoom'],
-  12, '#ECF6EF', 13, '#E3F2E6', 14, '#DBEFE0',
-  15, '#CFE9D3', 16, '#CFE9D3',
+  12, 0.75, 13, 0.90, 14, 1, 16, 1,
 ] as const;
 
 const polygonFilter = ['match', ['geometry-type'], ['MultiPolygon', 'Polygon'], true, false] as const;
-const landcover = (id: string, className: string, color: unknown, factor = 1) => ({
+const landcover = (id: string, className: string, color: unknown) => ({
   id, type: 'fill' as const, source: 'openmaptiles', 'source-layer': 'landcover',
-  minzoom: 12,
+  minzoom: 10,
   filter: ['all', polygonFilter, ['==', ['get', 'class'], className]],
-  paint: { 'fill-color': color, 'fill-opacity': zoomStrength(factor) },
+  paint: { 'fill-color': color, 'fill-opacity': zoomStrength },
 });
 
 const closeLandcover = [
   landcover('landcover_grass', 'grass', [
-    'step', ['zoom'], '#ECF6EF', 14,
+    'step', ['zoom'], '#D0EECE', 14,
     ['match', ['get', 'subclass'],
-      ['garden', 'park', 'recreation_ground', 'golf_course'], '#CFE9D3', '#ECF6EF'],
+      ['garden', 'park', 'recreation_ground', 'golf_course'], '#BFE7C5', '#D0EECE'],
   ]),
-  landcover('landcover_farmland', 'farmland', '#ECF6EF', 0.55),
-  landcover('landcover_wetland', 'wetland', '#D8EEDB', 0.75),
+  landcover('landcover_farmland', 'farmland', '#DFEBCF'),
+  landcover('landcover_wetland', 'wetland', '#D8EEDB'),
   {
     id: 'landuse_recreation', type: 'fill' as const, source: 'openmaptiles',
-    'source-layer': 'landuse', minzoom: 15,
+    'source-layer': 'landuse', minzoom: 13,
     filter: ['all', polygonFilter,
       ['match', ['get', 'class'],
         ['pitch', 'playground', 'stadium', 'theme_park', 'zoo', 'cemetery'], true, false]],
     paint: {
-      'fill-color': '#CFE9D3',
-      'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.4, 16, 0.65],
+      'fill-color': '#BFE7C5',
+      'fill-opacity': zoomStrength,
     },
   },
 ];
@@ -76,7 +69,7 @@ const layers = positron.layers.flatMap((layer): Record<string, unknown>[] => {
     { ...layer, paint: { ...layer.paint, ...paintById.water } },
   ];
   if (layer.id === 'landcover_wood') return [{
-    ...layer, paint: { ...layer.paint, 'fill-color': woodColor },
+    ...layer, paint: { ...layer.paint, 'fill-color': '#A8DBB0' },
   }];
   return [paintById[layer.id]
     ? { ...layer, paint: { ...layer.paint, ...paintById[layer.id] } } : layer];

@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: t.colors.graphite },
   north: { position: 'absolute', top: 3, left: 8, width: 0, height: 0,
     borderLeftWidth: 4, borderRightWidth: 4, borderBottomWidth: 9,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: t.colors.white },
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: t.colors.red },
   south: { position: 'absolute', top: 11, left: 6, width: 0, height: 0,
     borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 13,
     borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: t.colors.graphite },

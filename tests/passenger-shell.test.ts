@@ -111,14 +111,14 @@ test('Passenger Home, Search and address controls have exactly one 0.97 press ow
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('Home and Search share one 1900 ms glow clock with matching; background and Reduced Motion stop it', async () => {
+test('Home and Search halos stay static; only matching uses the approved 1900 ms clock', async () => {
   for (const reduced of [false, true]) {
     const h = createHarness({}, { reduced });
     const { SearchInputGlow, SearchPulse, useSearchCycle } = h.load('src/motion/SearchPulse.tsx');
     function Probe({ mode, focused = false }: { mode: 'home' | 'search' | 'matching' | null; focused?: boolean }) {
-      const cycle = useSearchCycle(mode !== null);
+      const cycle = useSearchCycle(mode === 'matching');
       return mode === 'matching' ? React.createElement(SearchPulse, { visible: true, expanded: false, cycle })
-        : mode ? React.createElement(SearchInputGlow, { cycle, home: mode === 'home', focused }) : null;
+        : mode ? React.createElement(SearchInputGlow, { home: mode === 'home', focused }) : null;
     }
     let tree: ReactTestRenderer;
     await act(async () => { tree = create(React.createElement(Probe, { mode: 'home' })); });
@@ -127,8 +127,7 @@ test('Home and Search share one 1900 ms glow clock with matching; background and
       assert.equal(style(homeGlow).boxShadow[0].color, '#00D68F');
       assert.equal(style(homeGlow).opacity, 0.18);
       const homeOpacity = style(homeGlow).opacity;
-      assert.equal(h.repeats.length, reduced ? 0 : 1);
-      if (!reduced) assert.ok(h.animations.some((animation: { duration: number }) => animation.duration === 1900));
+      assert.equal(h.repeats.length, 0);
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
       assert.equal(style(id(tree!, 'passenger-active-search-glow')).opacity, 0.20);
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search', focused: true })));
@@ -140,9 +139,10 @@ test('Home and Search share one 1900 ms glow clock with matching; background and
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
       assert.equal(style(id(tree!, 'passenger-active-search-glow')).opacity, 0.20);
-      assert.equal(h.repeats.length, reduced ? 0 : 1);
+      assert.equal(h.repeats.length, 0);
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'matching' })));
       assert.equal(h.repeats.length, reduced ? 0 : 1);
+      if (!reduced) assert.ok(h.animations.some((animation: { duration: number }) => animation.duration === 1900));
       assert.equal(tree!.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length, 0);
       const beforeBackground = h.cancellations.length;
       await act(async () => h.setAppState('background'));
@@ -245,7 +245,7 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     assert.equal(fieldHeight, 52);
     assert.ok(id(tree, 'passenger-active-search-glow'));
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-home-search-glow').length, 0);
-    assert.equal(h.repeats.length, 1);
+    assert.equal(h.repeats.length, 0);
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
@@ -392,18 +392,18 @@ test('review and confirmation put one green address panel first in the sheet con
     const reviewOrder = id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-frame' ||
       n.props.label === 'Agregar a Favoritos' || n.props.label === 'Confirmar ubicaciones').map(n => n.props.testID ?? n.props.label);
     assert.deepEqual(reviewOrder, ['passenger-address-frame', 'Confirmar ubicaciones']);
-    assert.equal(h.repeats.length, 1);
+    assert.equal(h.repeats.length, 0);
     await press(tree, 'Confirmar ubicaciones'); await settle();
     checkAddresses();
     const confirmOrder = id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-frame' ||
       n.props.label === 'Duración' || n.props.label === 'Solicitar viaje').map(n => n.props.testID ?? n.props.label);
     assert.deepEqual(confirmOrder, ['passenger-address-frame', 'Duración', 'Solicitar viaje']);
     assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 40);
-    assert.equal(h.repeats.length, 1);
+    assert.equal(h.repeats.length, 0);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
     await press(tree, 'Solicitar viaje'); await settle();
     assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, undefined);
-    assert.equal(h.repeats.length, 2); // Home stops before matching starts its use of the shared cycle.
+    assert.equal(h.repeats.length, 1); // Only matching starts the approved cycle.
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length, 0);
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
@@ -843,7 +843,7 @@ test('rotating reveals the compass above Layers with only a 160 ms fade under ei
       const compass = id(tree, 'passenger-compass');
       const needle = id(tree, 'passenger-compass-needle');
       assert.equal(style(needle).width, 24); assert.equal(style(needle).height, 24);
-      assert.equal(style(id(tree, 'passenger-compass-north')).borderBottomColor, '#FFFFFF');
+      assert.equal(style(id(tree, 'passenger-compass-north')).borderBottomColor, '#FF3830');
       assert.equal(style(id(tree, 'passenger-compass-south')).borderTopColor, '#2A2E2D');
       assert.equal(style(id(tree, 'passenger-compass-north-outline')).borderBottomColor, '#2A2E2D');
       assert.deepEqual(style(needle).transform, [{ rotate: '-90deg' }]);

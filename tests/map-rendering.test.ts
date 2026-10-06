@@ -38,15 +38,19 @@ test('MapLibre owns one persistent map, camera fit, Vima pins and route layers',
   assert.equal(pins.length, 3);
   assert.equal(pins[0]!.props.anchor, 'bottom');
   assert.deepEqual(pins[0]!.props.lngLat, [-99, 19]);
-  assert.equal(pins[0]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#00D68F');
-  assert.equal(pins[1]!.findAllByType('View' as never)[1]!.props.style[1].backgroundColor, '#FF3830');
+  assert.ok(pins[0]!.findAllByType('View' as never).some(view => view.props.style?.[1]?.backgroundColor === '#00D68F'));
+  assert.ok(pins[1]!.findAllByType('View' as never).some(view => view.props.style?.[1]?.backgroundColor === '#FF3830'));
+  for (const kind of ['origin', 'destination']) {
+    const pin = pins[kind === 'origin' ? 0 : 1]!;
+    const nodes = pin.findAllByType('View' as never);
+    assert.ok(nodes.findIndex(node => node.props.testID === `passenger-${kind}-halo`) <
+      nodes.findIndex(node => node.props.testID === `passenger-${kind}-core`));
+  }
   const line = tree.root.findAllByType('MapLibreLayer' as never).find(layer => layer.props.id === 'r')!.props;
   assert.equal(line.type, 'line');
   assert.equal(line.paint['line-width'], 4);
-  const halo = tree.root.findAllByType('MapLibreLayer' as never).find(layer => layer.props.id === 'r-halo')!.props;
-  assert.equal(halo.paint['line-color'], '#00826F');
-  assert.ok(halo.paint['line-blur'] > 0);
-  assert.ok(halo.paint['line-width'] > line.paint['line-width']);
+  assert.equal(tree.root.findAllByType('MapLibreLayer' as never).filter(layer => layer.props.id === 'r-halo').length, 0);
+  assert.ok(tree.root.findAllByType('MapLibreLayer' as never).some(layer => layer.props.id === 'r-shadow'));
   const routeSource = tree.root.findByType('MapLibreSource' as never).props;
   assert.equal(routeSource.id, 'r-source');
   assert.equal(JSON.parse(routeSource.data).geometry.type, 'MultiLineString');
@@ -117,12 +121,47 @@ test('MapLibre vehicle pose flows through animated GeoJSON without React pose re
         appearance: { radius: 12, color: '#0B0F0E', strokeWidth: 1, strokeColor: '#FFFFFF' } }))));
   const source = tree.root.findByType('MapLibreSource' as never);
   assert.deepEqual(JSON.parse(source.props.data).geometry.coordinates, [-99, 19]);
-  assert.equal(tree.root.findByType('MapLibreLayer' as never).props.paint['circle-radius'], 12);
+  const vehicleLayers = tree.root.findAllByType('MapLibreLayer' as never);
+  assert.deepEqual(vehicleLayers.map(layer => layer.props.id), ['vehicle-bloom', 'vehicle']);
+  assert.equal(vehicleLayers[1]!.props.paint['circle-radius'], 12);
   const afterMount = renders;
   h.poses.set({ coordinate: [-98, 20], heading: 10 });
   await h.flush();
   assert.equal(renders, afterMount);
   await h.act(async () => tree.unmount());
+});
+
+test('driver-found bloom sits below the vehicle, runs once per assignment and never follows samples', async () => {
+  for (const reduced of [false, true]) {
+    const h = createMapHarness({ reduced });
+    const { VehicleLayer } = h.load('src/map/VehicleLayer.tsx');
+    h.poses.set({ coordinate: [-99, 19], heading: 0 });
+    const appearance = { radius: 12, color: '#0B0F0E', strokeWidth: 1, strokeColor: '#FFFFFF' };
+    const scene = (assignmentId?: string) => React.createElement(VehicleLayer,
+      { id: 'vehicle', kind: 'circle', sample: h.sample, appearance, assignmentId });
+    const tree: ReactTestRenderer = await h.render(scene());
+    const bloomTimings = () => h.calls.filter((call: unknown[]) => call[0] === 'timing' && call[1] === 1 &&
+      (call[2] as { duration: number }).duration === (reduced ? 160 : 480));
+    assert.equal(bloomTimings().length, 0);
+    await h.act(async () => tree.update(scene('assignment-a')));
+    assert.equal(bloomTimings().length, 1);
+    const layers = tree.root.findAllByType('MapLibreLayer' as never);
+    assert.deepEqual(layers.map(layer => layer.props.id), ['vehicle-bloom', 'vehicle']);
+    assert.equal(layers[0]!.props.paint['circle-color'], '#00D68F');
+    const source = tree.root.findByType('MapLibreSource' as never);
+    const feature = JSON.parse(source.props.data);
+    assert.equal(feature.properties.vimaBloomRadius, reduced ? 12 : 12 * 1.18);
+    assert.equal(feature.properties.vimaBloomOpacity, 0);
+    h.poses.set({ coordinate: [-98, 20], heading: 10 });
+    await h.act(async () => tree.update(scene('assignment-a')));
+    await h.flush();
+    assert.equal(bloomTimings().length, 1);
+    await h.act(async () => tree.update(scene('assignment-b')));
+    assert.equal(bloomTimings().length, 2);
+    assert.equal(h.calls.some((call: unknown[]) => call[0] === 'repeat'), false);
+    await h.act(async () => tree.unmount());
+  }
+  assert.match(readFileSync('src/features/passenger/PassengerMap.tsx', 'utf8'), /assignmentId=\{assignment\?\.id\}/);
 });
 
 test('map viewport clips native markers and Search locks camera while hiding only prior presentation', async () => {
@@ -262,7 +301,7 @@ test('Orbis layers remain absent without display key and use vector sources when
   await h.act(async () => tree.unmount());
 });
 
-test('Traffic toggling preserves blue route, halo and geometry with and without Reduced Motion', async () => {
+test('Traffic toggling preserves blue route, neutral shadow and geometry with and without Reduced Motion', async () => {
   for (const reduced of [false, true]) {
     const h = createMapHarness({ reduced });
     const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
@@ -287,13 +326,14 @@ test('Traffic toggling preserves blue route, halo and geometry with and without 
     assert.deepEqual(JSON.parse(source().props.data).geometry, JSON.parse(before).geometry);
     assert.deepEqual(color(source().props.data), [47, 128, 255]);
     const layers = tree.root.findAllByType('MapLibreLayer' as never);
-    const halo = layers.find(node => node.props.id === 'passenger-route-halo')!;
+    const shadow = layers.find(node => node.props.id === 'passenger-route-shadow')!;
     const line = layers.find(node => node.props.id === 'passenger-route')!;
-    assert.equal(halo.props.paint['line-color'], '#2F80FF');
-    assert.ok(halo.props.paint['line-blur'] > 0);
-    assert.ok(halo.props.paint['line-width'] > line.props.paint['line-width']);
+    assert.equal(layers.some(node => node.props.id === 'passenger-route-halo'), false);
+    assert.equal(shadow.props.paint['line-color'], '#0B0F0E');
+    assert.ok(shadow.props.paint['line-blur'] > 0);
+    assert.ok(shadow.props.paint['line-width'] > line.props.paint['line-width']);
     const trafficIndex = layers.findIndex(node => node.props.id === 'vima-traffic-flow-lines');
-    assert.ok(trafficIndex >= 0 && layers.indexOf(halo) > trafficIndex);
+    assert.ok(trafficIndex >= 0 && layers.indexOf(shadow) > trafficIndex);
     assert.equal(layers.some(node => node.props.id === 'passenger-route-flow'), !reduced);
     await h.act(async () => tree.unmount());
   }
@@ -348,17 +388,29 @@ test('location animates only its outer ring, stops in background and remains opa
   }
 });
 
-test('route reveals once then repeats a separate highlight; reduced/background disable repetition', async () => {
+test('route keeps its reveal and sweeps the real geometry once for each new active geometry', async () => {
   for (const reduced of [false, true]) {
     const h = createMapHarness({ reduced }); const { RouteLayer } = h.load('src/map/RouteLayer.tsx');
     const data = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[0, 0], [1, 0]] } };
-    const scene = (active = true) => React.createElement(RouteLayer, { id: 'test', data, state: 'active', activeTone: 'greenDark', appearance: { width: 4, opacity: 1 }, active });
+    const scene = (route = data, active = true) => React.createElement(RouteLayer, { id: 'test', data: route,
+      state: 'active', activeTone: 'greenDark', appearance: { width: 4, opacity: 1 }, active });
     const tree: ReactTestRenderer = await h.render(scene());
-    assert.equal(h.calls.some((c: unknown[]) => c[0] === 'repeat'), !reduced);
+    assert.equal(h.calls.some((c: unknown[]) => c[0] === 'repeat' || c[0] === 'delay'), false);
     assert.equal(tree.root.findAllByType('MapLibreSource' as never).length, reduced ? 1 : 2);
+    assert.equal(tree.root.findAllByType('MapLibreLayer' as never).some(layer => layer.props.id === 'test-halo'), false);
+    const sweeps = () => h.calls.filter((c: unknown[]) => c[0] === 'timing' && c[1] === 1 &&
+      (c[2] as { duration: number }).duration === 720).length;
+    assert.equal(sweeps(), reduced ? 0 : 2); // The other 720 ms timing is the unchanged route reveal.
     const mounts = h.calls.filter((c: unknown[]) => c[0] === 'mount').length;
-    await h.act(async () => tree.update(scene(false)));
+    await h.act(async () => tree.update(scene({ ...data, geometry: { ...data.geometry, coordinates: [[0, 0], [1, 0]] } })));
+    assert.equal(sweeps(), reduced ? 0 : 2);
+    await h.act(async () => tree.update(scene(data, false)));
     assert.equal(h.calls.filter((c: unknown[]) => c[0] === 'mount').length, mounts);
+    await h.act(async () => tree.update(scene(data)));
+    assert.equal(sweeps(), reduced ? 0 : 2); // Returning foreground never replays a geometry already shown.
+    const changed = { ...data, geometry: { ...data.geometry, coordinates: [[0, 0], [2, 0]] } };
+    await h.act(async () => tree.update(scene(changed)));
+    assert.equal(sweeps(), reduced ? 0 : 3);
     assert.ok(h.calls.some((c: unknown[]) => c[0] === 'timing' && (c[2] as { duration: number }).duration === (reduced ? 160 : 720)));
     await h.act(async () => tree.unmount());
   }

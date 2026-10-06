@@ -15,7 +15,7 @@ export interface SearchCycle {
   readonly foreground: boolean;
 }
 
-/** The one decorative clock shared by input glow and matching rings. */
+/** The approved decorative clock is used only by matching rings. */
 export function useSearchCycle(visible: boolean): SearchCycle {
   const policy = useMotionPolicy();
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
@@ -58,7 +58,7 @@ export function SearchPulse({ visible, expanded, cycle }: { visible: boolean; ex
   </View>;
 }
 
-/** A stationary exterior halo. Focus changes fade; only the shared cycle breathes. */
+/** A stationary exterior halo with a one-shot focus transition. */
 export function useSearchFocusBorder(focused: boolean) {
   const progress = useSharedValue(focused ? 1 : 0);
   useEffect(() => {
@@ -70,8 +70,8 @@ export function useSearchFocusBorder(focused: boolean) {
     [t.colors.green, t.colors.greenDark]) }));
 }
 
-export function SearchInputGlow({ cycle, focused = false, home = false }: {
-  cycle: SearchCycle; focused?: boolean; home?: boolean;
+export function SearchInputGlow({ focused = false, home = false }: {
+  focused?: boolean; home?: boolean;
 }) {
   const focus = useSharedValue(focused ? 1 : 0);
   useEffect(() => {
@@ -79,10 +79,8 @@ export function SearchInputGlow({ cycle, focused = false, home = false }: {
     focus.set(fadeTo(focused ? 1 : 0, motionTimings.focus));
     return () => cancelAnimation(focus);
   }, [focus, focused]);
-  const halo = useAnimatedStyle(() => {
-    const breath = cycle.running ? 1 - Math.abs(cycle.progress.get() * 2 - 1) : 0;
-    return { opacity: (home ? 0.18 : 0.20) + focus.get() * m.interactionRules.inputFocusHaloBoost + breath * 0.05 };
-  });
+  const halo = useAnimatedStyle(() => ({ opacity: (home ? 0.18 : 0.20) +
+    focus.get() * m.interactionRules.inputFocusHaloBoost }));
   return <Animated.View testID={home ? 'passenger-home-search-glow' : 'passenger-active-search-glow'}
     pointerEvents="none" style={[styles.inputGlow, home && styles.homeGlow, halo]} />;
 }
