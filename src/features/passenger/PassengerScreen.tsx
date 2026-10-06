@@ -58,7 +58,7 @@ const confirmationPillHeight = 40;
 const homeSearchHeight = 58;
 const homeSearchGap = 10;
 const homeSearchAccessoryHeight = homeSearchHeight + homeSearchGap;
-const passengerPanelTopRadius = 60;
+const passengerPanelTopRadius = 120;
 
 export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }: PassengerScreenProps) {
   const flow = usePassengerFlow(gateway);
@@ -740,8 +740,8 @@ const styles = StyleSheet.create({
   detachedSheet: { overflow: 'visible', backgroundColor: 'transparent', borderWidth: 0, boxShadow: [] },
   detachedPanelHeader: { backgroundColor: t.colors.white, borderTopLeftRadius: passengerPanelTopRadius,
     borderTopRightRadius: passengerPanelTopRadius, paddingBottom: sm },
-  detachedPanelContent: { backgroundColor: t.colors.white, borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32, overflow: 'hidden' },
+  detachedPanelContent: { backgroundColor: t.colors.white, borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0, overflow: 'hidden' },
   accessoryGap: { height: homeSearchGap },
   floatingSearchFrame: { marginHorizontal: base },
   floatingAddressesFrame: { marginHorizontal: base },

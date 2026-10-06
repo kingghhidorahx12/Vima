@@ -1,12 +1,25 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-shell-compact-polish-p0`, creada desde
-`codex/passenger-shared-address-panel-p0` @ `ad028f3`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-panel-corners-final-p0`, creada desde
+`codex/passenger-shell-compact-polish-p0` @ `49cc15c`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Esquinas de los paneles Passenger — 2026-10-06
+
+- Home, Search, reviewing, confirm y requesting usan radio de 120 dp sólo en
+  las dos esquinas superiores de la superficie blanca principal. El contenido
+  del panel detached conserva `overflow: hidden` y tiene ambos radios
+  inferiores en 0 dp; header y contenido siguen continuos y blancos.
+- No cambiaron alturas, snaps, mediciones, layout, route-fit, Camera, motion,
+  accessories, bottom nav ni lógica. Sin dependencias o cambios nativos.
+  Android físico PENDIENTE; no se generó EAS Build.
+- Validación local: TypeScript, lint, 161 tests, worklets, Expo Doctor 21/21,
+  schema MapLibre, export Hermes Android/iOS, splash y aislamiento de fixtures,
+  pricing/servidor, rutas y credenciales de release, todos correctos.
 
 ### Alineación Home, halo de direcciones y nav compacto — 2026-10-06
 
