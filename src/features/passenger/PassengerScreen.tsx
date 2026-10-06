@@ -132,6 +132,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     confirmationPillVisible ? confirmationPillTop + confirmationPillHeight : 0) + 12;
   const sheetFrameHeight = Math.max(0, height - topFrameShift);
   const homeFloatingSearch = homeNormal && homePanel === 'home' && !reviewing;
+  const roundedPassengerSheet = flow.phase === 'home' || flow.field !== null ||
+    flow.phase === 'confirm' || flow.phase === 'requesting';
   // Home, a live Search field and matching are mutually exclusive. One clock
   // follows the active surface and stops when none is visible.
   const searchCycle = useSearchCycle(focused && (homeFloatingSearch ||
@@ -227,7 +229,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       <SearchInputGlow cycle={searchCycle} home /><Pressable testID="passenger-home-floating-search"
       onPressIn={homeSearchPress.onPressIn} onPressOut={homeSearchPress.onPressOut}
       onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
-      style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed]}>
+      style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed, styles.brandBorder]}>
       <VimaGlyph name="search" color={t.colors.graphite} />
       <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
     </Pressable></Animated.View><View style={styles.homeSearchGap} /></> : null}
@@ -347,7 +349,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         }} />
       </> : flow.field ? <>
         <View style={styles.searchFieldFrame}><SearchInputGlow cycle={searchCycle} focused={searchFocused} />
-        <View testID="passenger-search-field" style={[styles.searchField, searchFocused && styles.searchFocused]}><SmallPin color={t.colors.red} />
+        <View testID="passenger-search-field" style={[styles.searchField, searchFocused && styles.searchFocused, styles.brandBorder]}><SmallPin color={t.colors.red} />
           <TextInput ref={input} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección" value={flow.search}
             onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }} returnKeyType="search"
             style={styles.searchInput} placeholderTextColor={t.colors.gray} />
@@ -373,19 +375,22 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           </> : null}
         </> : <>
           {flow.favorites.length ? <><VimaText variant="bodyMedium">Favoritos</VimaText>
-            {flow.favorites.map(place => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
+            {flow.favorites.map(place => <PlaceRow key={place.id} place={place} presentation="list" resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
           {flow.recents.length ? <><VimaText variant="bodyMedium">Recientes</VimaText>
-            {flow.recents.map(place => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
+            {flow.recents.map(place => <PlaceRow key={place.id} place={place} presentation="list" resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
           {flow.popular.length ? <><VimaText variant="bodyMedium">Populares en tu zona</VimaText>
-            {flow.popular.map(place => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
+            {flow.popular.map(place => <PlaceRow key={place.id} place={place} presentation="list" resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
           {flow.featured.length ? <><VimaText variant="bodyMedium">Vima Local</VimaText>
-            {flow.featured.map(place => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
+            {flow.featured.map(place => <PlaceRow key={place.id} place={place} presentation="list" resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
         </>}
       </> : reviewing ? <>
-        <View style={styles.addressGroup}>
-          <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
-          <View style={styles.addressRule} />
-          <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} />
+        <View style={styles.addressStack}>
+          <View testID="passenger-origin-surface" style={styles.addressSurface}>
+            <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
+          </View>
+          <View testID="passenger-destination-surface" style={styles.addressSurface}>
+            <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} />
+          </View>
         </View>
         {gateway.saveFavorite && flow.destination ? <TextAction
           label={flow.favorites.some(place => (place.canonicalId ?? place.id) === (flow.destination?.canonicalId ?? flow.destination?.id))
@@ -422,7 +427,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <VimaButton secondary label="Agregar favorito" onPress={() => openSavedPicker('favorite')} />
       </> : flow.phase === 'home' && homePanel === 'recents' ? <>
         <TextAction label="Volver" onPress={() => setHomePanel('home')} />
-        {flow.recents.map(place => <PlaceRow key={place.id} place={place} rich resolveMedia={gateway.resolvePlaceMedia}
+        {flow.recents.map(place => <PlaceRow key={place.id} place={place} rich presentation="list" resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'home' ? <>
         <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Lugares guardados</VimaText>
@@ -438,14 +443,17 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         </View>
         <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Viajes recientes</VimaText>
           <TextAction label="Ver todos" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('recents'); }} /></View>
-        {flow.recents.slice(0, homeRecentLimit).map((place) => <PlaceRow key={place.id} place={place} rich resolveMedia={gateway.resolvePlaceMedia}
+        {flow.recents.slice(0, homeRecentLimit).map((place) => <PlaceRow key={place.id} place={place} rich presentation="list" resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
-        <View style={[styles.addressGroup, styles.confirmAddressGroup]}>
-          <AddressField label="Origen" place={flow.origin} color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />
+        <View style={styles.addressStack}>
+          <View testID="passenger-origin-surface" style={styles.addressSurface}>
+            <AddressField label="Origen" place={flow.origin} color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />
+          </View>
           {flow.quote?.stops.map((place) => <AddressField key={place.id} label={place.name} place={place} color={t.colors.gray} disabled />)}
-          <View style={styles.addressRule} />
-          <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} disabled={blocked} />
+          <View testID="passenger-destination-surface" style={styles.addressSurface}>
+            <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} disabled={blocked} />
+          </View>
         </View>
         {flow.loadingQuote ? <ActivityIndicator color={t.colors.greenDark} /> : null}
         {flow.quote ? <>
@@ -541,7 +549,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           homeBottomOcclusion={homeFloatingSearch ? bottomFootprint : undefined}
           layersMenuOpen={layersOpen}
           sheetHeight={interaction ? sheetFrameHeight - interaction.targetOffset : sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
-        sheet={{ interaction, header, style: [styles.sheet, homeFloatingSearch && styles.homeSheet], onVisibleHeightChange: reportVisibleSheetHeight }}
+        sheet={{ interaction, header, style: [styles.sheet, homeFloatingSearch && styles.homeSheet,
+          roundedPassengerSheet && styles.roundedPassengerSheet], onVisibleHeightChange: reportVisibleSheetHeight }}
         renderPhase={() => content} />
       <View testID="passenger-top-chrome" pointerEvents="box-none" onTouchStart={dismissKeyboard}
         style={[styles.topChrome, homeNormal && styles.homeTopChrome, { top: homeNormal ? topInset + 8 : topFrameShift + 8 }]}>
@@ -610,7 +619,7 @@ function OriginField({ place, status, onPress }: { place: Place | null; status: 
   const feedback = usePressFeedback();
   return <Animated.View style={feedback.style}><Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={onPress}
     onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
-    style={({ pressed }) => [styles.originField, pressed && surfaces.pressed]}>
+    style={({ pressed }) => [styles.originField, styles.addressSurfaceField, pressed && surfaces.pressed]}>
     <View style={styles.originDot} />
     <View style={styles.fill}>
       <VimaText variant="caption" style={styles.muted}>Origen</VimaText>
@@ -625,7 +634,7 @@ function AddressField({ label, place, color, onPress, disabled }: { label: strin
   const feedback = usePressFeedback();
   return <Animated.View style={feedback.style}><Pressable onPress={onPress} disabled={disabled} accessibilityRole={onPress ? 'button' : 'text'} accessibilityLabel={`${label} ${place?.name ?? ''}`}
     onPressIn={onPress && !disabled ? feedback.onPressIn : undefined} onPressOut={onPress && !disabled ? feedback.onPressOut : undefined}
-    style={({ pressed }) => [styles.address, pressed && !disabled && surfaces.pressed]}>
+    style={({ pressed }) => [styles.address, styles.addressSurfaceField, pressed && !disabled && surfaces.pressed]}>
     <SmallPin color={color} />
     <View style={styles.fill}><VimaText variant="caption" style={styles.addressLabel}>{label}</VimaText>
       <VimaText variant="bodySmall" style={!place && styles.muted} numberOfLines={1}>{place?.name ?? label}</VimaText>
@@ -701,9 +710,10 @@ const styles = StyleSheet.create({
   confirmationPillText: { fontFamily: interFamilies[600], fontSize: 16, fontWeight: '600', color: t.colors.carbon,
     textAlign: 'center' },
   sheet: { overflow: 'hidden' },
+  roundedPassengerSheet: { borderTopLeftRadius: 32, borderTopRightRadius: 32 },
   homeSheet: { overflow: 'visible', backgroundColor: 'transparent', borderWidth: 0, boxShadow: [] },
-  homePanelHeader: { backgroundColor: t.colors.white, borderTopLeftRadius: t.radii.sheetPx,
-    borderTopRightRadius: t.radii.sheetPx, paddingBottom: sm },
+  homePanelHeader: { backgroundColor: t.colors.white, borderTopLeftRadius: 32,
+    borderTopRightRadius: 32, paddingBottom: sm },
   homePanelContent: { backgroundColor: t.colors.white },
   homeSearchGap: { height: homeSearchGap },
   sheetHeader: { paddingHorizontal: base, alignItems: 'center', paddingTop: sm, paddingBottom: md, gap: sm },
@@ -718,6 +728,7 @@ const styles = StyleSheet.create({
   homeSearch: { ...surfaces.card, width: '100%', height: homeSearchHeight, borderRadius: 24,
     flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md,
     ...elevationStyle('level1', t.colors.carbon) },
+  brandBorder: { borderColor: t.colors.green },
   quickRow: { ...surfaces.card, height: 44, flexDirection: 'row', alignItems: 'center',
     borderRadius: t.radii.pillPx, ...elevationStyle('level1', t.colors.carbon) },
   quickPlace: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
@@ -739,10 +750,13 @@ const styles = StyleSheet.create({
   pinShape: { width: t.components.iconSizesPx[0], height: t.components.iconSizesPx[0], borderRadius: t.radii.pillPx,
     borderBottomRightRadius: t.radii.smallPx / 2, transform: [{ rotate: '45deg' }] },
   pinCore: { position: 'absolute', width: xs, height: xs, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white, top: sm, left: sm },
-  addressGroup: { ...surfaces.field, borderRadius: t.radii.cardPx, overflow: 'hidden', ...elevationStyle('level1', t.colors.carbon) },
-  confirmAddressGroup: { marginHorizontal: 0 },
+  addressStack: { gap: sm },
+  addressSurface: { backgroundColor: t.colors.white, borderRadius: t.radii.cardPx,
+    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.green,
+    boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 12, spreadDistance: 2, color: surfaceColors.brandWash }] },
+  addressSurfaceField: { minHeight: 46, paddingVertical: sm, borderWidth: 0,
+    borderRadius: t.radii.cardPx, backgroundColor: 'transparent', boxShadow: [] },
   address: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md, paddingVertical: md, paddingHorizontal: md },
-  addressRule: { marginLeft: t.components.iconSizesPx[1]! + md * 2, marginRight: md, height: t.borders.standardWidthPx, backgroundColor: surfaceColors.border },
   addressLabel: { color: t.colors.graphite },
   metrics: { flexDirection: 'row', alignItems: 'stretch', gap: xs },
   metric: { ...surfaces.field, flex: 1, justifyContent: 'center', alignItems: 'center', gap: xs, paddingHorizontal: xs, paddingVertical: md,

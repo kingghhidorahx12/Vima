@@ -97,7 +97,7 @@ test('Home and Search share one 1900 ms glow clock with matching; background and
   }
 });
 
-test('Search results use continuous list rows while Home retains rich recents and fixed geometry', async () => {
+test('Search results and Home rich recents use continuous list rows with fixed geometry', async () => {
   const h = createHarness(); const fixture = createPassengerFixtureGateway(clock);
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   try {
@@ -113,19 +113,30 @@ test('Search results use continuous list rows while Home retains rich recents an
     assert.equal(restingStyle(pill).width, '100%');
     assert.equal(restingStyle(pill).marginHorizontal, undefined);
     assert.equal(restingStyle(pill).borderRadius, 24);
+    assert.equal(restingStyle(pill).borderColor, '#00D68F');
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 32);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopRightRadius, 32);
+    assert.equal(style(id(tree, 'passenger-sheet-header').find(n => style(n).backgroundColor === '#FFFFFF')).borderTopLeftRadius, 32);
     assert.equal(style(glow).borderRadius, 24);
     assert.deepEqual([style(glow).top, style(glow).right, style(glow).bottom, style(glow).left], [0, 0, 0, 0]);
     assert.equal(style(glow).position, 'absolute');
     assert.equal(style(glow).opacity, 0.18);
     assert.equal(frame.findAll(n => n.props.testID === 'passenger-home-search-glow').length, 1);
     const homeRecent = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel?.includes('Plaza Atlacomulco'));
-    if (homeRecent) assert.ok(restingStyle(homeRecent).boxShadow);
+    assert.ok(homeRecent);
+    assert.equal(restingStyle(homeRecent).boxShadow, undefined);
+    assert.equal(restingStyle(homeRecent).borderBottomWidth, 1);
+    assert.ok(homeRecent.findAll(n => n.props.size === 64 && typeof n.type === 'function' && n.type.name === 'PlaceThumbnail').length === 1);
+    assert.ok(homeRecent.findAll(n => n.props.numberOfLines === 2).length >= 1);
     await press(tree, '¿A dónde vamos?');
     const input = host(tree, 'TextInput');
     const fieldHeight = style(id(tree, 'passenger-search-field')).height;
     await act(async () => input.props.onFocus());
     assert.equal(style(id(tree, 'passenger-search-field')).height, fieldHeight);
     assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00D68F');
+    await act(async () => input.props.onBlur());
+    assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00D68F');
+    assert.ok(id(tree, 'passenger-active-search-glow'));
     await act(async () => input.props.onChangeText('Plaza'));
     await settle();
     const results = id(tree, 'passenger-search-results');
@@ -150,6 +161,86 @@ test('Search results use continuous list rows while Home retains rich recents an
     assert.ok(id(tree, 'passenger-active-search-glow'));
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-home-search-glow').length, 0);
     assert.equal(h.repeats.length, 1);
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('Search suggestions and saved, recent, popular and local collections keep one list presentation', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const favorite = { ...fixturePlaces[1]!, id: 'favorite', name: 'Favorito de prueba' };
+  const recent = { ...fixturePlaces[2]!, id: 'recent', name: 'Reciente de prueba' };
+  const popular = { ...fixturePlaces[3]!, id: 'popular', name: 'Popular de prueba' };
+  const featured = { ...fixturePlaces[0]!, id: 'featured', name: 'Local de prueba' };
+  const tree: ReactTestRenderer = await h.render({ ...fixture.gateway,
+    favoritePlaces: async () => [favorite], recentPlaces: async () => [recent],
+    discoverPlaces: async () => ({ popular: [popular], featured: [featured] }),
+  });
+  try {
+    await settle(); await press(tree, '¿A dónde vamos?'); await settle();
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 32);
+    for (const place of [favorite, recent, popular, featured]) {
+      const row = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === `${place.name}, ${place.address}`);
+      assert.ok(row, place.name);
+      assert.equal(restingStyle(row).boxShadow, undefined);
+      assert.equal(restingStyle(row).borderBottomWidth, 1);
+      assert.ok(row.findAll(n => n.props.size === 48 && typeof n.type === 'function' && n.type.name === 'PlaceThumbnail').length === 1);
+      assert.ok(row.findAll(n => n.props.name === 'chevron').length >= 1);
+    }
+    assert.equal(h.delays.length, 0); // Initial collections do not stagger on re-render.
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('Reduced Motion keeps permanent green borders and stationary halos in Home and Search', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { reduced: true });
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle();
+    assert.equal(restingStyle(id(tree, 'passenger-home-floating-search')).borderColor, '#00D68F');
+    assert.equal(style(id(tree, 'passenger-home-search-glow')).opacity, 0.18);
+    await press(tree, '¿A dónde vamos?');
+    assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00D68F');
+    assert.equal(style(id(tree, 'passenger-active-search-glow')).opacity, 0.20);
+    assert.equal(h.repeats.length, 0);
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('review and confirmation separate green-outlined address surfaces without changing map or sheet identity', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  const checkAddresses = () => {
+    const origin = id(tree, 'passenger-origin-surface');
+    const destination = id(tree, 'passenger-destination-surface');
+    const stack = origin.parent;
+    assert.ok(stack);
+    assert.equal(stack, destination.parent);
+    assert.equal(style(stack).gap, 8);
+    assert.equal(stack.findAll(n => style(n).backgroundColor === 'rgba(11, 15, 14, 0.08)' && style(n).height === 1).length, 0);
+    for (const surface of [origin, destination]) {
+      const s = style(surface);
+      assert.equal(s.borderColor, '#00D68F');
+      assert.equal(s.borderRadius, 16);
+      assert.equal(s.boxShadow.length, 1);
+      assert.equal(s.boxShadow[0].offsetY, 0);
+    }
+    assert.equal(origin.findAll(n => style(n).backgroundColor === '#00D68F').length >= 1, true);
+    assert.equal(destination.findAll(n => style(n).backgroundColor === '#FF3830').length >= 1, true);
+    assert.ok(origin.findAllByType('Pressable' as never).length >= 1);
+    assert.ok(destination.findAllByType('Pressable' as never).length >= 1);
+  };
+  try {
+    await settle(); await press(tree, '¿A dónde vamos?');
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    checkAddresses();
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 32);
+    assert.equal(h.repeats.length, 1);
+    await press(tree, 'Confirmar ubicaciones'); await settle();
+    checkAddresses();
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 32);
+    assert.equal(h.repeats.length, 1);
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+    await press(tree, 'Solicitar viaje'); await settle();
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, undefined);
+    assert.equal(h.repeats.length, 2); // Home stops before matching starts its use of the shared cycle.
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length, 0);
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 async function press(tree: ReactTestRenderer, label: string) {
@@ -227,7 +318,7 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       assert.equal(searchStyle.marginHorizontal, undefined);
       assert.equal(style(id(tree, 'passenger-home-search-frame')).marginHorizontal, 20);
       const panelHeader = tree.root.findAllByType('View' as never).find(n =>
-        style(n).borderTopLeftRadius === 28 && style(n).backgroundColor === '#FFFFFF');
+        style(n).borderTopLeftRadius === 32 && style(n).backgroundColor === '#FFFFFF');
       assert.ok(panelHeader);
       assert.equal(style(panelHeader!).boxShadow, undefined);
       assert.equal(style(id(tree, 'passenger-sheet-viewport')).boxShadow, undefined);

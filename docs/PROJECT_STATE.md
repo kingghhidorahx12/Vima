@@ -1,9 +1,35 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-search-glow-fix-p0`, creada desde
-`codex/passenger-search-list-glow-p0` @ `f45d1dd`. Sin merge a main.
+Actualizado 2026-10-05 en `codex/passenger-final-visual-polish-p0`, creada desde
+`codex/passenger-search-glow-fix-p0` @ `f4381e1`. Sin merge a main.
 
 ## IMPLEMENTADO
+
+### Cierre visual Home, Search y confirmación — 2026-10-05
+
+- Sólo Home, Search/selección y reviewing/confirmación/requesting usan radio
+  superior local de 32 dp en el panel. Matching/assigned conservan el radio
+  del tema; no cambian snaps, gestos, safe area ni viewport.
+- El pill Home conserva 58 dp, radio 24 y su frame/márgenes de `f4381e1`.
+  Home y Search muestran borde verde permanente sobre la superficie además del
+  halo exterior ya existente. Foco, fade de 160 ms, ciclo único de 1900 ms y
+  Reduced Motion mantienen su política previa.
+- Recientes de Home y «Ver todos» usan `PlaceRow` como lista rica, con thumbnail
+  de 64 dp, media aprobada/fallback, dirección de hasta dos líneas, chevron y
+  feedback Motion 1.1, sin elevación individual. Las colecciones iniciales de
+  Search (Favoritos, Recientes, Populares, Vima Local) usan la misma presentación
+  lista de Suggest/Discover; no se alteraron keys ni selección.
+- Origen y destino en reviewing, confirmación y requesting son dos superficies
+  compactas independientes con separación de 8 dp, borde y halo verde estático.
+  El pin de destino sigue rojo y la semántica de taps/disabled permanece.
+  No se añadió ciclo de animación a estos campos.
+- Permanecen sin cambios el hook y los parámetros de route-fit, Camera,
+  Search/Suggest/Discover funcional, mapa, routing, pricing, matching, persistencia
+  y navegación. Validación física Android del acabado y la altura óptica del
+  panel sigue PENDIENTE; no se generó APK ni se añadió código nativo.
+- Verificación local: TypeScript, lint, suite 158/158, worklets, Expo Doctor
+  21/21, export Hermes Android/iOS, schema/style MapLibre, splash y aislamiento
+  de fixtures/release/credenciales/paths correctos.
 
 ### Geometría e intensidad del glow Home/Search — 2026-10-05
 
@@ -27,8 +53,8 @@ Actualizado 2026-10-05 en `codex/passenger-search-glow-fix-p0`, creada desde
 - Search usa la variante `list` de `PlaceRow`: filas continuas sin elevación
   individual, radio y padding discretos, thumbnail de 48 dp, título, dirección,
   chevron y target de 56 dp. Conserva keys, selección, media/fallback,
-  feedback de press y entrada escalonada Motion 1.1. Home conserva Recientes
-  como cards ricas y la geometría de su panel, buscador y sheet.
+  feedback de press y entrada escalonada Motion 1.1. Recientes de Home se
+  refinaron después a lista rica; se conserva la geometría de panel y buscador.
 - El buscador Home tiene halo verde suave; el campo Search usa la misma
   familia visual con más intensidad y transición de foco de 160 ms. El halo
   es una capa absoluta: no modifica tamaño ni layout. Su respiración sutil
