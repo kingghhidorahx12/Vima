@@ -64,15 +64,21 @@ test('Home and Search share one 1900 ms glow clock with matching; background and
     try {
       const homeGlow = id(tree!, 'passenger-home-search-glow');
       assert.equal(style(homeGlow).boxShadow[0].color, '#00D68F');
-      assert.equal(style(homeGlow).opacity, 0.12);
+      assert.equal(style(homeGlow).opacity, 0.18);
       const homeOpacity = style(homeGlow).opacity;
       assert.equal(h.repeats.length, reduced ? 0 : 1);
       if (!reduced) assert.ok(h.animations.some((animation: { duration: number }) => animation.duration === 1900));
+      await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
+      assert.equal(style(id(tree!, 'passenger-active-search-glow')).opacity, 0.20);
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search', focused: true })));
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search', focused: true })));
       const activeGlow = id(tree!, 'passenger-active-search-glow');
       assert.ok(style(activeGlow).opacity > homeOpacity);
+      assert.ok(Math.abs(style(activeGlow).opacity - 0.30) < 1e-9);
       assert.equal(h.animations.at(-1).duration, 160);
+      await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
+      await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
+      assert.equal(style(id(tree!, 'passenger-active-search-glow')).opacity, 0.20);
       assert.equal(h.repeats.length, reduced ? 0 : 1);
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'matching' })));
       assert.equal(h.repeats.length, reduced ? 0 : 1);
@@ -96,8 +102,22 @@ test('Search results use continuous list rows while Home retains rich recents an
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   try {
     await settle();
-    assert.equal(restingStyle(id(tree, 'passenger-home-floating-search')).height, 58);
-    assert.ok(id(tree, 'passenger-home-search-glow'));
+    const frame = id(tree, 'passenger-home-search-frame');
+    const pill = id(tree, 'passenger-home-floating-search');
+    const glow = id(tree, 'passenger-home-search-glow');
+    assert.equal(style(frame).position, 'relative');
+    assert.equal(style(frame).height, 58);
+    assert.equal(style(frame).marginHorizontal, 20);
+    assert.equal(style(frame).alignSelf, 'stretch');
+    assert.equal(restingStyle(pill).height, 58);
+    assert.equal(restingStyle(pill).width, '100%');
+    assert.equal(restingStyle(pill).marginHorizontal, undefined);
+    assert.equal(restingStyle(pill).borderRadius, 24);
+    assert.equal(style(glow).borderRadius, 24);
+    assert.deepEqual([style(glow).top, style(glow).right, style(glow).bottom, style(glow).left], [0, 0, 0, 0]);
+    assert.equal(style(glow).position, 'absolute');
+    assert.equal(style(glow).opacity, 0.18);
+    assert.equal(frame.findAll(n => n.props.testID === 'passenger-home-search-glow').length, 1);
     const homeRecent = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel?.includes('Plaza Atlacomulco'));
     if (homeRecent) assert.ok(restingStyle(homeRecent).boxShadow);
     await press(tree, '¿A dónde vamos?');
@@ -204,7 +224,8 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       const search = id(tree, 'passenger-home-floating-search');
       const searchStyle = Object.assign({}, ...search.props.style({ pressed: false }).filter(Boolean));
       assert.equal(searchStyle.height, 58); assert.equal(searchStyle.borderRadius, 24);
-      assert.equal(searchStyle.marginHorizontal, 20);
+      assert.equal(searchStyle.marginHorizontal, undefined);
+      assert.equal(style(id(tree, 'passenger-home-search-frame')).marginHorizontal, 20);
       const panelHeader = tree.root.findAllByType('View' as never).find(n =>
         style(n).borderTopLeftRadius === 28 && style(n).backgroundColor === '#FFFFFF');
       assert.ok(panelHeader);

@@ -1,9 +1,26 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-search-list-glow-p0`, creada desde
-`codex/passenger-motion-1-1-p0` @ `27d48dc`. Sin merge a main.
+Actualizado 2026-10-05 en `codex/passenger-search-glow-fix-p0`, creada desde
+`codex/passenger-search-list-glow-p0` @ `f45d1dd`. Sin merge a main.
 
 ## IMPLEMENTADO
+
+### Geometría e intensidad del glow Home/Search — 2026-10-05
+
+- El frame Home comparte exactamente el ancho útil, alto de 58 dp y radio de
+  24 dp con el pill. El margen horizontal de 20 dp reside en el frame; el halo
+  absoluto ocupa sólo sus cuatro lados y no participa en el layout. La
+  posición, gap de 10 dp y medidas del mismo `VimaRideSheet` no cambian.
+- Opacidad base del halo Home 0.18, Search 0.20 y Search enfocado 0.30; la
+  respiración suave añade hasta 0.05 mediante el ciclo compartido existente
+  de 1900 ms. El foco conserva fade de 160 ms. Reduced Motion deja el halo
+  estático y visible, sin respiración. No cambia `useSearchCycle` ni el
+  `SearchPulse` de matching. Android físico permanece pendiente.
+- No cambian lista Search, resultados/teclado, Recientes, geometría del sheet,
+  ruta/Camera/mapa, pricing, persistencia ni otros componentes Motion.
+- Verificación local: TypeScript, lint, suite 155/155, worklets, Expo Doctor
+  21/21, export Hermes Android/iOS, style MapLibre, splash y aislamiento de
+  fixtures/release/credenciales/paths correctos. Sin EAS Build.
 
 ### Search lista ligera y glow compartido — 2026-10-05
 

@@ -222,7 +222,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
   const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
-    {homeFloatingSearch ? <><Animated.View style={homeSearchPress.style}>
+    {homeFloatingSearch ? <><Animated.View testID="passenger-home-search-frame"
+      style={[styles.homeSearchFrame, homeSearchPress.style]}>
       <SearchInputGlow cycle={searchCycle} home /><Pressable testID="passenger-home-floating-search"
       onPressIn={homeSearchPress.onPressIn} onPressOut={homeSearchPress.onPressOut}
       onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
@@ -713,8 +714,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: md, paddingVertical: sm, ...elevationStyle('level1', t.colors.carbon) },
   originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
   row: { flexDirection: 'row', alignItems: 'center', gap: md },
-  homeSearch: { ...surfaces.card, marginHorizontal: base,
-    height: homeSearchHeight, borderRadius: 24,
+  homeSearchFrame: { position: 'relative', alignSelf: 'stretch', marginHorizontal: base, height: homeSearchHeight },
+  homeSearch: { ...surfaces.card, width: '100%', height: homeSearchHeight, borderRadius: 24,
     flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md,
     ...elevationStyle('level1', t.colors.carbon) },
   quickRow: { ...surfaces.card, height: 44, flexDirection: 'row', alignItems: 'center',
