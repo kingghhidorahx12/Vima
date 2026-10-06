@@ -15,4 +15,4 @@ export const passengerPinClearance = {
 
 export const locationCtaHeight = 48;
 export const mapControlSize = 44;
-export const mapLayersMenuWidth = 170;
+export const mapLayersMenuWidth = 192;

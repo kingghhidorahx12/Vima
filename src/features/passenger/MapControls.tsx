@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { ReactNode } from 'react';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence } from 'react-native-reanimated';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { fadeTo } from '../../motion/helpers';
@@ -14,8 +15,9 @@ import type { TrafficLayerPreferences } from '../../map/traffic';
 import { ElementEntrance } from '../../motion/ElementEntrance';
 import { locationCtaHeight, mapControlSize, mapLayersMenuWidth } from './mapCameraFootprint';
 
-export function MapControls({ available, layers, open, onOpen, onToggle }: {
+export function MapControls({ available, layers, open, onOpen, onToggle, compass }: {
   available: boolean; layers: TrafficLayerPreferences; open: boolean;
+  compass?: ReactNode;
   onOpen: () => void; onToggle: (layer: keyof TrafficLayerPreferences) => void;
 }) {
   const tap = (action: () => void) => { void semanticHaptics('toggle'); action(); };
@@ -32,10 +34,11 @@ export function MapControls({ available, layers, open, onOpen, onToggle }: {
         style={({ pressed }) => [styles.menuRow, layer === 'incidents' && styles.menuDivider, pressed && styles.rowPressed]}>
         <VimaGlyph name={layer === 'traffic' ? 'traffic' : 'warning'}
           color={available && layers[layer] ? t.colors.green : t.colors.graphite} />
-        <VimaText variant="bodySmall" style={styles.menuLabel}>{layer === 'traffic' ? 'Tráfico' : 'Incidentes'}</VimaText>
+        <VimaText variant="bodySmall" numberOfLines={1} style={styles.menuLabel}>{layer === 'traffic' ? 'Tráfico' : 'Incidentes'}</VimaText>
         <LayerSwitch checked={layers[layer] && available} />
       </Pressable>)}
     </Animated.View> : null}
+    {compass}
     <MapControl label="Capas del mapa" icon="layers" active={open || available && (layers.traffic || layers.incidents)}
       expanded={open} onPress={() => tap(onOpen)} />
   </ElementEntrance>;

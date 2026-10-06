@@ -1,14 +1,42 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-saved-places-home-p0`, creada sobre
-`codex/passenger-landcover-detail-p0` @ `4cf68d3`. Sin reset ni merge a main.
+Actualizado 2026-10-05 en `codex/passenger-home-layout-polish-p0`, creada sobre
+`codex/passenger-saved-places-home-p0` @ `568b497`. Sin reset ni merge a main.
 
 ## IMPLEMENTADO
+
+### Cierre de composición Home y controles Passenger — 2026-10-05
+
+- Sólo Home normal usa un panel principal de 69% del frame útil. El buscador
+  «¿A dónde vamos?» permanece dentro del mismo `VimaRideSheet`, como superficie
+  blanca de 76 dp y radio 24, separada 10 dp del panel. El panel comienza en
+  Lugares guardados; el área táctil del sheet incluye el buscador. Search,
+  reviewing, confirmación, request, matching y assigned conservan sus snaps.
+- La fila Casa/Trabajo/Favoritos mide 48 dp. Recientes conserva hasta tres
+  filas compactas con `resolvePlaceMedia` o fallback semántico. Persistencia y
+  acciones de slots, Favoritos y Recientes no cambiaron.
+- Brújula de 44 dp está en la columna de controles inmediatamente encima de
+  Capas, fuera del top chrome. Mantiene acción al norte y fade de 160 ms bajo
+  ambas políticas de movimiento. Notificaciones permanece sola arriba a la derecha.
+  Menú de capas tiene ancho mínimo 192 dp e «Incidentes» una sola línea.
+- El fit temprano de reviewing conserva padding y bounds. Sólo el fit posterior
+  a «Confirmar ubicaciones» suma 28 dp de padding inferior para desplazar
+  ópticamente la ruta unos 14 dp hacia arriba; conserva geometría, clearance
+  de pins, Camera y lifecycle.
+- Sin cambios en persistencia, TomTom, routing, pricing, matching, RouteLayer,
+  Traffic, basemap, edge-to-edge, safe area ni bottom nav. Sin dependencias ni
+  cambios nativos; no se ejecutó EAS Build.
+- TypeScript, lint, suite 149/149 (incluido schema/style MapLibre), worklets
+  19/19, Expo Doctor 21/21, export Hermes Android/iOS y checks de splash,
+  credenciales, fixtures, release y paths correctos.
+- PENDIENTE ANDROID FÍSICO: comprobar altura/densidad/scroll en Home, toque del
+  buscador separado, columna brújula/Capas y menú expandido, tres Recientes,
+  media/fallback y visibilidad completa de ruta y pins tras confirmar.
 
 ### Home con Lugares guardados y Recientes reales — 2026-10-05
 
 - Home mantiene «¿A dónde vamos?» como acción principal. «Lugares guardados»
-  muestra Casa, Trabajo y Favoritos en una fila compacta de 56 dp; los slots
+  muestra Casa, Trabajo y Favoritos en una fila compacta de 48 dp; los slots
   vacíos ofrecen agregar, los configurados seleccionan su destino directamente.
   Favoritos abre la colección real. No hay favoritos individuales ni Frecuentes
   dentro de Home.

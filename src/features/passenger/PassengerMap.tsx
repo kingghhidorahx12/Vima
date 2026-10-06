@@ -54,7 +54,8 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
         ...fitRoute, padding: { ...target.padding,
           top: (target.padding.top ?? 0) + passengerPinClearance.top,
           bottom: (target.padding.bottom ?? 0) - sheetHeight + (fitRoute.sheetHeight ?? sheetHeight) +
-            passengerPinClearance.bottom + (locationCtaVisible ? locationCtaHeight + t.spacing.scalePx[2]! : 0),
+            passengerPinClearance.bottom + (locationCtaVisible ? locationCtaHeight + t.spacing.scalePx[2]! : 0) +
+            (fitRoute.confirmationBottomPadding ?? 0),
           left: horizontalFitPadding,
           right: horizontalFitPadding },
       } : undefined} />

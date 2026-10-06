@@ -6,6 +6,8 @@ import type { Place, RideQuote } from './model';
 export interface PassengerRouteFitIntent extends RouteFitIntent {
   /** Actual settled sheet viewport, captured with this intent (not a percentage estimate). */
   readonly sheetHeight: number;
+  /** Applies only after confirming locations; reviewing keeps its original fit. */
+  readonly confirmationBottomPadding: number;
 }
 
 /** Camera-only validation. Does not alter or normalize the provider's route payload. */
@@ -41,7 +43,8 @@ export function usePassengerRouteFit({ quote, origin, destination, reviewing, co
     if (!token || !key || !candidate || !ready || measuredSheetHeight === undefined ||
       !Number.isFinite(measuredSheetHeight) || measuredSheetHeight <= 0 || seen.current.has(token)) return;
     seen.current.add(token);
-    setIssued({ key, intent: { sequence: ++serial.current, coordinates: candidate.coordinates, sheetHeight: measuredSheetHeight } });
-  }, [candidate, key, token, measuredSheetHeight, ready]);
+    setIssued({ key, intent: { sequence: ++serial.current, coordinates: candidate.coordinates,
+      sheetHeight: measuredSheetHeight, confirmationBottomPadding: confirming ? 28 : 0 } });
+  }, [candidate, key, token, measuredSheetHeight, ready, confirming]);
   return ready && key && issued?.key === key ? issued.intent : undefined;
 }

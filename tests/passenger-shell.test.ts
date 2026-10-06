@@ -57,7 +57,7 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       assert.equal(style(surface).overflow, undefined);
       assert.equal(surface.props.collapsable, false);
       await act(async () => surface.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 + top! + 4 } } }));
-      assert.equal(host(tree, 'SheetBoundary').props.interaction.height, 700);
+      assert.equal(host(tree, 'SheetBoundary').props.interaction.height, 786);
       const mapViewport = surface.findAllByType('View' as never).find(n => style(n).marginHorizontal === 4);
       assert.ok(mapViewport);
       assert.equal(mapViewport!.props.collapsable, false);
@@ -84,17 +84,36 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
         const resting = Object.assign({}, ...control.props.style({ pressed: false }).filter(Boolean));
         assert.deepEqual(resting.boxShadow, style(logo).boxShadow);
       }
-      const savedStrip = tree.root.findAllByType('View' as never).find(n => style(n).height === 56 && style(n).boxShadow);
+      const savedStrip = tree.root.findAllByType('View' as never).find(n => style(n).height === 48 && style(n).boxShadow);
       assert.deepEqual(style(savedStrip!).boxShadow, style(logo).boxShadow);
+      const search = id(tree, 'passenger-home-floating-search');
+      const searchStyle = Object.assign({}, ...search.props.style({ pressed: false }).filter(Boolean));
+      assert.equal(searchStyle.height, 76); assert.equal(searchStyle.borderRadius, 24);
+      assert.equal(searchStyle.marginHorizontal, 20);
+      assert.equal(style(id(tree, 'passenger-sheet-header')).backgroundColor, undefined);
+      assert.equal(style(id(tree, 'passenger-sheet-viewport')).backgroundColor, '#FFFFFF');
+      assert.equal(host(tree, 'SheetBoundary').findAll(n => n.props.testID === 'passenger-home-floating-search').length, 1);
+      assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-home-floating-search').length, 0);
+      assert.equal(style(host(tree, 'SheetBoundary')).overflow, 'visible');
+      assert.equal(style(host(tree, 'SheetBoundary')).backgroundColor, 'transparent');
       const notifications = chrome.findByType('Pressable' as never);
       assert.equal(notifications.props.accessibilityLabel, 'Notificaciones');
       assert.equal(notifications.props.accessibilityState.disabled, true); assert.equal(notifications.props.onPress, undefined);
       assert.equal(style(notifications).width, 44); assert.equal(style(notifications).height, 44);
       assert.deepEqual(style(notifications).boxShadow, [{ offsetX: 0, offsetY: 8, blurRadius: 24,
         spreadDistance: 0, color: 'rgba(11, 15, 14, 0.1)' }]);
+      await act(async () => host(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
       const compass = id(tree, 'passenger-compass');
-      assert.equal(style(compass).right, 16);
-      assert.equal(style(compass).top - (style(chrome).top + style(notifications).height), 12);
+      assert.equal(chrome.findAll(n => n.props.testID === 'passenger-compass').length, 0);
+      const controls = id(tree, 'passenger-map-controls');
+      assert.deepEqual(controls.findAll(n => n.props.testID === 'passenger-compass' || n.props.accessibilityLabel === 'Capas del mapa')
+        .map(n => n.props.testID ?? n.props.accessibilityLabel), ['passenger-compass', 'Capas del mapa']);
+      assert.equal(style(compass).width, 44); assert.equal(style(compass).height, 44);
+      assert.equal(style(compass).position, undefined);
+      await press(tree, 'Capas del mapa');
+      assert.ok(controls.findAll(n => style(n).minWidth === 192).length > 0);
+      const incidentLabel = controls.findAll(n => String(n.type) === 'Text' && n.props.children === 'Incidentes')[0];
+      assert.equal(incidentLabel?.props.numberOfLines, 1);
       assert.equal(host(tree, 'NativeMapBoundary').props.compass, false);
       assert.equal(notifications.props.hitSlop, 4);
       const nav = id(tree, 'passenger-bottom-navigation');
@@ -143,20 +162,20 @@ test('bottom nav exists only in normal Home and returns after internal back with
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('rotating reveals the compass below notifications with only a 160 ms fade under either motion policy', async () => {
+test('rotating reveals the compass above Layers with only a 160 ms fade under either motion policy', async () => {
   for (const reduced of [false, true]) {
     const h = createHarness({}, { reduced });
     const fixture = createPassengerFixtureGateway(clock);
     const tree: ReactTestRenderer = await h.render(fixture.gateway);
     try {
-      await settle();
+      await settle(); await mapLayout(tree);
       await act(async () => host(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
       assert.equal(id(tree, 'passenger-compass').props.pointerEvents, 'none');
       const before = h.animations.length;
       await act(async () => host(tree, 'NativeMapBoundary').props.onRegionIsChanging({ nativeEvent: { bearing: 90 } }));
       const compass = id(tree, 'passenger-compass');
       assert.equal(compass.props.pointerEvents, 'auto');
-      assert.equal(style(compass).top, 24 + 64); assert.equal(style(compass).right, 16);
+      assert.equal(style(compass).top, undefined); assert.equal(style(compass).right, undefined);
       assert.equal(style(compass).transform, undefined); // Appearance adds no translation or scale.
       assert.ok(h.animations.slice(before).some((a: { value: number; duration: number }) => a.value === 1 && a.duration === 160));
       const button = compass.findByType('Pressable' as never);
@@ -174,6 +193,28 @@ test('rotating reveals the compass below notifications with only a 160 ms fade u
       assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
     } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
   }
+});
+
+test('only normal Home uses the 69% panel and detached search within the persistent sheet', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle(); await mapLayout(tree);
+    const homeHeight = await measure(tree, 250);
+    assert.equal(homeHeight, 700 * 0.69 + 86);
+    assert.equal(host(tree, 'SheetBoundary').props.interaction.height, 786);
+    assert.ok(Math.abs(homeHeight - 86 - 700 * 0.69) < 0.01);
+    assert.equal(id(tree, 'passenger-home-floating-search').props.accessibilityLabel, '¿A dónde vamos?');
+    assert.equal(style(host(tree, 'SheetBoundary')).overflow, 'visible');
+    await press(tree, '¿A dónde vamos?');
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-home-floating-search').length, 0);
+    assert.equal(style(host(tree, 'SheetBoundary')).overflow, 'hidden');
+    assert.equal(host(tree, 'SheetBoundary').props.interaction.targetOffset, 84);
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    await mapLayout(tree); const reviewHeight = await measure(tree, 250);
+    assert.equal(reviewHeight, 278); // Content + header, without Home's fixed percentage.
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
 test('confirmation title floats over the persistent map with approved geometry and no duplicate safe-area occlusion', async () => {
@@ -245,6 +286,7 @@ test('review fit waits for actual phase layout; confirm emits an independent fit
     await mapLayout(tree); // The surface now recovers the bottom-nav space.
     const firstHeight = await measure(tree, 252);
     const first = fit(); assert.ok(first); assert.equal(first.sheetHeight, firstHeight);
+    assert.equal(first.confirmationBottomPadding, 0);
     const map = host(tree, 'PassengerMapContent').props;
     assert.deepEqual(first.coordinates, [map.origin.coordinate, ...(map.quote.route.geometry.type === 'LineString' ? map.quote.route.geometry.coordinates : map.quote.route.geometry.coordinates.flat()), map.destination.coordinate]);
     await act(async () => host(tree, 'NativeMapBoundary').props.onTouchStart());
@@ -261,6 +303,7 @@ test('review fit waits for actual phase layout; confirm emits an independent fit
     assert.equal(fit(), undefined);
     const finalHeight = await measure(tree, 340); const final = fit();
     assert.ok(final.sequence > first.sequence); assert.equal(final.sheetHeight, finalHeight);
+    assert.equal(final.confirmationBottomPadding, 28);
     await measure(tree, 342); assert.equal(fit().sequence, final.sequence);
     await press(tree, `Destino ${fixturePlaces[1]!.name}`); assert.equal(fit(), undefined);
     const field = host(tree, 'TextInput'); await act(async () => field.props.onChangeText('Centro')); await settle();
