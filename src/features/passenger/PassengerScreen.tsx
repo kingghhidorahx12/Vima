@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Image, Keyboard, Pressable, ScrollView, StyleSheet, TextInput, View, type ImageSourcePropType } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -58,6 +58,7 @@ const confirmationPillHeight = 40;
 const homeSearchHeight = 58;
 const homeSearchGap = 10;
 const homeSearchAccessoryHeight = homeSearchHeight + homeSearchGap;
+const passengerPanelTopRadius = 60;
 
 export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }: PassengerScreenProps) {
   const flow = usePassengerFlow(gateway);
@@ -230,14 +231,18 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         value={flow.search} onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }}
         returnKeyType="search" style={styles.searchInput} placeholderTextColor={t.colors.gray} />
       {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</View></View>;
-  const addressFields = <View style={styles.addressStack}>
-    <View testID="passenger-origin-surface" style={styles.addressSurface}>
-      {reviewing ? <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
-        : <AddressField label="Origen" place={flow.origin} color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />}
-    </View>
-    {!reviewing ? flow.quote?.stops.map((place) => <AddressField key={place.id} label={place.name} place={place} color={t.colors.gray} disabled />) : null}
-    <View testID="passenger-destination-surface" style={styles.addressSurface}>
-      <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')}
+  const addressFields = <View testID="passenger-address-panel" style={styles.addressSurface}>
+    <View style={styles.addressInterior}>
+      {reviewing ? <OriginField embedded place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
+        : <AddressField embedded rowTestID="passenger-origin-row" label="Origen" place={flow.origin}
+          color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />}
+      {!reviewing ? flow.quote?.stops.map((place) => <Fragment key={place.id}>
+        <View testID="passenger-address-divider" style={styles.addressDivider} />
+        <AddressField embedded rowTestID="passenger-stop-row" label={place.name} place={place} color={t.colors.gray} disabled />
+      </Fragment>) : null}
+      <View testID="passenger-address-divider" style={styles.addressDivider} />
+      <AddressField embedded rowTestID="passenger-destination-row" label="Destino" place={flow.destination}
+        color={t.colors.red} onPress={() => openField('destination')}
         disabled={!reviewing && blocked} />
     </View>
   </View>;
@@ -256,8 +261,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       style={styles.floatingSearchFrame}>{searchField}</View> : addressesFloating ? <View testID="passenger-floating-accessory"
       style={styles.floatingAddressesFrame}>{addressFields}</View> : null}
     {detachedPanel ? <View testID="passenger-accessory-gap" style={styles.accessoryGap} /> : null}
-    <View testID="passenger-panel-header" style={[styles.sheetHeader, detachedPanel && styles.detachedPanelHeader,
-      homeFloatingSearch && styles.homePanelTop]}>
+    <View testID="passenger-panel-header" style={[styles.sheetHeader, detachedPanel && styles.detachedPanelHeader]}>
       <View style={styles.handle} />
       {destinationSearchTitleVisible || addressesFloating ? null
         : sheetTitle ? <VimaText variant={flow.phase === 'home' || assignment ? 'h3' : 'bodyMedium'} style={[styles.center, !!assignment && styles.eta]}
@@ -625,11 +629,14 @@ function MatchingProgress() {
     <View style={styles.progressIdle} /><View style={styles.progressIdle} />
   </View>;
 }
-function OriginField({ place, status, onPress }: { place: Place | null; status: OriginStatus; onPress: () => void }) {
+function OriginField({ place, status, onPress, embedded = false }: {
+  place: Place | null; status: OriginStatus; onPress: () => void; embedded?: boolean;
+}) {
   const feedback = usePressFeedback();
-  return <Animated.View style={feedback.style}><Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={onPress}
+  return <Animated.View style={feedback.style}><Pressable testID="passenger-origin-row"
+    accessibilityRole="button" accessibilityLabel="Origen" onPress={onPress}
     onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
-    style={({ pressed }) => [styles.originField, styles.addressSurfaceField, pressed && surfaces.pressed]}>
+    style={({ pressed }) => [styles.originField, embedded && styles.embeddedAddressField, pressed && surfaces.pressed]}>
     <View style={styles.originDot} />
     <View style={styles.fill}>
       <VimaText variant="caption" style={styles.muted}>Origen</VimaText>
@@ -640,11 +647,14 @@ function OriginField({ place, status, onPress }: { place: Place | null; status: 
     <VimaGlyph name="chevron" />
   </Pressable></Animated.View>;
 }
-function AddressField({ label, place, color, onPress, disabled }: { label: string; place?: Place | null; color: string; onPress?: () => void; disabled?: boolean }) {
+function AddressField({ label, place, color, onPress, disabled, embedded = false, rowTestID }: {
+  label: string; place?: Place | null; color: string; onPress?: () => void; disabled?: boolean; embedded?: boolean; rowTestID?: string;
+}) {
   const feedback = usePressFeedback();
-  return <Animated.View style={feedback.style}><Pressable onPress={onPress} disabled={disabled} accessibilityRole={onPress ? 'button' : 'text'} accessibilityLabel={`${label} ${place?.name ?? ''}`}
+  return <Animated.View style={feedback.style}><Pressable testID={rowTestID}
+    onPress={onPress} disabled={disabled} accessibilityRole={onPress ? 'button' : 'text'} accessibilityLabel={`${label} ${place?.name ?? ''}`}
     onPressIn={onPress && !disabled ? feedback.onPressIn : undefined} onPressOut={onPress && !disabled ? feedback.onPressOut : undefined}
-    style={({ pressed }) => [styles.address, styles.addressSurfaceField, pressed && !disabled && surfaces.pressed]}>
+    style={({ pressed }) => [styles.address, embedded && styles.embeddedAddressField, pressed && !disabled && surfaces.pressed]}>
     <SmallPin color={color} />
     <View style={styles.fill}><VimaText variant="caption" style={styles.addressLabel}>{label}</VimaText>
       <VimaText variant="bodySmall" style={!place && styles.muted} numberOfLines={1}>{place?.name ?? label}</VimaText>
@@ -721,11 +731,10 @@ const styles = StyleSheet.create({
   floatingTitleText: { fontFamily: interFamilies[600], fontSize: 16, fontWeight: '600', color: t.colors.carbon,
     textAlign: 'center' },
   sheet: { overflow: 'hidden' },
-  roundedPassengerSheet: { borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+  roundedPassengerSheet: { borderTopLeftRadius: passengerPanelTopRadius, borderTopRightRadius: passengerPanelTopRadius },
   detachedSheet: { overflow: 'visible', backgroundColor: 'transparent', borderWidth: 0, boxShadow: [] },
-  detachedPanelHeader: { backgroundColor: t.colors.white, borderTopLeftRadius: 32,
-    borderTopRightRadius: 32, paddingBottom: sm },
-  homePanelTop: { borderTopLeftRadius: 44, borderTopRightRadius: 44 },
+  detachedPanelHeader: { backgroundColor: t.colors.white, borderTopLeftRadius: passengerPanelTopRadius,
+    borderTopRightRadius: passengerPanelTopRadius, paddingBottom: sm },
   detachedPanelContent: { backgroundColor: t.colors.white, borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32, overflow: 'hidden' },
   accessoryGap: { height: homeSearchGap },
@@ -767,12 +776,13 @@ const styles = StyleSheet.create({
   pinShape: { width: t.components.iconSizesPx[0], height: t.components.iconSizesPx[0], borderRadius: t.radii.pillPx,
     borderBottomRightRadius: t.radii.smallPx / 2, transform: [{ rotate: '45deg' }] },
   pinCore: { position: 'absolute', width: xs, height: xs, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white, top: sm, left: sm },
-  addressStack: { gap: sm },
   addressSurface: { backgroundColor: t.colors.white, borderRadius: t.radii.cardPx,
     borderWidth: t.borders.standardWidthPx, borderColor: t.colors.green,
     boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 12, spreadDistance: 2, color: surfaceColors.brandWash }] },
-  addressSurfaceField: { minHeight: 46, paddingVertical: sm, borderWidth: 0,
-    borderRadius: t.radii.cardPx, backgroundColor: 'transparent', boxShadow: [] },
+  addressInterior: { borderRadius: t.radii.cardPx, overflow: 'hidden' },
+  addressDivider: { height: t.borders.standardWidthPx, marginHorizontal: md, backgroundColor: surfaceColors.border },
+  embeddedAddressField: { minHeight: 46, paddingVertical: sm, borderWidth: 0,
+    borderRadius: 0, backgroundColor: 'transparent', boxShadow: [] },
   address: { minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md, paddingVertical: md, paddingHorizontal: md },
   addressLabel: { color: t.colors.graphite },
   metrics: { flexDirection: 'row', alignItems: 'stretch', gap: xs },

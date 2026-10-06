@@ -1,9 +1,30 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-floating-fields-final-p0`, creada desde
-`codex/passenger-motion-visibility-final-p0` @ `c11e392`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-shared-address-panel-p0`, creada desde
+`codex/passenger-floating-fields-final-p0` @ `b0b8e5d`. Sin merge a main.
+
+Las secciones de implementación son cronológicas; los ajustes más recientes
+sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Bloque único de direcciones y radio superior Passenger — 2026-10-06
+
+- Reviewing, confirm y requesting presentan Origen, paradas existentes y
+  Destino dentro de una sola superficie blanca con borde y halo verde
+  estáticos. Los divisores son internos; las filas embedded no llevan borde,
+  sombra, fondo ni radio propios. Conservan pins, texto, targets, press, taps y
+  estados disabled. Matching y assigned no usan este accesorio.
+- El radio superior local del panel Passenger es 60 dp en Home, Search,
+  reviewing, confirm y requesting, aplicado al header blanco real o al sheet
+  redondeado según la fase. Las esquinas inferiores permanecen en 32 dp.
+- El bloque permanece en el mismo header flotante y la tubería de mediciones
+  no cambió: accesorio y panel se cuentan una vez. Home sigue al 50%, buscador
+  a 58 dp y gap a 10 dp. Route-fit, Camera, mapa, lógica y Motion 1.1 siguen
+  intactos. No hay dependencias ni cambios nativos; Android físico PENDIENTE.
+- Validación local: TypeScript, lint, 161 tests, worklets, Expo Doctor 21/21,
+  schema MapLibre, export Hermes Android/iOS, splash y aislamiento de fixtures,
+  pricing/servidor, rutas y credenciales de release, todos correctos.
 
 ### Accesorios flotantes de Home, Search y confirmación — 2026-10-06
 

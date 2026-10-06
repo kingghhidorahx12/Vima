@@ -120,8 +120,8 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     assert.ok(restingStyle(pill).boxShadow.length > 0);
     assert.deepEqual(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).boxShadow, []);
     assert.equal(style(host(tree, 'SheetBoundary')).backgroundColor, 'transparent');
-    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 44);
-    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopRightRadius, 44);
+    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 60);
+    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopRightRadius, 60);
     assert.equal(style(glow).borderRadius, 24);
     assert.deepEqual([style(glow).top, style(glow).right, style(glow).bottom, style(glow).left], [0, 0, 0, 0]);
     assert.equal(style(glow).position, 'absolute');
@@ -181,7 +181,7 @@ test('Search suggestions and saved, recent, popular and local collections keep o
   });
   try {
     await settle(); await press(tree, '¿A dónde vamos?'); await settle();
-    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 32);
+    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 60);
     for (const place of [favorite, recent, popular, featured]) {
       const row = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === `${place.name}, ${place.address}`);
       assert.ok(row, place.name);
@@ -208,41 +208,47 @@ test('Reduced Motion keeps permanent green borders and stationary halos in Home 
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('review and confirmation separate green-outlined address surfaces without changing map or sheet identity', async () => {
+test('review and confirmation share one green address panel without changing map or sheet identity', async () => {
   const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   const checkAddresses = () => {
-    const origin = id(tree, 'passenger-origin-surface');
-    const destination = id(tree, 'passenger-destination-surface');
-    const stack = origin.parent;
-    assert.ok(stack);
-    assert.equal(stack, destination.parent);
+    const panel = id(tree, 'passenger-address-panel');
+    const origin = id(tree, 'passenger-origin-row');
+    const destination = id(tree, 'passenger-destination-row');
+    assert.equal(panel.findAll(n => n.props.testID === 'passenger-origin-row').length, 1);
+    assert.equal(panel.findAll(n => n.props.testID === 'passenger-destination-row').length, 1);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
     assert.ok(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-floating-accessory').length === 1);
-    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-origin-surface').length, 0);
-    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-destination-surface').length, 0);
-    assert.equal(style(stack).gap, 8);
-    assert.equal(stack.findAll(n => style(n).backgroundColor === 'rgba(11, 15, 14, 0.08)' && style(n).height === 1).length, 0);
-    for (const surface of [origin, destination]) {
-      const s = style(surface);
-      assert.equal(s.borderColor, '#00D68F');
-      assert.equal(s.borderRadius, 16);
-      assert.equal(s.boxShadow.length, 1);
-      assert.equal(s.boxShadow[0].offsetY, 0);
+    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    assert.equal(panel.findAll(n => n.props.testID === 'passenger-address-divider').length, 1);
+    assert.equal(style(panel).backgroundColor, '#FFFFFF');
+    assert.equal(style(panel).borderColor, '#00D68F');
+    assert.equal(style(panel).borderRadius, 16);
+    assert.equal(style(panel).boxShadow.length, 1);
+    for (const row of [origin, destination]) {
+      const s = restingStyle(row);
+      assert.equal(s.borderWidth, 0);
+      assert.equal(s.borderRadius, 0);
+      assert.deepEqual(s.boxShadow, []);
+      assert.equal(s.backgroundColor, 'transparent');
+      assert.equal(s.minHeight, 46);
+      assert.notEqual(row.props.disabled, true);
+      assert.equal(typeof row.props.onPress, 'function');
     }
     assert.equal(origin.findAll(n => style(n).backgroundColor === '#00D68F').length >= 1, true);
     assert.equal(destination.findAll(n => style(n).backgroundColor === '#FF3830').length >= 1, true);
-    assert.ok(origin.findAllByType('Pressable' as never).length >= 1);
-    assert.ok(destination.findAllByType('Pressable' as never).length >= 1);
+    assert.match(origin.props.accessibilityLabel, /^Origen/);
+    assert.match(destination.props.accessibilityLabel, /^Destino /);
   };
   try {
     await settle(); await press(tree, '¿A dónde vamos?');
     await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
     checkAddresses();
-    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 32);
+    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 60);
     assert.equal(h.repeats.length, 1);
     await press(tree, 'Confirmar ubicaciones'); await settle();
     checkAddresses();
-    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 32);
+    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 60);
     assert.equal(h.repeats.length, 1);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
     await press(tree, 'Solicitar viaje'); await settle();
@@ -257,7 +263,7 @@ test('destination Search floats its title and sole input above the measured pane
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   try {
     await settle(); await mapLayout(tree);
-    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 44);
+    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 60);
     assert.equal(style(id(tree, 'passenger-sheet-viewport')).borderBottomLeftRadius, 32);
     assert.equal(style(id(tree, 'passenger-sheet-viewport')).borderBottomRightRadius, 32);
     assert.equal(style(id(tree, 'passenger-sheet-viewport')).backgroundColor, '#FFFFFF');
@@ -268,7 +274,7 @@ test('destination Search floats its title and sole input above the measured pane
     const header = id(tree, 'passenger-sheet-header');
     assert.equal(header.findAll(n => n.props.children === '¿A dónde vamos?').length, 0);
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-search-title-reserve').length, 0);
-    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 32);
+    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 60);
     assert.equal(style(id(tree, 'passenger-panel-header')).backgroundColor, '#FFFFFF');
     assert.equal(style(id(tree, 'passenger-floating-accessory')).marginHorizontal, 20);
     assert.equal(style(id(tree, 'passenger-accessory-gap')).height, 10);
@@ -302,31 +308,44 @@ test('destination Search floats its title and sole input above the measured pane
 test('requesting keeps measured floating addresses, then matching and assigned remove that accessory', async () => {
   let finishRequest: (() => void) | undefined;
   const requestClock = { after: () => () => {}, delay: () => new Promise<void>(resolve => { finishRequest = resolve; }) };
-  const fixture = createPassengerFixtureGateway(requestClock); const h = createHarness();
+  const fixture = createPassengerFixtureGateway(requestClock); fixture.controls.setStop(true);
+  const h = createHarness();
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   try {
     await settle(); await mapLayout(tree);
     await press(tree, '¿A dónde vamos?');
     await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
     const reviewingContent = id(tree, 'passenger-sheet-content');
-    assert.equal(reviewingContent.findAll(n => n.props.testID === 'passenger-origin-surface').length, 0);
-    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-origin-surface').length, 1);
+    assert.equal(reviewingContent.findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-stop-row').length, 0);
     const reviewHeight = await measure(tree, 120, 132);
     assert.equal(reviewHeight, 252); // Accessory + panel, counted once by the existing measurement pipeline.
     await press(tree, 'Confirmar ubicaciones');
     assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-floating-accessory').length, 1);
-    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-origin-surface').length, 0);
+    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    const panel = id(tree, 'passenger-address-panel');
+    const stop = id(tree, 'passenger-stop-row');
+    assert.equal(stop.props.disabled, true);
+    assert.equal(stop.props.onPress, undefined);
+    assert.match(stop.props.accessibilityLabel, new RegExp(fixturePlaces[3]!.name));
+    assert.equal(panel.findAll(n => n.props.testID === 'passenger-address-divider').length, 2);
+    assert.deepEqual(restingStyle(stop).boxShadow, []);
+    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 60);
     const confirmHeight = await measure(tree, 160, 132);
     assert.equal(confirmHeight, 292);
     await press(tree, 'Solicitar viaje');
-    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-origin-surface').length, 1);
-    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-origin-surface').length, 0);
+    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
+    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    assert.equal(style(id(tree, 'passenger-panel-header')).borderTopLeftRadius, 60);
     assert.equal(id(tree, 'passenger-panel-header').findAll(n => n.props.children === 'Confirma tu viaje').length, 0);
     assert.ok(finishRequest);
     await act(async () => finishRequest!()); await settle();
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-floating-accessory').length, 0);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, undefined);
     await act(async () => fixture.controls.advance('assigned')); await settle();
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-floating-accessory').length, 0);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, undefined);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
   } finally { finishRequest?.(); await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
@@ -432,7 +451,7 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       assert.equal(searchStyle.marginHorizontal, undefined);
       assert.equal(style(id(tree, 'passenger-home-search-frame')).marginHorizontal, 20);
       const panelHeader = tree.root.findAllByType('View' as never).find(n =>
-        style(n).borderTopLeftRadius === 44 && style(n).backgroundColor === '#FFFFFF');
+        style(n).borderTopLeftRadius === 60 && style(n).backgroundColor === '#FFFFFF');
       assert.ok(panelHeader);
       assert.equal(style(panelHeader!).boxShadow, undefined);
       assert.equal(style(id(tree, 'passenger-sheet-viewport')).boxShadow, undefined);
