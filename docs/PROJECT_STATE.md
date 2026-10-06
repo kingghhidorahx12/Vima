@@ -1,9 +1,34 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-motion-visibility-final-p0`, creada desde
-`codex/passenger-final-visual-polish-p0` @ `a58cade`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-floating-fields-final-p0`, creada desde
+`codex/passenger-motion-visibility-final-p0` @ `c11e392`. Sin merge a main.
 
 ## IMPLEMENTADO
+
+### Accesorios flotantes de Home, Search y confirmación — 2026-10-06
+
+- El panel blanco Home conserva su altura de 50%, buscador de 58 dp y gap de
+  10 dp. Sus esquinas superiores reales son de 44 dp; las inferiores siguen
+  redondeadas a 32 dp cuando quedan visibles.
+- Search de destino conserva el título flotante y aloja el único input, con
+  borde y halo existentes, en el header del mismo `VimaRideSheet`. El panel
+  comienza después del gap con handle y resultados; no hay reserva de título
+  ni input duplicado en el contenido. Los demás modos Search mantienen su input
+  interno y su comportamiento previo.
+- Reviewing, confirm y requesting alojan origen y destino en el mismo slot
+  flotante del header; el panel contiene Favoritos/CTA o métricas/pago/CTA.
+  Se mantienen los campos, pins, halos, paradas, taps y estados disabled.
+  Matching y assigned no usan este accesorio.
+- Header y contenido siguen alimentando `headerMeasure`, `contentMeasure`,
+  `visibleSheetHeight` y `settledSheetHeight` una vez cada uno. El footprint
+  responde a la altura real nueva; no se tocaron route-fit, Camera, bounds,
+  padding ni solicitudes de fit. El mapa y sheet siguen persistentes.
+- La transición de escenas Motion 1.1, Reduced Motion y el único ciclo
+  `useSearchCycle` continúan sin cambios. No hay dependencias ni cambios
+  nativos. Android físico sigue PENDIENTE; no se generó EAS Build.
+- Validación local: TypeScript, lint, 161 tests, worklets, Expo Doctor 21/21,
+  export Hermes Android/iOS y schema MapLibre, splash, aislamiento de fixtures,
+  pricing/servidor, rutas y credenciales de release, todos correctos.
 
 ### Visibilidad Motion 1.1 y cierre del panel Home/Search — 2026-10-06
 

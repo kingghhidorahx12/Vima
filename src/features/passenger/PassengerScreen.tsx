@@ -133,6 +133,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     confirmationPillVisible ? confirmationPillTop + confirmationPillHeight : 0) + 12;
   const sheetFrameHeight = Math.max(0, height - topFrameShift);
   const homeFloatingSearch = homeNormal && homePanel === 'home' && !reviewing;
+  const destinationSearchFloating = flow.field === 'destination' && searchAction === 'results';
+  const addressesFloating = flow.field === null && (reviewing || flow.phase === 'confirm' || flow.phase === 'requesting');
+  const detachedPanel = homeFloatingSearch || destinationSearchFloating || addressesFloating;
   const roundedPassengerSheet = flow.phase === 'home' || flow.field !== null ||
     flow.phase === 'confirm' || flow.phase === 'requesting';
   // Home, a live Search field and matching are mutually exclusive. One clock
@@ -218,9 +221,29 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
   const destinationSearchTitleVisible = flow.field === 'destination' && searchAction === 'results' &&
     sheetTitle === '¿A dónde vamos?';
+  const blocked = flow.pending || flow.connection !== 'online';
+  const searchField = <View style={styles.searchFieldFrame}><SearchInputGlow cycle={searchCycle} focused={searchFocused} />
+    <View testID="passenger-search-field" style={[styles.searchField, styles.brandBorder,
+      searchFocused && styles.activeBrandBorder]}><SmallPin color={t.colors.red} />
+      <TextInput ref={input} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus
+        onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección"
+        value={flow.search} onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }}
+        returnKeyType="search" style={styles.searchInput} placeholderTextColor={t.colors.gray} />
+      {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</View></View>;
+  const addressFields = <View style={styles.addressStack}>
+    <View testID="passenger-origin-surface" style={styles.addressSurface}>
+      {reviewing ? <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
+        : <AddressField label="Origen" place={flow.origin} color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />}
+    </View>
+    {!reviewing ? flow.quote?.stops.map((place) => <AddressField key={place.id} label={place.name} place={place} color={t.colors.gray} disabled />) : null}
+    <View testID="passenger-destination-surface" style={styles.addressSurface}>
+      <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')}
+        disabled={!reviewing && blocked} />
+    </View>
+  </View>;
   const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
-    {homeFloatingSearch ? <><Animated.View testID="passenger-home-search-frame"
+    {homeFloatingSearch ? <Animated.View testID="passenger-home-search-frame"
       style={[styles.homeSearchFrame, homeSearchPress.style]}>
       <SearchInputGlow cycle={searchCycle} home /><Pressable testID="passenger-home-floating-search"
       onPressIn={homeSearchPress.onPressIn} onPressOut={homeSearchPress.onPressOut}
@@ -229,15 +252,18 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         pressed && styles.pressedElevation, styles.brandBorder, pressed && styles.activeBrandBorder]}>
       <VimaGlyph name="search" color={t.colors.graphite} />
       <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
-    </Pressable></Animated.View><View style={styles.homeSearchGap} /></> : null}
-    <View style={[styles.sheetHeader, homeFloatingSearch && styles.homePanelHeader]}>
+    </Pressable></Animated.View> : destinationSearchFloating ? <View testID="passenger-floating-accessory"
+      style={styles.floatingSearchFrame}>{searchField}</View> : addressesFloating ? <View testID="passenger-floating-accessory"
+      style={styles.floatingAddressesFrame}>{addressFields}</View> : null}
+    {detachedPanel ? <View testID="passenger-accessory-gap" style={styles.accessoryGap} /> : null}
+    <View testID="passenger-panel-header" style={[styles.sheetHeader, detachedPanel && styles.detachedPanelHeader,
+      homeFloatingSearch && styles.homePanelTop]}>
       <View style={styles.handle} />
-      {destinationSearchTitleVisible ? <View testID="passenger-search-title-reserve" style={styles.searchTitleReserve} />
+      {destinationSearchTitleVisible || addressesFloating ? null
         : sheetTitle ? <VimaText variant={flow.phase === 'home' || assignment ? 'h3' : 'bodyMedium'} style={[styles.center, !!assignment && styles.eta]}
         accessibilityRole="header">{sheetTitle}</VimaText> : null}
     </View>
   </View>;
-  const blocked = flow.pending || flow.connection !== 'online';
   const edit = async () => { dismissKeyboard(); if (await flow.edit()) setReviewedDraft(undefined); };
   const schedule = async () => {
     dismissKeyboard();
@@ -305,7 +331,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const content = <ElementEntrance key={scene} testID="passenger-phase-presence" style={styles.fill}
     timing={sceneTiming} exit exitTiming={sceneTiming} distance={motionDistances.shortEnterY * 2}>
     <Animated.View key={measureKey} testID="passenger-sheet-viewport"
-    style={[styles.fill, homeFloatingSearch && styles.homePanelContent]}
+    style={[styles.fill, detachedPanel && styles.detachedPanelContent]}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setViewportMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
     {flow.connection !== 'online' ? <ElementEntrance timing={motionTimings.state}>
       <StatusNotice>Sin conexión · Intentando reconectar</StatusNotice></ElementEntrance> : null}
@@ -348,13 +374,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           setSearchAction('contribute-map');
         }} />
       </> : flow.field ? <>
-        <View style={styles.searchFieldFrame}><SearchInputGlow cycle={searchCycle} focused={searchFocused} />
-        <View testID="passenger-search-field" style={[styles.searchField, styles.brandBorder,
-          searchFocused && styles.activeBrandBorder]}><SmallPin color={t.colors.red} />
-          <TextInput ref={input} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección" value={flow.search}
-            onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }} returnKeyType="search"
-            style={styles.searchInput} placeholderTextColor={t.colors.gray} />
-          {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</View></View>
+        {!destinationSearchFloating ? searchField : null}
         {flow.search.trim() ? <>
           {flow.places.length ? <View testID="passenger-search-results" style={styles.searchResults}>
             {flow.places.map((place, index) => <PlaceRow key={place.id} place={place} presentation="list"
@@ -385,14 +405,6 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             {flow.featured.map(place => <PlaceRow key={place.id} place={place} presentation="list" resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
         </>}
       </> : reviewing ? <>
-        <View style={styles.addressStack}>
-          <View testID="passenger-origin-surface" style={styles.addressSurface}>
-            <OriginField place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
-          </View>
-          <View testID="passenger-destination-surface" style={styles.addressSurface}>
-            <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} />
-          </View>
-        </View>
         {gateway.saveFavorite && flow.destination ? <TextAction
           label={flow.favorites.some(place => (place.canonicalId ?? place.id) === (flow.destination?.canonicalId ?? flow.destination?.id))
             ? 'En Favoritos' : 'Agregar a Favoritos'} onPress={() => {
@@ -447,15 +459,6 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         {flow.recents.slice(0, homeRecentLimit).map((place) => <PlaceRow key={place.id} place={place} rich presentation="list" resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
-        <View style={styles.addressStack}>
-          <View testID="passenger-origin-surface" style={styles.addressSurface}>
-            <AddressField label="Origen" place={flow.origin} color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />
-          </View>
-          {flow.quote?.stops.map((place) => <AddressField key={place.id} label={place.name} place={place} color={t.colors.gray} disabled />)}
-          <View testID="passenger-destination-surface" style={styles.addressSurface}>
-            <AddressField label="Destino" place={flow.destination} color={t.colors.red} onPress={() => openField('destination')} disabled={blocked} />
-          </View>
-        </View>
         {flow.loadingQuote ? <ActivityIndicator color={t.colors.greenDark} /> : null}
         {flow.quote ? <>
           <View style={styles.metrics}>
@@ -550,8 +553,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           homeBottomOcclusion={homeFloatingSearch ? bottomFootprint : undefined}
           layersMenuOpen={layersOpen}
           sheetHeight={interaction ? sheetFrameHeight - interaction.targetOffset : sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
-        sheet={{ interaction, header, style: [styles.sheet, homeFloatingSearch && styles.homeSheet,
-          roundedPassengerSheet && styles.roundedPassengerSheet], onVisibleHeightChange: reportVisibleSheetHeight }}
+        sheet={{ interaction, header, style: [styles.sheet, detachedPanel && styles.detachedSheet,
+          !detachedPanel && roundedPassengerSheet && styles.roundedPassengerSheet], onVisibleHeightChange: reportVisibleSheetHeight }}
         renderPhase={() => content} />
       <View testID="passenger-top-chrome" pointerEvents="box-none" onTouchStart={dismissKeyboard}
         style={[styles.topChrome, homeNormal && styles.homeTopChrome, { top: homeNormal ? topInset + 8 : topFrameShift + 8 }]}>
@@ -719,14 +722,16 @@ const styles = StyleSheet.create({
     textAlign: 'center' },
   sheet: { overflow: 'hidden' },
   roundedPassengerSheet: { borderTopLeftRadius: 32, borderTopRightRadius: 32 },
-  homeSheet: { overflow: 'visible', backgroundColor: 'transparent', borderWidth: 0, boxShadow: [] },
-  homePanelHeader: { backgroundColor: t.colors.white, borderTopLeftRadius: 32,
+  detachedSheet: { overflow: 'visible', backgroundColor: 'transparent', borderWidth: 0, boxShadow: [] },
+  detachedPanelHeader: { backgroundColor: t.colors.white, borderTopLeftRadius: 32,
     borderTopRightRadius: 32, paddingBottom: sm },
-  homePanelContent: { backgroundColor: t.colors.white, borderBottomLeftRadius: 32,
+  homePanelTop: { borderTopLeftRadius: 44, borderTopRightRadius: 44 },
+  detachedPanelContent: { backgroundColor: t.colors.white, borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32, overflow: 'hidden' },
-  homeSearchGap: { height: homeSearchGap },
+  accessoryGap: { height: homeSearchGap },
+  floatingSearchFrame: { marginHorizontal: base },
+  floatingAddressesFrame: { marginHorizontal: base },
   sheetHeader: { paddingHorizontal: base, alignItems: 'center', paddingTop: sm, paddingBottom: md, gap: sm },
-  searchTitleReserve: { height: textStyle({ variant: 'h3' }).lineHeight },
   handle: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[0], borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   content: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingBottom: base, gap: md },
   homeContent: { gap: sm },
