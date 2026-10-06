@@ -58,7 +58,7 @@ const confirmationPillHeight = 40;
 const homeSearchHeight = 58;
 const homeSearchGap = 10;
 const homeSearchAccessoryHeight = homeSearchHeight + homeSearchGap;
-const passengerPanelTopRadius = 120;
+const passengerPanelTopRadius = 64;
 
 export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }: PassengerScreenProps) {
   const flow = usePassengerFlow(gateway);
@@ -757,9 +757,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: md, paddingVertical: sm, ...elevationStyle('level1', t.colors.carbon) },
   originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
   row: { flexDirection: 'row', alignItems: 'center', gap: md },
-  homeSearchFrame: { position: 'relative', alignSelf: 'stretch', marginHorizontal: base, height: homeSearchHeight },
-  homeSearch: { ...surfaces.card, width: '100%', height: homeSearchHeight, borderRadius: 24,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: md,
+  homeSearchFrame: { position: 'relative', alignSelf: 'center', marginHorizontal: base, height: homeSearchHeight },
+  homeSearch: { ...surfaces.card, height: homeSearchHeight, borderRadius: 24,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 24,
     ...elevationStyle('level1', t.colors.carbon) },
   homeSearchIconFrame: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   brandBorder: { borderColor: t.colors.green },

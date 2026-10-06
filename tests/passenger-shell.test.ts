@@ -38,7 +38,7 @@ const assertDetachedSurface = (tree: ReactTestRenderer) => {
     ['absolute', 0, 0, 0]);
   assert.equal(style(background).backgroundColor, '#FFFFFF');
   assert.deepEqual([style(background).borderTopLeftRadius, style(background).borderTopRightRadius,
-    style(background).borderBottomLeftRadius, style(background).borderBottomRightRadius], [120, 120, 0, 0]);
+    style(background).borderBottomLeftRadius, style(background).borderBottomRightRadius], [64, 64, 0, 0]);
   const interaction = host(tree, 'SheetBoundary').props.interaction;
   if (interaction) assert.equal(style(background).height,
     interaction.height - (accessory === 'passenger-home-search-frame' ? 68 : 0));
@@ -143,9 +143,11 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     assert.equal(style(frame).position, 'relative');
     assert.equal(style(frame).height, 58);
     assert.equal(style(frame).marginHorizontal, 20);
-    assert.equal(style(frame).alignSelf, 'stretch');
+    assert.equal(style(frame).alignSelf, 'center');
+    assert.equal(style(frame).width, undefined);
     assert.equal(restingStyle(pill).height, 58);
-    assert.equal(restingStyle(pill).width, '100%');
+    assert.equal(restingStyle(pill).width, undefined);
+    assert.equal(restingStyle(pill).paddingHorizontal, 24);
     assert.equal(restingStyle(pill).marginHorizontal, undefined);
     assert.equal(restingStyle(pill).borderRadius, 24);
     assert.equal(restingStyle(pill).gap, 10);
@@ -169,6 +171,7 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     assert.ok(restingStyle(pill).boxShadow.length > 0);
     assert.deepEqual(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).boxShadow, []);
     assert.equal(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).justifyContent, 'center');
+    assert.equal(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).paddingHorizontal, 24);
     assert.equal(style(host(tree, 'SheetBoundary')).backgroundColor, 'transparent');
     assertDetachedSurface(tree);
     assert.equal(style(id(tree, 'passenger-sheet-viewport')).borderTopLeftRadius, undefined);
@@ -709,6 +712,18 @@ test('only normal Home uses the 50% panel and detached search within the persist
     assert.ok(Math.abs(homeHeight - 68 - 700 * 0.50) < 0.01);
     assert.equal(id(tree, 'passenger-home-floating-search').props.accessibilityLabel, '¿A dónde vamos?');
     assert.equal(style(host(tree, 'SheetBoundary')).overflow, 'visible');
+    const savedLink = tree.root.findAllByType('Pressable' as never).find(n =>
+      n.findAll(child => child.props.children === 'Ver todos').length > 0);
+    assert.ok(savedLink);
+    await act(async () => savedLink.props.onPress());
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-panel-background').length, 0);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 64);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopRightRadius, 64);
+    const back = tree.root.findAllByType('Pressable' as never).find(n =>
+      n.findAll(child => child.props.children === 'Volver').length > 0);
+    assert.ok(back);
+    await act(async () => back.props.onPress());
+    assertDetachedSurface(tree);
     await press(tree, '¿A dónde vamos?');
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-home-floating-search').length, 0);
     assert.equal(style(host(tree, 'SheetBoundary')).overflow, 'visible');

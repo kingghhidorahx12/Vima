@@ -1,12 +1,31 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-panel-surface-geometry-final-p0`, creada desde
-`codex/passenger-panel-corners-final-p0` @ `954b5c5`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-radius-search-compact-final-p0`, creada desde
+`codex/passenger-panel-surface-geometry-final-p0` @ `9139d31`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Radio 64 y buscador Home compacto — 2026-10-06
+
+- El radio superior Passenger es 64 dp en Home, Search, reviewing, confirm y
+  requesting; las esquinas inferiores detached siguen en 0 dp. La superficie
+  blanca absoluta de altura `sheetFrameHeight` continúa detrás del header y
+  contenido, fuera de los accessories y sin participar en layout o touches.
+- Sólo en Home, el buscador de 58 dp toma el ancho de su contenido: frame
+  centrado sin stretch, pill sin ancho `100%`, padding horizontal 24 dp por
+  lado, glyph 21 dp en frame 24 × 24, gap 10 dp y texto `bodyMedium`. El halo
+  absolute-fill y el press escalan junto al frame compacto, centrados.
+- Home 50%, gap, medidas, snaps, route-fit, Camera, Motion 1.1 y lógica
+  permanecen intactos. Sin dependencias ni cambios nativos; Android físico
+  PENDIENTE. No se generó EAS Build.
+- Validación local: TypeScript, lint, 161 tests, worklets, schema MapLibre,
+  Hermes Android/iOS, splash y aislamiento de fixtures, servidor, rutas,
+  credenciales y release correctos. Expo Doctor pasó 20/21: sólo señala las
+  mismas cinco versiones patch pendientes del SDK 57; no se actualizaron
+  dependencias en esta rama.
 
 ### Superficie continua detached y buscador Home centrado — 2026-10-06
 
