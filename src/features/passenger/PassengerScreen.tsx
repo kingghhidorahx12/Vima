@@ -133,8 +133,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const sheetFrameHeight = Math.max(0, height - topFrameShift);
   const homeFloatingSearch = homeNormal && homePanel === 'home' && !reviewing;
   const destinationSearchFloating = flow.field === 'destination' && searchAction === 'results';
-  const addressesFloating = flow.field === null && (reviewing || flow.phase === 'confirm' || flow.phase === 'requesting');
-  const detachedPanel = homeFloatingSearch || destinationSearchFloating || addressesFloating;
+  const detachedPanel = homeFloatingSearch || destinationSearchFloating;
   const roundedPassengerSheet = flow.phase === 'home' || flow.field !== null ||
     flow.phase === 'confirm' || flow.phase === 'requesting';
   // Home, a live Search field and matching are mutually exclusive. One clock
@@ -234,10 +233,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         {reviewing ? <OriginField embedded place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
           : <AddressField embedded rowTestID="passenger-origin-row" label="Origen" place={flow.origin}
             color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />}
-        {!reviewing ? flow.quote?.stops.map((place) => <Fragment key={place.id}>
+        {flow.quote?.stops.map((place) => <Fragment key={place.id}>
           <View testID="passenger-address-divider" style={styles.addressDivider} />
           <AddressField embedded rowTestID="passenger-stop-row" label={place.name} place={place} color={t.colors.gray} disabled />
-        </Fragment>) : null}
+        </Fragment>)}
         <View testID="passenger-address-divider" style={styles.addressDivider} />
         <AddressField embedded rowTestID="passenger-destination-row" label="Destino" place={flow.destination}
           color={t.colors.red} onPress={() => openField('destination')}
@@ -247,9 +246,6 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   </View>;
   const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
-    {addressesFloating ? <View testID="passenger-floating-accessory"
-      style={styles.floatingAddressesFrame}>{addressFields}</View> : null}
-    {addressesFloating ? <View testID="passenger-accessory-gap" style={styles.accessoryGap} /> : null}
     <View testID="passenger-panel-header" style={[styles.sheetHeader, detachedPanel && styles.detachedPanelHeader]}>
       {detachedPanel ? <View testID="passenger-panel-background" pointerEvents="none"
         style={[styles.detachedPanelBackground, { height: sheetFrameHeight }]} /> : null}
@@ -267,7 +263,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
       </Pressable></Animated.View> : null}
       {destinationSearchFloating ? searchField : null}
-      {destinationSearchFloating || addressesFloating ? null
+      {destinationSearchFloating ? null
         : sheetTitle ? <VimaText variant={flow.phase === 'home' || assignment ? 'h3' : 'bodyMedium'} style={[styles.center, !!assignment && styles.eta]}
         accessibilityRole="header">{sheetTitle}</VimaText> : null}
     </View>
@@ -419,6 +415,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             {flow.featured.map(place => <PlaceRow key={place.id} place={place} presentation="list" resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
         </>}
       </> : reviewing ? <>
+        {addressFields}
         {gateway.saveFavorite && flow.destination ? <TextAction
           label={flow.favorites.some(place => (place.canonicalId ?? place.id) === (flow.destination?.canonicalId ?? flow.destination?.id))
             ? 'En Favoritos' : 'Agregar a Favoritos'} onPress={() => {
@@ -473,6 +470,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         {flow.recents.slice(0, homeRecentLimit).map((place) => <PlaceRow key={place.id} place={place} rich presentation="list" resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
+        {addressFields}
         {flow.loadingQuote ? <ActivityIndicator color={t.colors.greenDark} /> : null}
         {flow.quote ? <>
           <View style={styles.metrics}>
@@ -752,8 +750,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: passengerPanelTopRadius, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   detachedPanelContent: { backgroundColor: 'transparent', borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0, overflow: 'hidden' },
-  accessoryGap: { height: 10 },
-  floatingAddressesFrame: { marginHorizontal: base },
   sheetHeader: { paddingHorizontal: base, alignItems: 'center', paddingTop: sm, paddingBottom: md, gap: sm },
   handle: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[0], borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   content: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingBottom: base, gap: md },

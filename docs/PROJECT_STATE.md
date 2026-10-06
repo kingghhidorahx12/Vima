@@ -1,12 +1,32 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-home-life-final-p0`, creada desde
-`codex/passenger-compass-icon-final-p0` @ `f49bfb3`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-addresses-in-panel-final-p0`, creada desde
+`codex/passenger-home-life-final-p0` @ `789304c`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Direcciones integradas al panel Passenger — 2026-10-06
+
+- En reviewing, confirm y requesting, el bloque único de Origen/paradas/Destino
+  ocupa el primer lugar del contenido del panel blanco. Conserva borde y halo
+  únicos, filas embedded, colores de pines, edición, taps y disabled. Las paradas
+  de la cotización también se muestran deshabilitadas en reviewing, entre Origen
+  y Destino.
+- Se retiraron el accesorio flotante de direcciones y su gap. Home y Search
+  conservan sus superficies detached; los tres estados de direcciones usan el
+  sheet normal con radio superior 40 dp, inferior 0 y fondo continuo. La altura
+  se deriva de las mismas mediciones de header y content, ahora con el bloque
+  dentro de content. No cambiaron snaps, route-fit, Camera ni geometría del mapa.
+- TypeScript, lint, 163 pruebas, 28 pruebas de gateway, worklets, schema de
+  MapLibre, splash, export Hermes Android/iOS y checks de aislamiento de
+  fixtures, servidor, credenciales y paths/release pasaron. Expo Doctor queda
+  en 20/21 por los mismos cinco patches pendientes de SDK 57; no se actualizaron
+  dependencias.
+- La comprobación visual en Android físico sigue PENDIENTE; esta ronda no incluye
+  cambios nativos ni EAS Build.
 
 ### Home/Search integrados, accesos con color y basemap más vivo — 2026-10-06
 

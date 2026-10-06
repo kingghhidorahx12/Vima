@@ -28,18 +28,11 @@ const assertDetachedSurface = (tree: ReactTestRenderer) => {
   assert.equal(header.findAll(n => n.props.testID === 'passenger-panel-background').length, 1);
   assert.equal(viewport.findAll(n => n.props.testID === 'passenger-panel-background').length, 0);
   const panelOrder = header.findAll(n => ['passenger-home-search-frame', 'passenger-search-field',
-    'passenger-floating-accessory', 'passenger-accessory-gap', 'passenger-panel-header', 'passenger-panel-background'].includes(n.props.testID))
+    'passenger-panel-header', 'passenger-panel-background'].includes(n.props.testID))
     .map(n => n.props.testID);
   assert.ok(panelOrder.indexOf('passenger-panel-header') < panelOrder.indexOf('passenger-panel-background'));
-  const accessory = panelOrder.find(n => n === 'passenger-floating-accessory');
-  if (accessory) {
-    assert.ok(panelOrder.indexOf('passenger-accessory-gap') < panelOrder.indexOf('passenger-panel-header'));
-    assert.ok(panelOrder.indexOf(accessory) < panelOrder.indexOf('passenger-panel-header'));
-  } else {
-    assert.equal(panelOrder.includes('passenger-accessory-gap'), false);
-    const field = panelOrder.find(n => n === 'passenger-home-search-frame' || n === 'passenger-search-field');
-    assert.ok(field && panelOrder.indexOf(field) > panelOrder.indexOf('passenger-panel-header'));
-  }
+  const field = panelOrder.find(n => n === 'passenger-home-search-frame' || n === 'passenger-search-field');
+  assert.ok(field && panelOrder.indexOf(field) > panelOrder.indexOf('passenger-panel-header'));
   assert.equal(background.props.pointerEvents, 'none');
   assert.deepEqual([style(background).position, style(background).top, style(background).left, style(background).right],
     ['absolute', 0, 0, 0]);
@@ -268,7 +261,7 @@ test('Reduced Motion keeps permanent green borders and stationary halos in Home 
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('review and confirmation share one green address panel without changing map or sheet identity', async () => {
+test('review and confirmation put one green address panel first in the sheet content', async () => {
   const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   const checkAddresses = () => {
@@ -280,8 +273,12 @@ test('review and confirmation share one green address panel without changing map
     assert.equal(panel.findAll(n => n.props.testID === 'passenger-origin-row').length, 1);
     assert.equal(panel.findAll(n => n.props.testID === 'passenger-destination-row').length, 1);
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
-    assert.ok(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-floating-accessory').length === 1);
-    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    const content = id(tree, 'passenger-sheet-content');
+    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    assert.equal(content.findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
+    assert.equal(content.findAll(n => n.props.testID === 'passenger-address-frame')[0], frame);
+    assert.equal(tree.root.findAll(n => ['passenger-floating-accessory', 'passenger-accessory-gap',
+      'passenger-panel-background'].includes(n.props.testID)).length, 0);
     assert.equal(panel.findAll(n => n.props.testID === 'passenger-address-divider').length, 1);
     assert.equal(style(panel).backgroundColor, '#FFFFFF');
     assert.equal(style(panel).borderColor, '#00D68F');
@@ -315,11 +312,20 @@ test('review and confirmation share one green address panel without changing map
     await settle(); await press(tree, '¿A dónde vamos?');
     await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
     checkAddresses();
-    assertDetachedSurface(tree);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 40);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopRightRadius, 40);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderBottomLeftRadius ?? 0, 0);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderBottomRightRadius ?? 0, 0);
+    const reviewOrder = id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-frame' ||
+      n.props.label === 'Agregar a Favoritos' || n.props.label === 'Confirmar ubicaciones').map(n => n.props.testID ?? n.props.label);
+    assert.deepEqual(reviewOrder, ['passenger-address-frame', 'Confirmar ubicaciones']);
     assert.equal(h.repeats.length, 1);
     await press(tree, 'Confirmar ubicaciones'); await settle();
     checkAddresses();
-    assertDetachedSurface(tree);
+    const confirmOrder = id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-frame' ||
+      n.props.label === 'Duración' || n.props.label === 'Solicitar viaje').map(n => n.props.testID ?? n.props.label);
+    assert.deepEqual(confirmOrder, ['passenger-address-frame', 'Duración', 'Solicitar viaje']);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 40);
     assert.equal(h.repeats.length, 1);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
     await press(tree, 'Solicitar viaje'); await settle();
@@ -374,7 +380,7 @@ test('destination Search places its sole input after the handle inside the measu
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('requesting keeps measured floating addresses, then matching and assigned remove that accessory', async () => {
+test('review, confirmation and requesting measure addresses inside content; later phases remove them', async () => {
   let finishRequest: (() => void) | undefined;
   const requestClock = { after: () => () => {}, delay: () => new Promise<void>(resolve => { finishRequest = resolve; }) };
   const fixture = createPassengerFixtureGateway(requestClock); fixture.controls.setStop(true);
@@ -384,15 +390,19 @@ test('requesting keeps measured floating addresses, then matching and assigned r
     await settle(); await mapLayout(tree);
     await press(tree, '¿A dónde vamos?');
     await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    await settle();
     const reviewingContent = id(tree, 'passenger-sheet-content');
-    assert.equal(reviewingContent.findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
-    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
-    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-stop-row').length, 0);
-    const reviewHeight = await measure(tree, 120, 132);
-    assert.equal(reviewHeight, 252); // Accessory + panel, counted once by the existing measurement pipeline.
+    assert.equal(reviewingContent.findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
+    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-stop-row').length, 1);
+    assert.equal(id(tree, 'passenger-stop-row').props.disabled, true);
+    assert.equal(id(tree, 'passenger-stop-row').props.onPress, undefined);
+    assert.equal(id(tree, 'passenger-address-panel').findAll(n => n.props.testID === 'passenger-address-divider').length, 2);
+    const reviewHeight = await measure(tree, 224, 28);
+    assert.equal(reviewHeight, 252); // Address rows and actions are included once in content height.
     await press(tree, 'Confirmar ubicaciones');
-    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-floating-accessory').length, 1);
-    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
     const panel = id(tree, 'passenger-address-panel');
     const stop = id(tree, 'passenger-stop-row');
     assert.equal(stop.props.disabled, true);
@@ -400,20 +410,24 @@ test('requesting keeps measured floating addresses, then matching and assigned r
     assert.match(stop.props.accessibilityLabel, new RegExp(fixturePlaces[3]!.name));
     assert.equal(panel.findAll(n => n.props.testID === 'passenger-address-divider').length, 2);
     assert.deepEqual(restingStyle(stop).boxShadow, []);
-    assertDetachedSurface(tree);
-    const confirmHeight = await measure(tree, 160, 132);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 40);
+    const confirmHeight = await measure(tree, 264, 28);
     assert.equal(confirmHeight, 292);
     await press(tree, 'Solicitar viaje');
-    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
-    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
-    assertDetachedSurface(tree);
+    assert.equal(id(tree, 'passenger-sheet-header').findAll(n => n.props.testID === 'passenger-address-panel').length, 0);
+    assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-panel').length, 1);
+    assert.equal(id(tree, 'passenger-stop-row').props.disabled, true);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 40);
+    const requestingOrder = id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-frame' ||
+      n.props.label === 'Duración' || n.props.label === 'Solicitar viaje').map(n => n.props.testID ?? n.props.label);
+    assert.deepEqual(requestingOrder, ['passenger-address-frame', 'Duración', 'Solicitar viaje']);
     assert.equal(id(tree, 'passenger-panel-header').findAll(n => n.props.children === 'Confirma tu viaje').length, 0);
     assert.ok(finishRequest);
     await act(async () => finishRequest!()); await settle();
-    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-floating-accessory').length, 0);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-address-frame').length, 0);
     assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, undefined);
     await act(async () => fixture.controls.advance('assigned')); await settle();
-    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-floating-accessory').length, 0);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-address-frame').length, 0);
     assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, undefined);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
   } finally { finishRequest?.(); await act(async () => tree.unmount()); fixture.controls.dispose(); }
