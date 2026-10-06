@@ -267,6 +267,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       style={styles.floatingAddressesFrame}>{addressFields}</View> : null}
     {detachedPanel ? <View testID="passenger-accessory-gap" style={styles.accessoryGap} /> : null}
     <View testID="passenger-panel-header" style={[styles.sheetHeader, detachedPanel && styles.detachedPanelHeader]}>
+      {detachedPanel ? <View testID="passenger-panel-background" pointerEvents="none"
+        style={[styles.detachedPanelBackground, { height: sheetFrameHeight }]} /> : null}
       <View style={styles.handle} />
       {destinationSearchTitleVisible || addressesFloating ? null
         : sheetTitle ? <VimaText variant={flow.phase === 'home' || assignment ? 'h3' : 'bodyMedium'} style={[styles.center, !!assignment && styles.eta]}
@@ -738,9 +740,11 @@ const styles = StyleSheet.create({
   sheet: { overflow: 'hidden' },
   roundedPassengerSheet: { borderTopLeftRadius: passengerPanelTopRadius, borderTopRightRadius: passengerPanelTopRadius },
   detachedSheet: { overflow: 'visible', backgroundColor: 'transparent', borderWidth: 0, boxShadow: [] },
-  detachedPanelHeader: { backgroundColor: t.colors.white, borderTopLeftRadius: passengerPanelTopRadius,
-    borderTopRightRadius: passengerPanelTopRadius, paddingBottom: sm },
-  detachedPanelContent: { backgroundColor: t.colors.white, borderBottomLeftRadius: 0,
+  detachedPanelHeader: { paddingBottom: sm },
+  detachedPanelBackground: { position: 'absolute', top: 0, left: 0, right: 0,
+    backgroundColor: t.colors.white, borderTopLeftRadius: passengerPanelTopRadius,
+    borderTopRightRadius: passengerPanelTopRadius, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+  detachedPanelContent: { backgroundColor: 'transparent', borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0, overflow: 'hidden' },
   accessoryGap: { height: homeSearchGap },
   floatingSearchFrame: { marginHorizontal: base },
@@ -755,7 +759,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: md },
   homeSearchFrame: { position: 'relative', alignSelf: 'stretch', marginHorizontal: base, height: homeSearchHeight },
   homeSearch: { ...surfaces.card, width: '100%', height: homeSearchHeight, borderRadius: 24,
-    flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: md,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: md,
     ...elevationStyle('level1', t.colors.carbon) },
   homeSearchIconFrame: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   brandBorder: { borderColor: t.colors.green },

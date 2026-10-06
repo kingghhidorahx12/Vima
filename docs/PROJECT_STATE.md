@@ -1,12 +1,35 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-panel-corners-final-p0`, creada desde
-`codex/passenger-shell-compact-polish-p0` @ `49cc15c`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-panel-surface-geometry-final-p0`, creada desde
+`codex/passenger-panel-corners-final-p0` @ `954b5c5`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Superficie continua detached y buscador Home centrado — 2026-10-06
+
+- En Home, Search de destino con resultados, reviewing, confirm y requesting,
+  el radio superior visible de 120 dp lo dibuja una superficie blanca absoluta
+  que nace dentro del panel, después del accessory y su gap. Usa el
+  `sheetFrameHeight` existente para continuar detrás de header y contenido;
+  no participa en layout ni intercepta touches. Las esquinas inferiores son
+  rectas (0 dp). Header y viewport ya no pintan blanco opaco propio; el
+  viewport conserva `overflow: hidden` para su contenido.
+- Los estados no detached conservan el radio de 120 dp en el sheet real. El
+  grupo lupa + texto del buscador Home queda centrado horizontalmente dentro
+  del pill de 58 dp, sin offsets; se mantienen glyph 21/24 dp, gap 10 dp,
+  `bodyMedium`, halo y press.
+- La tubería de medidas, Home 50%, snaps, route-fit, Camera, Motion 1.1 y
+  lógica permanecen intactos. Sin dependencias ni cambios nativos. Android
+  físico PENDIENTE; no se generó EAS Build.
+- Validación local: TypeScript, lint, 161 tests, worklets, schema MapLibre,
+  export Hermes Android/iOS, splash y aislamiento de fixtures, servidor,
+  credenciales, rutas y release correctos. Expo Doctor pasó 20/21: su check
+  remoto de versiones patch del SDK 57 pide actualizar `expo`,
+  `expo-constants`, `expo-linking`, `expo-router` y `expo-sqlite`. Se deja
+  pendiente por estar fuera del alcance sin cambios de dependencias.
 
 ### Esquinas de los paneles Passenger — 2026-10-06
 
