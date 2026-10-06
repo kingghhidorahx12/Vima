@@ -487,7 +487,7 @@ test('rendered passenger flow preserves the actual shell/map instance across mat
       String(node.props.source).endsWith('vima_header_lockup_final.png'));
     assert.equal(lockup.length, 1);
     assert.match(String(lockup[0]!.props.source), /vima_header_lockup_final\.png$/);
-    assert.equal(lockup[0]!.props.style.height, 32);
+    assert.equal(lockup[0]!.props.style.height, 35);
     assert.ok(!text(tree).includes('Vima'));
     assert.ok(text(tree).includes('Casa'));
     assert.ok(text(tree).includes('Trabajo'));
@@ -887,6 +887,58 @@ test('Home keeps three rich recents, empty and configured slots, and direct dest
     assert.equal(searches, 0);
     assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination.id, fixturePlaces[1]!.id);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('Casa and Trabajo reuse current location and reverse address through the existing saved-slot path', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  const h = createHarness();
+  let slots: { home: Place | null; work: Place | null } = { home: null, work: null };
+  let reverseCalls = 0;
+  const gateway: PassengerGateway = { ...fixture.gateway,
+    savedSlots: async () => slots,
+    saveSavedSlot: async (slot, place) => { slots = { ...slots, [slot]: place }; },
+    reversePlace: async coordinate => { reverseCalls++; return { ...fixturePlaces[1]!, coordinate }; },
+  };
+  const tree: ReactTestRenderer = await h.render(gateway);
+  try {
+    await settle(h);
+    await h.act(async () => press(tree, 'Casa')); await settle(h);
+    await h.act(async () => press(tree, 'Usar mi ubicación actual')); await settle(h);
+    assert.equal(slots.home?.id, fixturePlaces[0]!.id);
+    assert.equal(reverseCalls, 0); // Located place already carries an address.
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination, null);
+    await h.act(async () => press(tree, 'Trabajo')); await settle(h);
+    assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => n.props.accessibilityLabel === 'Usar mi ubicación actual').length, 1);
+  } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
+
+  const unresolved = createPassengerFixtureGateway(clock, { locate: async () => ({ ...fixturePlaces[0]!, address: '' }) });
+  const second = await h.render({ ...gateway, scope: `${gateway.scope}-reverse`, locate: unresolved.gateway.locate });
+  try {
+    await settle(h);
+    await h.act(async () => press(second, 'Trabajo')); await settle(h);
+    await h.act(async () => press(second, 'Usar mi ubicación actual')); await settle(h);
+    assert.equal(reverseCalls, 1);
+    assert.equal(slots.work?.address, fixturePlaces[1]!.address);
+    assert.deepEqual(slots.work?.coordinate, fixturePlaces[0]!.coordinate);
+  } finally { await h.act(async () => second.unmount()); unresolved.controls.dispose(); }
+});
+
+test('saved-slot current-location action stays disabled when location is unavailable and search remains usable', async () => {
+  const fixture = createPassengerFixtureGateway(clock, { locate: async () => null });
+  const h = createHarness();
+  let saved = false;
+  const tree: ReactTestRenderer = await h.render({ ...fixture.gateway,
+    savedSlots: async () => ({ home: null, work: null }), saveSavedSlot: async () => { saved = true; },
+  });
+  try {
+    await settle(h);
+    await h.act(async () => press(tree, 'Casa')); await settle(h);
+    const current = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Usar mi ubicación actual')!;
+    assert.ok(current.props.disabled);
+    assert.ok(text(tree).includes('Ubicación no disponible'));
+    assert.equal(saved, false);
+    assert.equal(nativeNode(tree, 'TextInput').props.placeholder, 'Buscar un lugar o dirección');
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 

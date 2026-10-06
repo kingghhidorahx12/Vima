@@ -56,8 +56,6 @@ export interface PassengerScreenProps {
 const confirmationPillTop = 12;
 const confirmationPillHeight = 40;
 const homeSearchHeight = 58;
-const homeSearchGap = 10;
-const homeSearchAccessoryHeight = homeSearchHeight + homeSearchGap;
 const passengerPanelTopRadius = 40;
 
 export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }: PassengerScreenProps) {
@@ -165,7 +163,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     if (homeFloatingSearch) {
       const panelHeight = sheetFrameHeight * 0.50;
       const targetOffset = sheetFrameHeight - panelHeight;
-      return createRideSheetInteraction(sheetFrameHeight + homeSearchAccessoryHeight, targetOffset, [targetOffset]);
+      return createRideSheetInteraction(sheetFrameHeight, targetOffset, [targetOffset]);
     }
     const base = rideSheetGeometry(sheetFrameHeight, snap);
     if (flow.field || !naturalHeight) return createRideSheetInteraction(sheetFrameHeight, base.targetOffset, [base.targetOffset]);
@@ -184,7 +182,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     ready: mapReady && !mapFailed && focused && mapWidth > 0 && mapLayoutNavHeight === navHeight &&
       height - (settledSheetHeight ?? height) > topOcclusion,
     measuredSheetHeight: settledSheetHeight, confirmationRequest: routeFitRequestId });
-  // The sheet reports its actual visible footprint, including Home's detached search.
+  // The sheet reports its actual visible footprint, including Home's in-panel search.
   // Before that measurement arrives, the interaction yields the same top edge.
   const usefulHeight = visibleSheetHeight === undefined
     ? Math.max(0, height - (interaction ? (interaction.height ?? sheetFrameHeight) - interaction.targetOffset : 0))
@@ -220,8 +218,6 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     searchAction === 'contribute-done' ? '' : flow.field === 'origin' ? '¿Desde dónde?' : '¿A dónde vamos?'
     : assignment ? `Llegará en ${assignment.etaMinutes} min` : homePanel === 'saved' ? 'Lugares guardados'
       : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
-  const destinationSearchTitleVisible = flow.field === 'destination' && searchAction === 'results' &&
-    sheetTitle === '¿A dónde vamos?';
   const blocked = flow.pending || flow.connection !== 'online';
   const searchField = <View style={styles.searchFieldFrame}><SearchInputGlow cycle={searchCycle} focused={searchFocused} />
     <View testID="passenger-search-field" style={[styles.searchField, styles.brandBorder,
@@ -251,26 +247,27 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   </View>;
   const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
-    {homeFloatingSearch ? <Animated.View testID="passenger-home-search-frame"
-      style={[styles.homeSearchFrame, homeSearchPress.style]}>
-      <SearchInputGlow cycle={searchCycle} home /><Pressable testID="passenger-home-floating-search"
-      onPressIn={homeSearchPress.onPressIn} onPressOut={homeSearchPress.onPressOut}
-      onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
-      style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed,
-        pressed && styles.pressedElevation, styles.brandBorder, pressed && styles.activeBrandBorder]}>
-      <View testID="passenger-home-search-icon-frame" style={styles.homeSearchIconFrame}>
-        <VimaGlyph name="search" color={t.colors.graphite} size={21} />
-      </View>
-      <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
-    </Pressable></Animated.View> : destinationSearchFloating ? <View testID="passenger-floating-accessory"
-      style={styles.floatingSearchFrame}>{searchField}</View> : addressesFloating ? <View testID="passenger-floating-accessory"
+    {addressesFloating ? <View testID="passenger-floating-accessory"
       style={styles.floatingAddressesFrame}>{addressFields}</View> : null}
-    {detachedPanel ? <View testID="passenger-accessory-gap" style={styles.accessoryGap} /> : null}
+    {addressesFloating ? <View testID="passenger-accessory-gap" style={styles.accessoryGap} /> : null}
     <View testID="passenger-panel-header" style={[styles.sheetHeader, detachedPanel && styles.detachedPanelHeader]}>
       {detachedPanel ? <View testID="passenger-panel-background" pointerEvents="none"
         style={[styles.detachedPanelBackground, { height: sheetFrameHeight }]} /> : null}
       <View style={styles.handle} />
-      {destinationSearchTitleVisible || addressesFloating ? null
+      {homeFloatingSearch ? <Animated.View testID="passenger-home-search-frame"
+        style={[styles.homeSearchFrame, homeSearchPress.style]}>
+        <SearchInputGlow cycle={searchCycle} home /><Pressable testID="passenger-home-search"
+        onPressIn={homeSearchPress.onPressIn} onPressOut={homeSearchPress.onPressOut}
+        onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
+        style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed,
+          pressed && styles.pressedElevation, styles.brandBorder, pressed && styles.activeBrandBorder]}>
+        <View testID="passenger-home-search-icon-frame" style={styles.homeSearchIconFrame}>
+          <VimaGlyph name="search" color={t.colors.graphite} size={21} />
+        </View>
+        <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
+      </Pressable></Animated.View> : null}
+      {destinationSearchFloating ? searchField : null}
+      {destinationSearchFloating || addressesFloating ? null
         : sheetTitle ? <VimaText variant={flow.phase === 'home' || assignment ? 'h3' : 'bodyMedium'} style={[styles.center, !!assignment && styles.eta]}
         accessibilityRole="header">{sheetTitle}</VimaText> : null}
     </View>
@@ -386,6 +383,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         }} />
       </> : flow.field ? <>
         {!destinationSearchFloating ? searchField : null}
+        {flow.savedPicker === 'home' || flow.savedPicker === 'work' ? <>
+          <VimaButton secondary label="Usar mi ubicación actual" disabled={flow.locationLoading ||
+            !flow.canUseCurrentLocation || flow.pending} onPress={() => { void flow.useCurrentLocationForSavedSlot(); }} />
+          {flow.locationLoading ? <VimaText variant="caption" style={styles.muted}>Obteniendo tu ubicación...</VimaText> :
+            !flow.canUseCurrentLocation ? <VimaText variant="caption" style={styles.muted}>Ubicación no disponible. Busca o elige en el mapa.</VimaText> : null}
+        </> : null}
         {flow.search.trim() ? <>
           {flow.places.length ? <View testID="passenger-search-results" style={styles.searchResults}>
             {flow.places.map((place, index) => <PlaceRow key={place.id} place={place} presentation="list"
@@ -457,13 +460,13 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Lugares guardados</VimaText>
           <TextAction label="Ver todos" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('saved'); }} /></View>
         <View style={styles.quickRow}>
-          <QuickPlace label="Casa" icon="home"
+          <QuickPlace label="Casa" icon="home" tone="home"
             onPress={() => flow.savedSlots.home ? choosePlace(flow.savedSlots.home, 'destination') : openSavedPicker('home')} />
           <View style={styles.quickDivider} />
-          <QuickPlace label="Trabajo" icon="work"
+          <QuickPlace label="Trabajo" icon="work" tone="work"
             onPress={() => flow.savedSlots.work ? choosePlace(flow.savedSlots.work, 'destination') : openSavedPicker('work')} />
           <View style={styles.quickDivider} />
-          <QuickPlace label="Favoritos" icon="favorite" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('favorites'); }} />
+          <QuickPlace label="Favoritos" icon="favorite" tone="favorite" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('favorites'); }} />
         </View>
         <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Viajes recientes</VimaText>
           <TextAction label="Ver todos" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('recents'); }} /></View>
@@ -584,8 +587,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           </VimaText> : null}
         </>}
       </View>
-      {confirmationPillVisible || destinationSearchTitleVisible ? <FloatingScreenTitle
-        title={confirmationPillVisible ? 'Confirma tu viaje' : '¿A dónde vamos?'}
+      {confirmationPillVisible ? <FloatingScreenTitle
+        title="Confirma tu viaje"
         top={topFrameShift + confirmationPillTop} /> : null}
       {mapReady && controlsFit ? <View pointerEvents="box-none"
         testID="passenger-map-controls"
@@ -619,9 +622,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
 function SmallPin({ color }: { color: string }) {
   return <View accessible={false} style={styles.pinBox}><View style={[styles.pinShape, { backgroundColor: color }]} /><View style={styles.pinCore} /></View>;
 }
-function FloatingScreenTitle({ title, top }: { title: 'Confirma tu viaje' | '¿A dónde vamos?'; top: number }) {
-  return <ElementEntrance key={title} testID={title === 'Confirma tu viaje'
-    ? 'passenger-confirmation-pill' : 'passenger-destination-search-title'} pointerEvents="none" exit
+function FloatingScreenTitle({ title, top }: { title: 'Confirma tu viaje'; top: number }) {
+  return <ElementEntrance key={title} testID="passenger-confirmation-pill" pointerEvents="none" exit
     timing={motionTimings.state} style={[styles.floatingTitle, { top }]}>
     <VimaText variant="bodyMedium" numberOfLines={1} accessibilityRole="header" style={styles.floatingTitleText}>{title}</VimaText>
   </ElementEntrance>;
@@ -692,14 +694,17 @@ function SavedSlotEntry({ label, place, onChange, onRemove }: { label: string; p
       {place ? <TextAction danger label="Eliminar" onPress={onRemove} /> : null}</View>
   </View>;
 }
-function QuickPlace({ label, icon, onPress }: { label: string; icon: VimaGlyphName; onPress?: () => void }) {
+function QuickPlace({ label, icon, tone, onPress }: { label: string; icon: VimaGlyphName;
+  tone: 'home' | 'work' | 'favorite'; onPress?: () => void }) {
   const feedback = usePressFeedback();
-  const content = <><VimaGlyph name={icon} color={t.colors.graphite} size={20} /><VimaText variant="caption" numberOfLines={1}>{label}</VimaText></>;
+  const color = tone === 'home' ? t.colors.greenDark : tone === 'work' ? t.colors.accentBluePressed : t.colors.red;
+  const tint = tone === 'home' ? styles.quickHome : tone === 'work' ? styles.quickWork : styles.quickFavorite;
+  const content = <><VimaGlyph name={icon} color={color} size={20} /><VimaText variant="caption" numberOfLines={1}>{label}</VimaText></>;
   return <ElementEntrance style={styles.fill}>{onPress ? <Animated.View style={[styles.fill, feedback.style]}><Pressable
     accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
     onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
-    style={({ pressed }) => [styles.quickPlace, pressed && surfaces.pressed]}>{content}</Pressable></Animated.View>
-    : <View accessible accessibilityLabel={label} style={styles.quickPlace}>{content}</View>}</ElementEntrance>;
+    style={({ pressed }) => [styles.quickPlace, tint, pressed && surfaces.pressed]}>{content}</Pressable></Animated.View>
+    : <View accessible accessibilityLabel={label} style={[styles.quickPlace, tint]}>{content}</View>}</ElementEntrance>;
 }
 function Metric({ icon, value, label, emphasis = false }: { icon: VimaGlyphName; value: string; label: string; emphasis?: boolean }) {
   return <View style={[styles.metric, emphasis && styles.metricEmphasis]}><VimaGlyph name={icon} color={emphasis ? t.colors.greenDark : t.colors.graphite} />
@@ -724,7 +729,8 @@ const styles = StyleSheet.create({
   topChrome: { position: 'absolute', left: 16, right: 16, minHeight: 48, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
   homeTopChrome: { minHeight: 44 },
-  headerLockup: { width: 672 * 32 / 200, height: 32, ...elevationStyle('level1', t.colors.carbon) },
+  headerLockup: { position: 'absolute', top: 6, left: 0, width: 672 * 35 / 200, height: 35,
+    ...elevationStyle('level1', t.colors.carbon) },
   headerSide: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center',
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.white },
   notification: { position: 'absolute', top: 0, right: 0, width: 52, height: 52,
@@ -746,8 +752,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: passengerPanelTopRadius, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   detachedPanelContent: { backgroundColor: 'transparent', borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0, overflow: 'hidden' },
-  accessoryGap: { height: homeSearchGap },
-  floatingSearchFrame: { marginHorizontal: base },
+  accessoryGap: { height: 10 },
   floatingAddressesFrame: { marginHorizontal: base },
   sheetHeader: { paddingHorizontal: base, alignItems: 'center', paddingTop: sm, paddingBottom: md, gap: sm },
   handle: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[0], borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
@@ -757,9 +762,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: md, paddingVertical: sm, ...elevationStyle('level1', t.colors.carbon) },
   originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
   row: { flexDirection: 'row', alignItems: 'center', gap: md },
-  homeSearchFrame: { position: 'relative', alignSelf: 'center', marginHorizontal: base, height: homeSearchHeight },
-  homeSearch: { ...surfaces.card, height: homeSearchHeight, borderRadius: 24,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 24,
+  homeSearchFrame: { position: 'relative', alignSelf: 'stretch', height: homeSearchHeight },
+  homeSearch: { ...surfaces.card, width: '100%', height: homeSearchHeight, borderRadius: 24,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 10, paddingHorizontal: 24,
     ...elevationStyle('level1', t.colors.carbon) },
   homeSearchIconFrame: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   brandBorder: { borderColor: t.colors.green },
@@ -769,6 +774,11 @@ const styles = StyleSheet.create({
     borderRadius: t.radii.pillPx, ...elevationStyle('level1', t.colors.carbon) },
   quickPlace: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: xs, gap: xs },
+  quickHome: { backgroundColor: surfaceColors.brandWash, borderTopLeftRadius: t.radii.pillPx,
+    borderBottomLeftRadius: t.radii.pillPx },
+  quickWork: { backgroundColor: t.colors.accentBlueSoft },
+  quickFavorite: { backgroundColor: surfaceColors.dangerWash, borderTopRightRadius: t.radii.pillPx,
+    borderBottomRightRadius: t.radii.pillPx },
   quickDivider: { width: t.borders.standardWidthPx, height: 24, backgroundColor: surfaceColors.border },
   savedEntry: { ...surfaces.card, gap: sm, padding: md, ...elevationStyle('level1', t.colors.carbon) },
   recentHeader: { flexDirection: 'row', alignItems: 'center', marginTop: xs },
@@ -807,7 +817,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: md, paddingVertical: sm, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
     ...elevationStyle('level1', t.colors.carbon) },
   paymentIcon: { width: 32, height: 32, borderRadius: t.radii.smallPx, backgroundColor: t.colors.white, alignItems: 'center', justifyContent: 'center' },
-  searchFieldFrame: { position: 'relative' },
+  searchFieldFrame: { position: 'relative', alignSelf: 'stretch' },
   searchField: { ...surfaces.card, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.pillPx,
     paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm, ...elevationStyle('level1', t.colors.carbon) },
   searchInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, height: t.components.inputPrimary.heightPx, color: t.colors.carbon },

@@ -7,15 +7,15 @@ const paintById: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   background: { 'background-color': '#F7F8F7' },
   landuse_residential: { 'fill-color': '#F7F8F7' },
   building: { 'fill-color': '#F7F8F7', 'fill-outline-color': '#EBEBEB' },
-  park: { 'fill-color': '#D8EEDB' },
-  water: { 'fill-color': '#BFDDF9' },
-  waterway: { 'line-color': '#BFDDF9' },
+  park: { 'fill-color': '#CFE9D3' },
+  water: { 'fill-color': '#AFD6FA' },
+  waterway: { 'line-color': '#AFD6FA' },
   road_area_pier: { 'fill-color': '#F7F8F7' },
   road_pier: { 'line-color': '#F7F8F7' },
   highway_path: { 'line-color': '#F5F6F7' },
-  highway_minor: { 'line-color': '#F5F6F7' },
-  highway_major_casing: { 'line-color': '#EBEBEB' },
-  highway_major_inner: { 'line-color': '#EBEBEB' },
+  highway_minor: { 'line-color': '#F0F2F0' },
+  highway_major_casing: { 'line-color': '#DDE2DE' },
+  highway_major_inner: { 'line-color': '#F1F2F1' },
   highway_major_subtle: { 'line-color': '#EBEBEB' },
   highway_motorway_casing: { 'line-color': '#EBEBEB' },
   highway_motorway_inner: { 'line-color': '#EBEBEB' },
@@ -30,14 +30,14 @@ const paintById: Readonly<Record<string, Readonly<Record<string, string>>>> = {
 // appearance and add detail only as the actual vector tiles reveal it.
 const zoomStrength = (factor = 1) => [
   'interpolate', ['linear'], ['zoom'],
-  12, 0, 13, 0.35 * factor, 14, 0.75 * factor,
-  15, 0.9 * factor, 16, factor,
+  12, 0, 13, 0.45 * factor, 14, 0.8 * factor,
+  15, 0.95 * factor, 16, factor,
 ] as const;
 
 const woodColor = [
   'interpolate', ['linear'], ['zoom'],
   12, '#ECF6EF', 13, '#E3F2E6', 14, '#DBEFE0',
-  15, '#D8EEDB', 16, '#D8EEDB',
+  15, '#CFE9D3', 16, '#CFE9D3',
 ] as const;
 
 const polygonFilter = ['match', ['geometry-type'], ['MultiPolygon', 'Polygon'], true, false] as const;
@@ -52,10 +52,10 @@ const closeLandcover = [
   landcover('landcover_grass', 'grass', [
     'step', ['zoom'], '#ECF6EF', 14,
     ['match', ['get', 'subclass'],
-      ['garden', 'park', 'recreation_ground', 'golf_course'], '#D8EEDB', '#ECF6EF'],
+      ['garden', 'park', 'recreation_ground', 'golf_course'], '#CFE9D3', '#ECF6EF'],
   ]),
-  landcover('landcover_farmland', 'farmland', '#ECF6EF', 0.45),
-  landcover('landcover_wetland', 'wetland', '#D8EEDB', 0.6),
+  landcover('landcover_farmland', 'farmland', '#ECF6EF', 0.55),
+  landcover('landcover_wetland', 'wetland', '#D8EEDB', 0.75),
   {
     id: 'landuse_recreation', type: 'fill' as const, source: 'openmaptiles',
     'source-layer': 'landuse', minzoom: 15,
@@ -63,8 +63,8 @@ const closeLandcover = [
       ['match', ['get', 'class'],
         ['pitch', 'playground', 'stadium', 'theme_park', 'zoo', 'cemetery'], true, false]],
     paint: {
-      'fill-color': '#D8EEDB',
-      'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.35, 16, 0.55],
+      'fill-color': '#CFE9D3',
+      'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.4, 16, 0.65],
     },
   },
 ];

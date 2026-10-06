@@ -27,13 +27,19 @@ const assertDetachedSurface = (tree: ReactTestRenderer) => {
   assert.equal(panelHeader.findAll(n => n.props.testID === 'passenger-panel-background').length, 1);
   assert.equal(header.findAll(n => n.props.testID === 'passenger-panel-background').length, 1);
   assert.equal(viewport.findAll(n => n.props.testID === 'passenger-panel-background').length, 0);
-  const panelOrder = header.findAll(n => ['passenger-home-search-frame', 'passenger-floating-accessory',
-    'passenger-accessory-gap', 'passenger-panel-header', 'passenger-panel-background'].includes(n.props.testID))
+  const panelOrder = header.findAll(n => ['passenger-home-search-frame', 'passenger-search-field',
+    'passenger-floating-accessory', 'passenger-accessory-gap', 'passenger-panel-header', 'passenger-panel-background'].includes(n.props.testID))
     .map(n => n.props.testID);
-  assert.ok(panelOrder.indexOf('passenger-accessory-gap') < panelOrder.indexOf('passenger-panel-header'));
   assert.ok(panelOrder.indexOf('passenger-panel-header') < panelOrder.indexOf('passenger-panel-background'));
-  const accessory = panelOrder.find(n => n === 'passenger-home-search-frame' || n === 'passenger-floating-accessory');
-  assert.ok(accessory && panelOrder.indexOf(accessory) < panelOrder.indexOf('passenger-panel-header'));
+  const accessory = panelOrder.find(n => n === 'passenger-floating-accessory');
+  if (accessory) {
+    assert.ok(panelOrder.indexOf('passenger-accessory-gap') < panelOrder.indexOf('passenger-panel-header'));
+    assert.ok(panelOrder.indexOf(accessory) < panelOrder.indexOf('passenger-panel-header'));
+  } else {
+    assert.equal(panelOrder.includes('passenger-accessory-gap'), false);
+    const field = panelOrder.find(n => n === 'passenger-home-search-frame' || n === 'passenger-search-field');
+    assert.ok(field && panelOrder.indexOf(field) > panelOrder.indexOf('passenger-panel-header'));
+  }
   assert.equal(background.props.pointerEvents, 'none');
   assert.deepEqual([style(background).position, style(background).top, style(background).left, style(background).right],
     ['absolute', 0, 0, 0]);
@@ -41,8 +47,7 @@ const assertDetachedSurface = (tree: ReactTestRenderer) => {
   assert.deepEqual([style(background).borderTopLeftRadius, style(background).borderTopRightRadius,
     style(background).borderBottomLeftRadius, style(background).borderBottomRightRadius], [40, 40, 0, 0]);
   const interaction = host(tree, 'SheetBoundary').props.interaction;
-  if (interaction) assert.equal(style(background).height,
-    interaction.height - (accessory === 'passenger-home-search-frame' ? 68 : 0));
+  if (interaction) assert.equal(style(background).height, interaction.height);
   assert.equal(style(panelHeader).backgroundColor, undefined);
   assert.equal(style(panelHeader).borderTopLeftRadius, undefined);
   assert.equal(style(panelHeader).borderTopRightRadius, undefined);
@@ -139,21 +144,21 @@ test('Search results and Home rich recents use continuous list rows with fixed g
   try {
     await settle();
     const frame = id(tree, 'passenger-home-search-frame');
-    const pill = id(tree, 'passenger-home-floating-search');
+    const pill = id(tree, 'passenger-home-search');
     const glow = id(tree, 'passenger-home-search-glow');
     assert.equal(style(frame).position, 'relative');
     assert.equal(style(frame).height, 58);
-    assert.equal(style(frame).marginHorizontal, 20);
-    assert.equal(style(frame).alignSelf, 'center');
+    assert.equal(style(frame).marginHorizontal, undefined);
+    assert.equal(style(frame).alignSelf, 'stretch');
     assert.equal(style(frame).width, undefined);
     assert.equal(restingStyle(pill).height, 58);
-    assert.equal(restingStyle(pill).width, undefined);
+    assert.equal(restingStyle(pill).width, '100%');
     assert.equal(restingStyle(pill).paddingHorizontal, 24);
     assert.equal(restingStyle(pill).marginHorizontal, undefined);
     assert.equal(restingStyle(pill).borderRadius, 24);
     assert.equal(restingStyle(pill).gap, 10);
     assert.equal(restingStyle(pill).alignItems, 'center');
-    assert.equal(restingStyle(pill).justifyContent, 'center');
+    assert.equal(restingStyle(pill).justifyContent, 'flex-start');
     assert.equal(restingStyle(pill).paddingLeft, undefined);
     assert.equal(restingStyle(pill).paddingRight, undefined);
     const iconFrame = id(tree, 'passenger-home-search-icon-frame');
@@ -171,7 +176,7 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     assert.equal(restingStyle(pill).borderColor, '#00D68F');
     assert.ok(restingStyle(pill).boxShadow.length > 0);
     assert.deepEqual(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).boxShadow, []);
-    assert.equal(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).justifyContent, 'center');
+    assert.equal(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).justifyContent, 'flex-start');
     assert.equal(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).paddingHorizontal, 24);
     assert.equal(style(host(tree, 'SheetBoundary')).backgroundColor, 'transparent');
     assertDetachedSurface(tree);
@@ -254,7 +259,7 @@ test('Reduced Motion keeps permanent green borders and stationary halos in Home 
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   try {
     await settle();
-    assert.equal(restingStyle(id(tree, 'passenger-home-floating-search')).borderColor, '#00D68F');
+    assert.equal(restingStyle(id(tree, 'passenger-home-search')).borderColor, '#00D68F');
     assert.equal(style(id(tree, 'passenger-home-search-glow')).opacity, 0.18);
     await press(tree, '¿A dónde vamos?');
     assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00D68F');
@@ -324,7 +329,7 @@ test('review and confirmation share one green address panel without changing map
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('destination Search floats its title and sole input above the measured panel', async () => {
+test('destination Search places its sole input after the handle inside the measured panel', async () => {
   const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   try {
@@ -338,23 +343,14 @@ test('destination Search floats its title and sole input above the measured pane
     assert.equal(style(host(tree, 'SheetBoundary')).borderBottomLeftRadius, undefined);
     assert.equal(style(host(tree, 'SheetBoundary')).borderBottomRightRadius, undefined);
     await press(tree, '¿A dónde vamos?');
-    const searchTitle = id(tree, 'passenger-destination-search-title');
-    const searchTitleStyle = style(searchTitle);
-    const searchTitleTextStyle = style(searchTitle.findByType('Text' as never));
     const header = id(tree, 'passenger-sheet-header');
     assert.equal(header.findAll(n => n.props.children === '¿A dónde vamos?').length, 0);
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-search-title-reserve').length, 0);
     assertDetachedSurface(tree);
     assert.equal(style(id(tree, 'passenger-panel-header')).backgroundColor, undefined);
-    assert.equal(style(id(tree, 'passenger-floating-accessory')).marginHorizontal, 20);
-    assert.equal(style(id(tree, 'passenger-accessory-gap')).height, 10);
-    assert.equal(style(searchTitle).height, 40);
-    assert.equal(style(searchTitle).top, 40);
-    assert.equal(style(searchTitle).alignSelf, 'center');
-    assert.deepEqual(style(searchTitle).boxShadow, [{ offsetX: 0, offsetY: 2, blurRadius: 8,
-      spreadDistance: 0, color: 'rgba(11, 15, 14, 0.06)' }]);
-    assert.equal(style(searchTitle.findByType('Text' as never)).fontSize, 16);
-    assert.equal(style(searchTitle.findByType('Text' as never)).fontWeight, '600');
+    assert.equal(header.findAll(n => n.props.testID === 'passenger-floating-accessory').length, 0);
+    assert.equal(header.findAll(n => n.props.testID === 'passenger-accessory-gap').length, 0);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-destination-search-title').length, 0);
     assert.equal(header.findAll(n => n.props.testID === 'passenger-search-field').length, 1);
     assert.equal(header.findAllByType('TextInput' as never).length, 1);
     assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-search-field').length, 0);
@@ -362,6 +358,8 @@ test('destination Search floats its title and sole input above the measured pane
     const input = host(tree, 'TextInput');
     assert.equal(input.props.autoFocus, true);
     assert.equal(style(id(tree, 'passenger-search-field')).height, 52);
+    assert.equal(style(id(tree, 'passenger-panel-header')).paddingHorizontal, 20);
+    assert.equal(style(id(tree, 'passenger-search-field').parent!).alignSelf, 'stretch');
     await act(async () => input.props.onChangeText(fixturePlaces[1]!.name)); await settle();
     assert.ok(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-search-results').length === 1);
     assert.equal(host(tree, 'SheetBoundary').props.interaction.targetOffset, 84);
@@ -369,8 +367,9 @@ test('destination Search floats its title and sole input above the measured pane
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-destination-search-title').length, 0);
     await press(tree, 'Confirmar ubicaciones');
     const confirmation = id(tree, 'passenger-confirmation-pill');
-    assert.deepEqual(style(confirmation), searchTitleStyle);
-    assert.deepEqual(style(confirmation.findByType('Text' as never)), searchTitleTextStyle);
+    assert.equal(style(confirmation).height, 40);
+    assert.equal(style(confirmation).top, 40);
+    assert.equal(style(confirmation).alignSelf, 'center');
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
@@ -486,7 +485,7 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       assert.equal(style(surface).overflow, undefined);
       assert.equal(surface.props.collapsable, false);
       await act(async () => surface.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 + top! + 4 } } }));
-      assert.equal(host(tree, 'SheetBoundary').props.interaction.height, 768);
+      assert.equal(host(tree, 'SheetBoundary').props.interaction.height, 700);
       const mapViewport = surface.findAllByType('View' as never).find(n => style(n).marginHorizontal === 4);
       assert.ok(mapViewport);
       assert.equal(mapViewport!.props.collapsable, false);
@@ -503,8 +502,10 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 0);
       const logo = chrome.findByType('Image' as never);
       assert.match(logo.props.source, /vima_header_lockup_final\.png$/);
-      assert.equal(style(logo).height, 32); assert.equal(style(logo).width, 672 * 32 / 200);
-      assert.equal(style(chrome).top + (style(chrome).minHeight - style(logo).height) / 2, top! + 14);
+      assert.equal(style(logo).height, 35); assert.equal(style(logo).width, 672 * 35 / 200);
+      assert.equal(style(logo).position, 'absolute');
+      assert.equal(style(logo).left, 0);
+      assert.equal(style(chrome).top + style(logo).top, top! + 14);
       assert.equal(style(logo).backgroundColor, undefined);
       assert.deepEqual(style(logo).boxShadow, [{ offsetX: 0, offsetY: 2, blurRadius: 8,
         spreadDistance: 0, color: 'rgba(11, 15, 14, 0.06)' }]);
@@ -515,14 +516,14 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       }
       const savedStrip = tree.root.findAllByType('View' as never).find(n => style(n).height === 44 && style(n).boxShadow);
       assert.deepEqual(style(savedStrip!).boxShadow, style(logo).boxShadow);
-      const search = id(tree, 'passenger-home-floating-search');
+      const search = id(tree, 'passenger-home-search');
       const searchStyle = Object.assign({}, ...search.props.style({ pressed: false }).filter(Boolean));
       assert.equal(searchStyle.height, 58); assert.equal(searchStyle.borderRadius, 24);
       assert.equal(searchStyle.marginHorizontal, undefined);
-      assert.equal(style(id(tree, 'passenger-home-search-frame')).marginHorizontal, 20);
+      assert.equal(style(id(tree, 'passenger-home-search-frame')).alignSelf, 'stretch');
       const panelBackground = id(tree, 'passenger-panel-background');
       assert.equal(style(panelBackground).height, 700);
-      assert.equal(style(panelBackground).height, host(tree, 'SheetBoundary').props.interaction.height - 68);
+      assert.equal(style(panelBackground).height, host(tree, 'SheetBoundary').props.interaction.height);
       assert.equal(style(panelBackground).boxShadow, undefined);
       assertDetachedSurface(tree);
       assert.equal(style(id(tree, 'passenger-sheet-viewport')).boxShadow, undefined);
@@ -533,12 +534,22 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       }
       assert.equal(tree.root.findAllByType('Pressable' as never).filter(n => ['Casa', 'Trabajo'].includes(n.props.accessibilityLabel)).length, 2);
       assert.equal(tree.root.findAllByType('Pressable' as never).some(n => String(n.props.accessibilityLabel).startsWith('+')), false);
+      for (const [label, background, color] of [
+        ['Casa', 'rgba(0, 130, 111, 0.06)', '#00826F'],
+        ['Trabajo', '#EAF3FF', '#1E6FE8'],
+        ['Favoritos', 'rgba(255, 56, 48, 0.06)', '#FF3830'],
+      ]) {
+        const place = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label)!;
+        assert.equal(restingStyle(place).height, 44);
+        assert.equal(restingStyle(place).backgroundColor, background);
+        assert.equal(place.findAll(n => typeof n.type === 'function' && n.type.name === 'VimaGlyph')[0]!.props.color, color);
+      }
       const homeIcon = tree.root.findAll(n => String(n.type) === 'Text' && style(n).fontSize === 20)[0];
       assert.ok(homeIcon);
       assert.equal(style(id(tree, 'passenger-sheet-header')).backgroundColor, undefined);
       assert.equal(style(id(tree, 'passenger-sheet-viewport')).backgroundColor, 'transparent');
-      assert.equal(host(tree, 'SheetBoundary').findAll(n => n.props.testID === 'passenger-home-floating-search').length, 1);
-      assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-home-floating-search').length, 0);
+      assert.equal(host(tree, 'SheetBoundary').findAll(n => n.props.testID === 'passenger-home-search').length, 1);
+      assert.equal(id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-home-search').length, 0);
       assert.equal(style(host(tree, 'SheetBoundary')).overflow, 'visible');
       assert.equal(style(host(tree, 'SheetBoundary')).backgroundColor, 'transparent');
       const notifications = chrome.findByType('Pressable' as never);
@@ -683,9 +694,12 @@ test('rotating reveals the compass above Layers with only a 160 ms fade under ei
       const before = h.animations.length;
       await act(async () => host(tree, 'NativeMapBoundary').props.onRegionIsChanging({ nativeEvent: { bearing: 90 } }));
       const compass = id(tree, 'passenger-compass');
-      const glyph = compass.findAll(n => typeof n.type === 'function' && n.type.name === 'VimaGlyph')[0]!;
-      assert.equal(glyph.props.name, 'compass');
-      assert.equal(glyph.findByType('Text' as never).props.children, String.fromCodePoint(glyphCodepoints.compass));
+      const needle = id(tree, 'passenger-compass-needle');
+      assert.equal(style(needle).width, 24); assert.equal(style(needle).height, 24);
+      assert.equal(style(id(tree, 'passenger-compass-north')).borderBottomColor, '#FFFFFF');
+      assert.equal(style(id(tree, 'passenger-compass-south')).borderTopColor, '#2A2E2D');
+      assert.equal(style(id(tree, 'passenger-compass-north-outline')).borderBottomColor, '#2A2E2D');
+      assert.deepEqual(style(needle).transform, [{ rotate: '-90deg' }]);
       assert.equal(compass.props.pointerEvents, 'auto');
       assert.equal(style(compass).top, undefined); assert.equal(style(compass).right, undefined);
       assert.equal(style(compass).transform, undefined); // Appearance adds no translation or scale.
@@ -707,16 +721,17 @@ test('rotating reveals the compass above Layers with only a 160 ms fade under ei
   }
 });
 
-test('only normal Home uses the 50% panel and detached search within the persistent sheet', async () => {
+test('only normal Home uses the 50% panel with its search inside the persistent sheet', async () => {
   const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   try {
     await settle(); await mapLayout(tree);
     const homeHeight = await measure(tree, 250, 96);
-    assert.equal(homeHeight, 700 * 0.50 + 68);
-    assert.equal(host(tree, 'SheetBoundary').props.interaction.height, 768);
-    assert.ok(Math.abs(homeHeight - 68 - 700 * 0.50) < 0.01);
-    assert.equal(id(tree, 'passenger-home-floating-search').props.accessibilityLabel, '¿A dónde vamos?');
+    assert.equal(homeHeight, 700 * 0.50);
+    assert.equal(host(tree, 'SheetBoundary').props.interaction.height, 700);
+    assert.ok(Math.abs(homeHeight - 700 * 0.50) < 0.01);
+    assert.equal(id(tree, 'passenger-home-search').props.accessibilityLabel, '¿A dónde vamos?');
+    assert.equal(id(tree, 'passenger-panel-header').findAll(n => n.props.testID === 'passenger-home-search').length, 1);
     assert.equal(style(host(tree, 'SheetBoundary')).overflow, 'visible');
     const savedLink = tree.root.findAllByType('Pressable' as never).find(n =>
       n.findAll(child => child.props.children === 'Ver todos').length > 0);
@@ -731,7 +746,7 @@ test('only normal Home uses the 50% panel and detached search within the persist
     await act(async () => back.props.onPress());
     assertDetachedSurface(tree);
     await press(tree, '¿A dónde vamos?');
-    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-home-floating-search').length, 0);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-home-search').length, 0);
     assert.equal(style(host(tree, 'SheetBoundary')).overflow, 'visible');
     assert.equal(host(tree, 'SheetBoundary').props.interaction.targetOffset, 84);
     await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
@@ -751,7 +766,7 @@ test('Home map controls and recenter share the measured search boundary after a 
     const map = () => host(tree, 'PassengerMapContent').props;
     const controls = id(tree, 'passenger-map-controls');
     const controlBottom = style(controls).bottom;
-    assert.equal(visibleHeight, 418);
+    assert.equal(visibleHeight, 350);
     assert.equal(map().homeBottomOcclusion, visibleHeight);
     assert.equal(controlBottom, visibleHeight + 8);
     assert.ok(728 - controlBottom - (44 * 2 + 8) >= map().topOcclusion);

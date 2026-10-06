@@ -53,3 +53,20 @@ Por ello el catálogo real tiene **cero fotos**. Plaza Atlacomulco y CU UAEM Atl
 los dos Local Places verificados, pero siguen con icono. Terminal, mercados, hospital y
 otros lugares sólo recibirán imagen cuando sus entidades y licencias estén verificadas;
 no se crean entradas vacías ni lugares artificiales. Aportes `pending` no publican media.
+
+## Revisión inicial de Atlacomulco — 2026-10-06
+
+Se revisaron los dos IDs que hoy admite el catálogo público. La
+[galería del Centro Universitario UAEM Atlacomulco](https://scuuap.uaemex.mx/component/speasyimagegallery/album/centro-universitario-uaem-atlacomulco.html)
+y la [galería de Plaza Atlacomulco](https://www.plazaatlacomulco.com.mx/galeria)
+identifican los lugares correctos, pero en la revisión no se encontró un permiso
+o licencia explícita para reutilizar, transformar y servir sus fotos desde Vima.
+Los resultados de Commons encontrados corresponden a otros campus o al zócalo,
+no a estas dos entidades. Por ello no se incorporó ningún binario, URL ni entrada
+de manifiesto: el icono de categoría sigue siendo el fallback correcto.
+
+Para incorporar una foto más adelante se requiere verificar que representa el
+`canonicalPlaceId` exacto, registrar titular, URL de origen y licencia/permiso en
+el manifiesto existente, preparar `thumb.webp` fuera del checkout y ejecutar los
+tests de media y el check de aislamiento del bundle. Esto permite ampliar el
+catálogo sin cambiar Search, `PlaceThumbnail` ni el contrato de `SavedPlace`.

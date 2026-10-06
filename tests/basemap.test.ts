@@ -19,14 +19,17 @@ test('Passenger basemap is valid native style with approved colors and unchanged
     return (layer.paint as Record<string, unknown>)[property];
   };
   assert.equal(color('background', 'background-color'), '#F7F8F7');
-  assert.equal(color('highway_minor', 'line-color'), '#F5F6F7');
-  assert.equal(color('highway_major_inner', 'line-color'), '#EBEBEB');
+  assert.equal(color('highway_path', 'line-color'), '#F5F6F7');
+  assert.equal(color('highway_minor', 'line-color'), '#F0F2F0');
+  assert.equal(color('highway_major_casing', 'line-color'), '#DDE2DE');
+  assert.equal(color('highway_major_inner', 'line-color'), '#F1F2F1');
   assert.deepEqual(color('landcover_wood', 'fill-color'), [
     'interpolate', ['linear'], ['zoom'], 12, '#ECF6EF', 13, '#E3F2E6',
-    14, '#DBEFE0', 15, '#D8EEDB', 16, '#D8EEDB',
+    14, '#DBEFE0', 15, '#CFE9D3', 16, '#CFE9D3',
   ]);
-  assert.equal(color('park', 'fill-color'), '#D8EEDB');
-  assert.equal(color('water', 'fill-color'), '#BFDDF9');
+  assert.equal(color('park', 'fill-color'), '#CFE9D3');
+  assert.equal(color('water', 'fill-color'), '#AFD6FA');
+  assert.equal(color('waterway', 'line-color'), '#AFD6FA');
   for (const [index, layer] of originalLayers.entries()) {
     const original = source.layers[index]!;
     const { paint, ...geometryAndLayout } = layer;
@@ -52,7 +55,7 @@ test('close landcover and landuse use supported OpenMapTiles fields, approved pr
   assert.deepEqual(layers.filter(layer => added.includes(layer.id)).map(layer => layer.id), added);
   const polygon = ['match', ['geometry-type'], ['MultiPolygon', 'Polygon'], true, false];
   const classes = ['grass', 'farmland', 'wetland'];
-  const factors = [1, 0.45, 0.6];
+  const factors = [1, 0.55, 0.75];
   for (const [index, id] of added.slice(0, 3).entries()) {
     const layer = byId(id);
     assert.equal(layer.source, 'openmaptiles');
@@ -61,14 +64,14 @@ test('close landcover and landuse use supported OpenMapTiles fields, approved pr
     assert.deepEqual(layer.filter, ['all', polygon, ['==', ['get', 'class'], classes[index]]]);
     assert.deepEqual((layer.paint as Record<string, unknown>)['fill-opacity'], [
       'interpolate', ['linear'], ['zoom'], 12, 0,
-      13, 0.35 * factors[index]!, 14, 0.75 * factors[index]!,
-      15, 0.9 * factors[index]!, 16, factors[index],
+      13, 0.45 * factors[index]!, 14, 0.8 * factors[index]!,
+      15, 0.95 * factors[index]!, 16, factors[index],
     ]);
   }
   assert.deepEqual((byId('landcover_grass').paint as Record<string, unknown>)['fill-color'], [
     'step', ['zoom'], '#ECF6EF', 14,
     ['match', ['get', 'subclass'],
-      ['garden', 'park', 'recreation_ground', 'golf_course'], '#D8EEDB', '#ECF6EF'],
+      ['garden', 'park', 'recreation_ground', 'golf_course'], '#CFE9D3', '#ECF6EF'],
   ]);
   assert.equal((byId('landcover_farmland').paint as Record<string, unknown>)['fill-color'], '#ECF6EF');
   assert.equal((byId('landcover_wetland').paint as Record<string, unknown>)['fill-color'], '#D8EEDB');
@@ -79,8 +82,8 @@ test('close landcover and landuse use supported OpenMapTiles fields, approved pr
     ['match', ['get', 'class'],
       ['pitch', 'playground', 'stadium', 'theme_park', 'zoo', 'cemetery'], true, false]]);
   assert.deepEqual(recreation.paint, {
-    'fill-color': '#D8EEDB',
-    'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.35, 16, 0.55],
+    'fill-color': '#CFE9D3',
+    'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.4, 16, 0.65],
   });
   const waterIndex = layers.findIndex(layer => layer.id === 'water');
   const firstRoad = layers.findIndex(layer => layer.id === 'highway_path');

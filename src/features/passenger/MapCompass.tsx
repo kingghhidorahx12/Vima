@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import { VimaGlyph } from '../../design/components/VimaGlyph';
 import { elevationStyle } from '../../design/themes/light';
 import { visualTokens as t } from '../../design/tokens';
 import { fadeTo } from '../../motion/helpers';
@@ -28,8 +27,10 @@ export function MapCompass({ bearing, ready, onPress }: {
     <Pressable accessibilityRole="button" accessibilityLabel="Orientar mapa al norte" disabled={!visible}
       onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
       onPress={onPress} style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
-      <View style={{ transform: [{ rotate: `${-angle}deg` }] }}>
-        <VimaGlyph name="compass" color={t.colors.graphite} />
+      <View testID="passenger-compass-needle" style={[styles.needle, { transform: [{ rotate: `${-angle}deg` }] }]}>
+        <View testID="passenger-compass-north-outline" style={styles.northOutline} />
+        <View testID="passenger-compass-north" style={styles.north} />
+        <View testID="passenger-compass-south" style={styles.south} />
       </View>
     </Pressable>
     </Animated.View>
@@ -40,4 +41,14 @@ const styles = StyleSheet.create({
   button: { width: 44, height: 44, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
     alignItems: 'center', justifyContent: 'center', ...elevationStyle('level1', t.colors.carbon) },
   pressed: { backgroundColor: t.colors.background },
+  needle: { width: 24, height: 24 },
+  northOutline: { position: 'absolute', top: 0, left: 6, width: 0, height: 0,
+    borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 13,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: t.colors.graphite },
+  north: { position: 'absolute', top: 3, left: 8, width: 0, height: 0,
+    borderLeftWidth: 4, borderRightWidth: 4, borderBottomWidth: 9,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: t.colors.white },
+  south: { position: 'absolute', top: 11, left: 6, width: 0, height: 0,
+    borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 13,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: t.colors.graphite },
 });

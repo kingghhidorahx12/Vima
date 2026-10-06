@@ -1,12 +1,51 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-compass-icon-final-p0`, creada desde
-`codex/passenger-panel-radius-40-final-p0` @ `fc87d63`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-home-life-final-p0`, creada desde
+`codex/passenger-compass-icon-final-p0` @ `f49bfb3`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Home/Search integrados, accesos con color y basemap más vivo — 2026-10-06
+
+- En Home, `¿A dónde vamos?` vuelve al interior del mismo panel blanco, después del
+  handle: ancho de panel, alineación izquierda y alto 58 dp. Conserva su borde,
+  halo y press Motion 1.1. En Search normal de destino hay un solo input, dentro
+  del panel después del handle; se eliminó el título flotante de Search. El
+  background absoluto/full-height mantiene radio superior 40 dp e inferior 0,
+  sin seam. Home conserva panel del 50% de `sheetFrameHeight`; su footprint real
+  incluye ahora el buscador interior, y controles/recenter usan la medida del
+  sheet sin compensación del antiguo accessory de 68 dp.
+- Casa, Trabajo y Favoritos conservan fila y targets de 44 dp; tienen washes
+  semánticos verde, azul y rojo suave con iconos del mismo color. En la
+  configuración de Casa/Trabajo, `Usar mi ubicación actual` utiliza el lugar
+  localizado con dirección o el Reverse existente si falta dirección, y guarda
+  por la misma operación `saveSavedSlot`. Si la ubicación carga o no está
+  disponible, la acción se desactiva y Search/map selection continúan accesibles.
+  No cambió la persistencia ni el comportamiento de Favoritos/Recientes.
+- La brújula conserva botón 44×44, columna, bearing, reset al norte, fade 160 ms,
+  press y Reduced Motion. Su símbolo usa una aguja de punta norte blanca con
+  contorno graphite y punta opuesta graphite. El lockup master Vima pasa de
+  32 a 35 dp, mantiene proporción y anclaje `safeAreaTop + 14`/left 16, sin
+  fondo; el botón de notificaciones no se movió.
+- Sólo el `passengerBasemap` local aumenta visibilidad de `park`, `landcover`
+  wood/grass/farmland/wetland y `landuse` recreativo con los filtros reales ya
+  verificados de OpenMapTiles. Agua y cauces usan azul más visible; vías path,
+  minor y major separan mejor su jerarquía. Source, geometría, labels, RouteLayer,
+  Traffic, pins, Camera y estilos custom/productivos no cambiaron. La fidelidad
+  de tiles en Atlacomulco todavía necesita Android físico.
+- La capa de miniaturas y su catálogo versionable permanecen listos para fotos
+  con derechos verificables. No se añadió ninguna foto: la revisión de Plaza
+  Atlacomulco y CU UAEM Atlacomulco halló páginas del titular con imágenes,
+  pero no una licencia reutilizable explícita. El fallback por categoría sigue
+  siendo el resultado real; ver `PLACE_MEDIA_P0.md`.
+- Validación: TypeScript, lint, 163 tests, gateway 28 tests, worklets, schema
+  MapLibre, splash, Hermes Android/iOS y checks de fixtures, servidor,
+  credenciales y paths/release pasaron. Expo Doctor 20/21 señala sólo los cinco
+  patches SDK 57 ya conocidos; dependencias intactas. Sin cambios nativos ni
+  EAS Build. Android físico sigue PENDIENTE.
 
 ### Cierre visual aprobado Home/Search/Confirmación: brújula — 2026-10-06
 

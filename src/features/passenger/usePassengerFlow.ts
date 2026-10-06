@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { connectTripRealtime } from '../../services/realtime';
 import { useCriticalTripCommand, tripKey, tripQueryOptions } from '../trip/queries';
-import { canRequest, isMatching, passengerPhase, passengerTrip, validDraft, type OriginStatus, type PassengerGateway, type PassengerTrip, type Place, type RideQuote } from './model';
+import { canRequest, isMatching, passengerPhase, passengerTrip, validDraft, validPlace, type OriginStatus, type PassengerGateway, type PassengerTrip, type Place, type RideQuote } from './model';
 import { requestPassengerRide } from './requests';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 import { approvedLocalPlaces } from '../../services/geospatial/localPlaces';
@@ -180,6 +180,13 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       }
     } finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
   };
+  const useCurrentLocationForSavedSlot = async () => {
+    if (savedPicker !== 'home' && savedPicker !== 'work') return;
+    const current = location.data;
+    if (!validPlace(current)) return;
+    if (current.address.trim()) await choosePlace(current);
+    else await chooseMapCoordinate(current.coordinate);
+  };
   const contributePlace = async (input: { name: string; coordinate: Place['coordinate']; reference?: string }) => {
     if (!gateway.contributePlace) { setSelectionError(new Error('Agregar lugar no disponible')); return null; }
     const fingerprint = `${input.name}|${input.coordinate.join(',')}|${input.reference ?? ''}`;
@@ -270,7 +277,8 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     followUpResults?.query === search ? followUpResults.results : places.data,
     followUpResults?.query === search || !places.isPlaceholderData ? search : undefined) : [];
   return { phase, connection, quoteExpired, origin, currentLocation: location.data ?? null, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
-    locationAvailable: !!location.data, field, search, setSearch: (value: string) => {
+    locationAvailable: !!location.data, locationLoading: location.isPending, canUseCurrentLocation: validPlace(location.data),
+    savedPicker, useCurrentLocationForSavedSlot, field, search, setSearch: (value: string) => {
       cancelSelection(); setFollowUpResults(undefined);
       if (!value.trim()) { gateway.closePlaces?.(); searchCoordinator.clear(); }
       setSearch(value);
