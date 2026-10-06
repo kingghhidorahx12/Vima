@@ -1,12 +1,25 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-radius-search-compact-final-p0`, creada desde
-`codex/passenger-panel-surface-geometry-final-p0` @ `9139d31`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-panel-radius-40-final-p0`, creada desde
+`codex/passenger-radius-search-compact-final-p0` @ `84625ef`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Radio superior Passenger de 40 dp — 2026-10-06
+
+- Home, Search, reviewing, confirm y requesting usan radio superior de 40 dp;
+  las esquinas inferiores detached siguen en 0 dp. Se conserva la superficie
+  absoluta de altura `sheetFrameHeight` detrás de header y content, sin seam.
+- No cambiaron Home search, alturas, snaps, mediciones, route-fit, Camera,
+  Motion 1.1 ni lógica. Sin dependencias o cambios nativos; Android físico
+  PENDIENTE. No se generó EAS Build.
+- Validación local: TypeScript, lint, 161 tests, worklets, schema MapLibre,
+  Hermes Android/iOS, splash y aislamiento de fixtures, servidor, rutas,
+  credenciales y release correctos. Expo Doctor pasó 20/21 únicamente por
+  los cinco patches pendientes del SDK 57; no se actualizaron dependencias.
 
 ### Radio 64 y buscador Home compacto — 2026-10-06
 

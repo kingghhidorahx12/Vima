@@ -58,7 +58,7 @@ const confirmationPillHeight = 40;
 const homeSearchHeight = 58;
 const homeSearchGap = 10;
 const homeSearchAccessoryHeight = homeSearchHeight + homeSearchGap;
-const passengerPanelTopRadius = 64;
+const passengerPanelTopRadius = 40;
 
 export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }: PassengerScreenProps) {
   const flow = usePassengerFlow(gateway);

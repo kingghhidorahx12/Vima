@@ -38,7 +38,7 @@ const assertDetachedSurface = (tree: ReactTestRenderer) => {
     ['absolute', 0, 0, 0]);
   assert.equal(style(background).backgroundColor, '#FFFFFF');
   assert.deepEqual([style(background).borderTopLeftRadius, style(background).borderTopRightRadius,
-    style(background).borderBottomLeftRadius, style(background).borderBottomRightRadius], [64, 64, 0, 0]);
+    style(background).borderBottomLeftRadius, style(background).borderBottomRightRadius], [40, 40, 0, 0]);
   const interaction = host(tree, 'SheetBoundary').props.interaction;
   if (interaction) assert.equal(style(background).height,
     interaction.height - (accessory === 'passenger-home-search-frame' ? 68 : 0));
@@ -717,8 +717,8 @@ test('only normal Home uses the 50% panel and detached search within the persist
     assert.ok(savedLink);
     await act(async () => savedLink.props.onPress());
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-panel-background').length, 0);
-    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 64);
-    assert.equal(style(host(tree, 'SheetBoundary')).borderTopRightRadius, 64);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 40);
+    assert.equal(style(host(tree, 'SheetBoundary')).borderTopRightRadius, 40);
     const back = tree.root.findAllByType('Pressable' as never).find(n =>
       n.findAll(child => child.props.children === 'Volver').length > 0);
     assert.ok(back);
