@@ -1,12 +1,9 @@
-import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { semanticHaptics } from '../../motion/haptics';
 import type { HapticEvent } from '../../motion/hapticEvents';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
-import { moveTo } from '../../motion/helpers';
-import { motionTimings } from '../../motion/timing';
-import { motionTokens } from '../../motion/tokens';
+import { usePressFeedback } from '../../motion/usePressFeedback';
 import { VimaText } from '../primitives';
 import { primaryGradient, visualTokens as t } from '../tokens';
 import { VimaGlyph, type VimaGlyphName } from './VimaGlyph';
@@ -20,15 +17,12 @@ export function VimaButton({ label, onPress, disabled = false, loading = false, 
   icon?: VimaGlyphName;
 }) {
   const { reducedMotion } = useMotionPolicy();
-  const scale = useSharedValue(1);
-  useEffect(() => () => cancelAnimation(scale), [scale]);
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: reducedMotion ? 1 : scale.get() }] }));
+  const feedback = usePressFeedback();
   const labelColor = disabled ? t.colors.gray : danger ? t.colors.red : communication ? t.colors.accentBluePressed : secondary ? t.colors.carbon : t.colors.white;
-  return <ElementEntrance style={style}><Animated.View style={animated}>
+  return <ElementEntrance style={style}><Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }}
       disabled={disabled || loading}
-      onPressIn={() => scale.set(moveTo(motionTokens.interactionRules.buttonPressScale, reducedMotion, motionTimings.press))}
-      onPressOut={() => scale.set(moveTo(1, reducedMotion, motionTimings.release))}
+      onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
       onPress={() => { void semanticHaptics(haptic); onPress(); }}
       style={({ pressed }) => [styles.button, compact && styles.compact, gradient && !secondary && !disabled && styles.gradient,
         secondary && styles.secondary, communication && styles.communication, danger && styles.danger,

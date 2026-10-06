@@ -770,7 +770,7 @@ test('map control press feedback and layer switches use approved timing and obey
       const before = h.animations.length;
       await h.act(async () => button.props.onPressIn());
       assert.equal(h.animations.length > before, !reduced);
-      if (!reduced) assert.equal(h.animations.at(-1).duration, 160);
+      if (!reduced) assert.equal(h.animations.at(-1).duration, 120);
       await h.act(async () => button.props.onPressOut());
       await h.act(async () => press(tree, 'Capas del mapa'));
       assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Capas del mapa')!

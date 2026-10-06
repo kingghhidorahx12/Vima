@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence } from 'react-native-reanimated';
+import Animated, { cancelAnimation, FadeIn, FadeInDown, FadeOut, FadeOutUp, ReduceMotion, useAnimatedStyle, useSharedValue, withDelay } from 'react-native-reanimated';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { fadeTo } from '../../motion/helpers';
 import { mapPersonality } from '../../motion/mapPersonality';
+import { motionDistances, motionTimings } from '../../motion/timing';
+import { usePressFeedback } from '../../motion/usePressFeedback';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { elevationStyle } from '../../design/themes/light';
 import { passengerSurfaces as surfaces, surfaceColors } from '../../design/presentation';
@@ -15,45 +17,61 @@ import type { TrafficLayerPreferences } from '../../map/traffic';
 import { ElementEntrance } from '../../motion/ElementEntrance';
 import { locationCtaHeight, mapControlSize, mapLayersMenuWidth } from './mapCameraFootprint';
 
+const menuEnter = FadeInDown.duration(motionTimings.sheetSnap.duration).easing(motionTimings.sheetSnap.easing)
+  .withInitialValues({ transform: [{ translateY: motionDistances.shortEnterY }] }).reduceMotion(ReduceMotion.Never);
+const menuExit = FadeOutUp.duration(motionTimings.state.duration).easing(motionTimings.sheetClose.easing)
+  .withTargetValues({ transform: [{ translateY: -motionDistances.shortEnterY }] }).reduceMotion(ReduceMotion.Never);
+const menuFadeIn = FadeIn.duration(motionTimings.sheetSnap.duration).easing(motionTimings.sheetSnap.easing).reduceMotion(ReduceMotion.Never);
+const menuFadeOut = FadeOut.duration(motionTimings.state.duration).easing(motionTimings.sheetClose.easing).reduceMotion(ReduceMotion.Never);
+
 export function MapControls({ available, layers, open, onOpen, onToggle, compass }: {
   available: boolean; layers: TrafficLayerPreferences; open: boolean;
   compass?: ReactNode;
   onOpen: () => void; onToggle: (layer: keyof TrafficLayerPreferences) => void;
 }) {
   const tap = (action: () => void) => { void semanticHaptics('toggle'); action(); };
-  const menuOpacity = useSharedValue(0);
-  useEffect(() => { menuOpacity.set(open ? fadeTo(1, mapPersonality.layer) : 0); return () => cancelAnimation(menuOpacity); }, [menuOpacity, open]);
-  const menuStyle = useAnimatedStyle(() => ({ opacity: menuOpacity.get() }));
+  const { reducedMotion } = useMotionPolicy();
   return <ElementEntrance style={styles.stack}>
-    {open ? <Animated.View style={[styles.menu, menuStyle]}>
-      {!available ? <VimaText variant="caption" style={styles.unavailable}>Capas no disponibles</VimaText> : null}
-      {(['traffic', 'incidents'] as const).map((layer) => <Pressable key={layer} accessibilityRole="switch"
-        accessibilityLabel={layer === 'traffic' ? 'Tráfico' : 'Incidentes'}
-        accessibilityState={{ checked: available && layers[layer], disabled: !available }} disabled={!available}
-        onPress={() => tap(() => onToggle(layer))}
-        style={({ pressed }) => [styles.menuRow, layer === 'incidents' && styles.menuDivider, pressed && styles.rowPressed]}>
-        <VimaGlyph name={layer === 'traffic' ? 'traffic' : 'warning'}
-          color={available && layers[layer] ? t.colors.green : t.colors.graphite} />
-        <VimaText variant="bodySmall" numberOfLines={1} style={styles.menuLabel}>{layer === 'traffic' ? 'Tráfico' : 'Incidentes'}</VimaText>
-        <LayerSwitch checked={layers[layer] && available} />
-      </Pressable>)}
-    </Animated.View> : null}
     {compass}
+    {open ? <Animated.View testID="passenger-layers-menu" entering={reducedMotion ? menuFadeIn : menuEnter}
+      exiting={reducedMotion ? menuFadeOut : menuExit} style={styles.menu}>
+      {!available ? <VimaText variant="caption" style={styles.unavailable}>Capas no disponibles</VimaText> : null}
+      {(['traffic', 'incidents'] as const).map((layer) => <LayerMenuRow key={layer} layer={layer}
+        available={available} checked={layers[layer]} onPress={() => tap(() => onToggle(layer))} />)}
+    </Animated.View> : null}
     <MapControl label="Capas del mapa" icon="layers" active={open || available && (layers.traffic || layers.incidents)}
       expanded={open} onPress={() => tap(onOpen)} />
   </ElementEntrance>;
 }
 
+function LayerMenuRow({ layer, available, checked, onPress }: {
+  layer: keyof TrafficLayerPreferences; available: boolean; checked: boolean; onPress: () => void;
+}) {
+  const feedback = usePressFeedback();
+  return <Animated.View style={feedback.style}><Pressable accessibilityRole="switch"
+    accessibilityLabel={layer === 'traffic' ? 'Tráfico' : 'Incidentes'}
+    accessibilityState={{ checked: available && checked, disabled: !available }} disabled={!available}
+    onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut} onPress={onPress}
+    style={({ pressed }) => [styles.menuRow, layer === 'incidents' && styles.menuDivider, pressed && styles.rowPressed]}>
+    <VimaGlyph name={layer === 'traffic' ? 'traffic' : 'warning'}
+      color={available && checked ? t.colors.green : t.colors.graphite} />
+    <VimaText variant="bodySmall" numberOfLines={1} style={styles.menuLabel}>{layer === 'traffic' ? 'Tráfico' : 'Incidentes'}</VimaText>
+    <LayerSwitch checked={checked && available} />
+  </Pressable></Animated.View>;
+}
+
 export function LocationCTA({ busy, onPress }: { busy: boolean; onPress: () => void }) {
   const { reducedMotion } = useMotionPolicy();
-  return <ElementEntrance><Pressable accessibilityRole="button" accessibilityLabel="Tu ubicación"
-    accessibilityState={{ busy }} onPress={() => { void semanticHaptics('toggle'); onPress(); }}
+  const feedback = usePressFeedback();
+  return <ElementEntrance><Animated.View style={feedback.style}><Pressable accessibilityRole="button" accessibilityLabel="Tu ubicación"
+    accessibilityState={{ busy }} onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
+    onPress={() => { void semanticHaptics('toggle'); onPress(); }}
     style={({ pressed }) => [styles.location, pressed && styles.buttonPressed]}>
     {busy && !reducedMotion ? <ActivityIndicator size="small" color={t.colors.blue} />
       : <VimaGlyph name="recenter" color={t.colors.blue} />}
     <VimaText variant="bodySmall">Tu ubicación</VimaText>
     <VimaGlyph name="chevron" color={t.colors.gray} />
-  </Pressable></ElementEntrance>;
+  </Pressable></Animated.View></ElementEntrance>;
 }
 
 export function CenteredToast() {
@@ -80,18 +98,12 @@ function LayerSwitch({ checked }: { checked: boolean }) {
 function MapControl({ label, icon, onPress, disabled = false, active = false, expanded = false, busy = false }: {
   label: string; icon: VimaGlyphName; onPress: () => void; disabled?: boolean; active?: boolean; expanded?: boolean; busy?: boolean;
 }) {
-  const { reducedMotion } = useMotionPolicy(); const progress = useSharedValue(0);
-  useEffect(() => () => cancelAnimation(progress), [progress]);
-  const feedback = useAnimatedStyle(() => ({ transform: [{ scale: reducedMotion ? 1 : 1 - progress.get() * (1 - mapPersonality.controlScale) }] }));
-  const halo = useAnimatedStyle(() => ({ opacity: reducedMotion ? 0 : progress.get() * mapPersonality.pulseOpacity,
-    transform: [{ scale: 1 + progress.get() * (mapPersonality.pulseScale - 1) }] }));
-  return <Animated.View style={feedback}>
-    <Animated.View pointerEvents="none" style={[styles.controlHalo, halo]} />
+  const { reducedMotion } = useMotionPolicy();
+  const feedback = usePressFeedback();
+  return <Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled}
       accessibilityState={{ disabled, busy, expanded: icon === 'layers' ? expanded : undefined }}
-      onPressIn={() => { cancelAnimation(progress); if (!reducedMotion) progress.set(fadeTo(1, mapPersonality.control)); }}
-      onPressOut={() => progress.set(reducedMotion ? 0 : fadeTo(0, mapPersonality.control))}
-      onPress={() => { if (!reducedMotion) progress.set(withSequence(fadeTo(1, mapPersonality.control), fadeTo(0, mapPersonality.control))); onPress(); }}
+      onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut} onPress={onPress}
       style={({ pressed }) => [styles.button, active && styles.buttonActive,
         pressed && styles.buttonPressed, disabled && styles.buttonDisabled]}>
       {busy && !reducedMotion ? <ActivityIndicator size="small" color={t.colors.green} />
@@ -103,7 +115,6 @@ function MapControl({ label, icon, onPress, disabled = false, active = false, ex
 const styles = StyleSheet.create({
   location: { ...surfaces.floating, borderRadius: t.radii.pillPx, minHeight: locationCtaHeight, flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: t.spacing.scalePx[2], gap: t.spacing.scalePx[1] },
-  controlHalo: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
   buttonActive: { borderColor: t.colors.green },
   buttonPressed: { backgroundColor: t.colors.background },
   buttonDisabled: { opacity: 0.5 },

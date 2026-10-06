@@ -30,14 +30,14 @@ const paintById: Readonly<Record<string, Readonly<Record<string, string>>>> = {
 // appearance and add detail only as the actual vector tiles reveal it.
 const zoomStrength = (factor = 1) => [
   'interpolate', ['linear'], ['zoom'],
-  12, 0, 13, 0.35 * factor, 14, 0.55 * factor,
-  15, 0.75 * factor, 16, factor,
+  12, 0, 13, 0.35 * factor, 14, 0.75 * factor,
+  15, 0.9 * factor, 16, factor,
 ] as const;
 
 const woodColor = [
   'interpolate', ['linear'], ['zoom'],
-  12, '#ECF6EF', 13, '#E5F3E8', 14, '#E1F2E4',
-  15, '#DDF0E0', 16, '#D8EEDB',
+  12, '#ECF6EF', 13, '#E3F2E6', 14, '#DBEFE0',
+  15, '#D8EEDB', 16, '#D8EEDB',
 ] as const;
 
 const polygonFilter = ['match', ['geometry-type'], ['MultiPolygon', 'Polygon'], true, false] as const;
@@ -54,8 +54,8 @@ const closeLandcover = [
     ['match', ['get', 'subclass'],
       ['garden', 'park', 'recreation_ground', 'golf_course'], '#D8EEDB', '#ECF6EF'],
   ]),
-  landcover('landcover_farmland', 'farmland', '#ECF6EF', 0.55),
-  landcover('landcover_wetland', 'wetland', '#D8EEDB', 0.7),
+  landcover('landcover_farmland', 'farmland', '#ECF6EF', 0.45),
+  landcover('landcover_wetland', 'wetland', '#D8EEDB', 0.6),
   {
     id: 'landuse_recreation', type: 'fill' as const, source: 'openmaptiles',
     'source-layer': 'landuse', minzoom: 15,
@@ -64,7 +64,7 @@ const closeLandcover = [
         ['pitch', 'playground', 'stadium', 'theme_park', 'zoo', 'cemetery'], true, false]],
     paint: {
       'fill-color': '#D8EEDB',
-      'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.135, 16, 0.18],
+      'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.35, 16, 0.55],
     },
   },
 ];

@@ -1,9 +1,49 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-home-android-regressions-p0`, creada
-desde `codex/passenger-home-layout-polish-p0` @ `0030739`. Sin merge a main.
+Actualizado 2026-10-05 en `codex/passenger-motion-1-1-p0`, creada desde
+`codex/passenger-home-android-regressions-p0` @ `3ebb1bd`. Sin merge a main.
 
 ## IMPLEMENTADO
+
+### Motion 1.1 y cierre físico de Home Passenger — 2026-10-05
+
+- Se amplía la cobertura del JSON aprobado de Motion v1 sin cambiar sus valores:
+  `usePressFeedback` reutiliza escala .98 y 120 ms en botones, buscador,
+  shortcuts, filas y controles; Reduced Motion suprime la escala. La entrada
+  de contenido nuevo usa 160 ms y 6 dp (sólo fade con reducción), con stagger
+  de 24 ms limitado a los primeros cinco resultados nuevos de Search. Keys de
+  lugar estables evitan repetir la entrada por renders o reordenamiento.
+- El contenido del sheet mantiene transición interrumpible de 300 ms y escena
+  asignada de 480 ms; métricas y copy de matching cambian con el timing de
+  estado de 240 ms. El pill de confirmación, avisos y acciones nuevas usan
+  entradas breves. Search conserva resultados útiles durante Suggest y su
+  loading permanece dentro del campo. `SearchPulse` conserva su único ciclo
+  de 1900 ms, sin loop adicional.
+- Bottom nav entra/sale en 240 ms con fade y 6 dp; Reduced Motion sólo fade.
+  Sólo Inicio es funcional y las demás tabs siguen deshabilitadas. Brújula
+  mantiene bearing real y fade de 160 ms. El menú de Capas abre en 300 ms y
+  cierra en 240 ms con fade y desplazamiento corto (sólo fade en Reduced
+  Motion), anclado entre Brújula y botón Capas con gap de
+  8 dp; switches y Traffic/Incidents no cambian.
+- Home conserva panel 50%, buscador 58 dp y fila guardados 44 dp. Header y
+  contenido del panel comparten fondo blanco sin sombras separadas en la
+  unión; se reduce sólo su espaciado vertical. Recientes mantiene hasta tres
+  filas, thumbnails y ScrollView. No se cambia la frontera visible compartida
+  de mapa/controles/CTA ni Home/Recenter de `3ebb1bd`.
+- El basemap local ajusta sólo la intensidad de `landcover` ya admitido y
+  `landuse` recreativo; conserva los verdes `#D8EEDB`/`#ECF6EF`, fuente,
+  filtros, orden y neutralidad donde no hay feature. Una muestra pública de
+  tiles OpenFreeMap de Atlacomulco encontró `wood/wood`, `grass/park`,
+  `grass/meadow`, `grass/recreation_ground`, `farmland` y usos `pitch`,
+  `playground`, `stadium`, `cemetery` entre z13–z14. El TileJSON sirve hasta
+  z14 y el renderer sobreescala esos datos en z15–z16; no se infiere vegetación.
+- Sin cambios en rutas, Camera/route-fits, matching funcional, pricing,
+  persistencia, TomTom, contratos, Traffic, geometría de RouteLayer, safe area,
+  top chrome, identidad ni disponibilidad de tabs. Sin dependencias ni código
+  nativo nuevo; Android físico y juicio de fluidez permanecen pendientes.
+- Verificación local: TypeScript, lint, suite 153/153, schema/style MapLibre,
+  worklets, Expo Doctor 21/21, export Hermes Android/iOS, splash y aislamiento
+  de fixtures/release/credenciales/paths correctos. No se generó APK.
 
 ### Correcciones físicas de Home Passenger — 2026-10-05
 

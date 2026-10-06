@@ -22,8 +22,8 @@ test('Passenger basemap is valid native style with approved colors and unchanged
   assert.equal(color('highway_minor', 'line-color'), '#F5F6F7');
   assert.equal(color('highway_major_inner', 'line-color'), '#EBEBEB');
   assert.deepEqual(color('landcover_wood', 'fill-color'), [
-    'interpolate', ['linear'], ['zoom'], 12, '#ECF6EF', 13, '#E5F3E8',
-    14, '#E1F2E4', 15, '#DDF0E0', 16, '#D8EEDB',
+    'interpolate', ['linear'], ['zoom'], 12, '#ECF6EF', 13, '#E3F2E6',
+    14, '#DBEFE0', 15, '#D8EEDB', 16, '#D8EEDB',
   ]);
   assert.equal(color('park', 'fill-color'), '#D8EEDB');
   assert.equal(color('water', 'fill-color'), '#BFDDF9');
@@ -52,7 +52,7 @@ test('close landcover and landuse use supported OpenMapTiles fields, approved pr
   assert.deepEqual(layers.filter(layer => added.includes(layer.id)).map(layer => layer.id), added);
   const polygon = ['match', ['geometry-type'], ['MultiPolygon', 'Polygon'], true, false];
   const classes = ['grass', 'farmland', 'wetland'];
-  const factors = [1, 0.55, 0.7];
+  const factors = [1, 0.45, 0.6];
   for (const [index, id] of added.slice(0, 3).entries()) {
     const layer = byId(id);
     assert.equal(layer.source, 'openmaptiles');
@@ -61,8 +61,8 @@ test('close landcover and landuse use supported OpenMapTiles fields, approved pr
     assert.deepEqual(layer.filter, ['all', polygon, ['==', ['get', 'class'], classes[index]]]);
     assert.deepEqual((layer.paint as Record<string, unknown>)['fill-opacity'], [
       'interpolate', ['linear'], ['zoom'], 12, 0,
-      13, 0.35 * factors[index]!, 14, 0.55 * factors[index]!,
-      15, 0.75 * factors[index]!, 16, factors[index],
+      13, 0.35 * factors[index]!, 14, 0.75 * factors[index]!,
+      15, 0.9 * factors[index]!, 16, factors[index],
     ]);
   }
   assert.deepEqual((byId('landcover_grass').paint as Record<string, unknown>)['fill-color'], [
@@ -80,7 +80,7 @@ test('close landcover and landuse use supported OpenMapTiles fields, approved pr
       ['pitch', 'playground', 'stadium', 'theme_park', 'zoo', 'cemetery'], true, false]]);
   assert.deepEqual(recreation.paint, {
     'fill-color': '#D8EEDB',
-    'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.135, 16, 0.18],
+    'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.35, 16, 0.55],
   });
   const waterIndex = layers.findIndex(layer => layer.id === 'water');
   const firstRoad = layers.findIndex(layer => layer.id === 'highway_path');

@@ -6,6 +6,7 @@ import { elevationStyle } from '../../design/themes/light';
 import { visualTokens as t } from '../../design/tokens';
 import { fadeTo } from '../../motion/helpers';
 import { motionTimings } from '../../motion/timing';
+import { usePressFeedback } from '../../motion/usePressFeedback';
 
 /** Mirrors map bearing; only visibility is animated. Fade is permitted by Reduced Motion. */
 export function MapCompass({ bearing, ready, onPress }: {
@@ -13,6 +14,7 @@ export function MapCompass({ bearing, ready, onPress }: {
 }) {
   const angle = Number.isFinite(bearing) ? ((bearing % 360) + 540) % 360 - 180 : 0;
   const visible = ready && angle !== 0;
+  const feedback = usePressFeedback();
   const opacity = useSharedValue(0);
   useEffect(() => {
     opacity.set(fadeTo(Number(visible), motionTimings.focus));
@@ -22,12 +24,15 @@ export function MapCompass({ bearing, ready, onPress }: {
   return <Animated.View testID="passenger-compass" pointerEvents={visible ? 'auto' : 'none'}
     accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
     style={[styles.position, fade]}>
+    <Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel="Orientar mapa al norte" disabled={!visible}
+      onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
       onPress={onPress} style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
       <View style={{ transform: [{ rotate: `${-angle}deg` }] }}>
         <VimaGlyph name="compass" color={t.colors.graphite} />
       </View>
     </Pressable>
+    </Animated.View>
   </Animated.View>;
 }
 const styles = StyleSheet.create({

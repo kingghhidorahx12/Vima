@@ -9,6 +9,7 @@ const query = require('@tanstack/react-query');
 // Native boundaries are test doubles. This tests React identity/interaction, not native rendering.
 function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top: 24, bottom: 16, left: 0, right: 0 } } = {}) {
   const animations = [];
+  const delays = [];
   const projection = { point: [190, 120], project: undefined };
   const modules = new Map();
   const mounted = { map: 0, unmountedMap: 0, sheet: 0, haptics: [], keyboardDismiss: 0, blur: 0, inputFocused: false };
@@ -19,11 +20,18 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
   let back;
   native.BackHandler = { addEventListener: (_event, fn) => { back = fn; return { remove() { back = undefined; } }; } };
   native.Keyboard = { dismiss() { mounted.keyboardDismiss++; mounted.inputFocused = false; } };
-  const fade = { duration() { return this; }, easing() { return this; }, reduceMotion() { return this; } };
-  const animated = { FadeIn: fade, FadeOut: fade, default: { View: 'AnimatedView' }, cancelAnimation() {}, ReduceMotion: { System: 'system', Never: 'never' },
+  const builder = (kind, values = {}) => ({ kind, ...values,
+    duration(value) { return builder(kind, { ...values, durationMs: value }); },
+    easing(value) { return builder(kind, { ...values, curve: value }); },
+    reduceMotion(value) { return builder(kind, { ...values, reduction: value }); },
+    withInitialValues(value) { return builder(kind, { ...values, initial: value }); },
+    withTargetValues(value) { return builder(kind, { ...values, target: value }); } });
+  const animated = { FadeIn: builder('FadeIn'), FadeOut: builder('FadeOut'),
+    FadeInDown: builder('FadeInDown'), FadeOutDown: builder('FadeOutDown'), FadeOutUp: builder('FadeOutUp'),
+    default: { View: 'AnimatedView' }, cancelAnimation() {}, ReduceMotion: { System: 'system', Never: 'never' },
     useSharedValue: (initial) => { const value = React.useRef(initial); return React.useMemo(() => ({ get: () => value.current, set: (next) => { value.current = next; } }), []); },
     useAnimatedStyle: (fn) => fn(), withTiming: (value, config) => { animations.push({ value, ...config }); return value; }, withRepeat: (value) => value,
-    withSequence: (...values) => values.at(-1), withDelay: (_duration, value) => value };
+    withSequence: (...values) => values.at(-1), withDelay: (duration, value) => { delays.push(duration); return value; } };
   const kv = new Map();
   const overrides = {
     'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => insets },
@@ -77,7 +85,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
   const fakeMapConfig = {};
   const boundaries = { schedule() {}, call() {}, safety() {}, ...boundaryOverrides };
   const client = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
-  return { projection, animations, mounted, client, kv, load, back: () => back?.(), async render(gateway) {
+  return { projection, animations, delays, mounted, client, kv, load, back: () => back?.(), async render(gateway) {
     let tree;
     await renderer.act(async () => { tree = renderer.create(React.createElement(query.QueryClientProvider, { client },
       React.createElement(Screen, { gateway, mapConfig: fakeMapConfig, boundaries })), { createNodeMock(element) {

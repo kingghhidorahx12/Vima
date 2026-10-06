@@ -17,6 +17,37 @@ const id = (tree: ReactTestRenderer, testID: string) => tree.root.find(n => type
 const hasNav = (tree: ReactTestRenderer) => tree.root.findAll(n => typeof n.type === 'string' && n.props.testID === 'passenger-bottom-navigation').length === 1;
 const style = (node: ReactTestInstance) => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean));
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+
+test('Motion 1.1 press and keyed short entries use approved values without spatial Reduced Motion', async () => {
+  for (const reduced of [false, true]) {
+    const h = createHarness({}, { reduced });
+    const { VimaButton } = h.load('src/design/components/VimaButton.tsx');
+    const { ElementEntrance } = h.load('src/motion/ElementEntrance.tsx');
+    let button: ReactTestRenderer;
+    await act(async () => { button = create(React.createElement(VimaButton, { label: 'Probar', onPress() {} })); });
+    try {
+      const pressable = button!.root.findByType('Pressable' as never);
+      const before = h.animations.length;
+      await act(async () => pressable.props.onPressIn());
+      assert.equal(h.animations.length - before, reduced ? 0 : 1);
+      if (!reduced) assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [0.98, 120]);
+      await act(async () => pressable.props.onPressOut());
+      if (!reduced) assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [1, 120]);
+    } finally { await act(async () => button!.unmount()); }
+    let entry: ReactTestRenderer;
+    await act(async () => { entry = create(React.createElement(ElementEntrance, { staggerIndex: 4 }, React.createElement('View'))); });
+    try {
+      assert.equal(h.delays.at(-1), reduced ? undefined : 96);
+      const count = h.delays.length;
+      await act(async () => entry!.update(React.createElement(ElementEntrance, { staggerIndex: 0 }, React.createElement('View'))));
+      assert.equal(h.delays.length, count); // Same keyed unit never restaggers on re-render.
+      assert.equal(h.animations.at(-1).duration, 160);
+    } finally { await act(async () => entry!.unmount()); }
+    await act(async () => { entry = create(React.createElement(ElementEntrance, { staggerIndex: 5 }, React.createElement('View'))); });
+    assert.equal(h.delays.length, reduced ? 0 : 1); // The sixth result has no delayed entrance.
+    await act(async () => entry!.unmount());
+  }
+});
 async function press(tree: ReactTestRenderer, label: string) {
   const node = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label && n.props.onPress);
   assert.ok(node, label); assert.ok(!node.props.disabled);
@@ -90,6 +121,12 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       const searchStyle = Object.assign({}, ...search.props.style({ pressed: false }).filter(Boolean));
       assert.equal(searchStyle.height, 58); assert.equal(searchStyle.borderRadius, 24);
       assert.equal(searchStyle.marginHorizontal, 20);
+      const panelHeader = tree.root.findAllByType('View' as never).find(n =>
+        style(n).borderTopLeftRadius === 28 && style(n).backgroundColor === '#FFFFFF');
+      assert.ok(panelHeader);
+      assert.equal(style(panelHeader!).boxShadow, undefined);
+      assert.equal(style(id(tree, 'passenger-sheet-viewport')).boxShadow, undefined);
+      assert.equal(style(id(tree, 'passenger-sheet-content')).gap, 8);
       const homeText = (label: string) => tree.root.findAll(n => String(n.type) === 'Text' && n.props.children === label)[0]!;
       for (const label of ['¿A dónde vamos?', 'Lugares guardados', 'Viajes recientes']) {
         assert.equal(style(homeText(label)).fontSize, 16);
@@ -138,6 +175,56 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       assert.ok(tabs.slice(1).every(n => n.props.onPress === undefined));
       assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
     } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+  }
+});
+
+test('Layers opens between the fixed compass and its own button with a compact anchor gap', async () => {
+  for (const reduced of [false, true]) {
+  const h = createHarness({}, { reduced });
+  const { MapControls } = h.load('src/features/passenger/MapControls.tsx');
+  let tree: ReactTestRenderer;
+  await act(async () => { tree = create(React.createElement(MapControls, {
+    available: true, layers: { traffic: false, incidents: false }, open: true,
+    onOpen() {}, onToggle() {}, compass: React.createElement('View', { testID: 'compass-marker' }),
+  })); });
+  try {
+    const nodes = tree!.root.findAll(n => typeof n.type === 'string');
+    const compass = nodes.findIndex(n => n.props.testID === 'compass-marker');
+    const menu = nodes.findIndex(n => n.props.testID === 'passenger-layers-menu');
+    const layers = nodes.findIndex(n => n.props.accessibilityLabel === 'Capas del mapa');
+    assert.ok(compass >= 0 && compass < menu && menu < layers);
+    assert.equal(style(nodes[menu]!).minWidth, 192);
+    assert.equal(style(tree!.root.findByType('AnimatedView' as never)).gap, 8);
+    assert.equal(nodes[menu]!.props.entering.kind, reduced ? 'FadeIn' : 'FadeInDown');
+    assert.equal(nodes[menu]!.props.exiting.kind, reduced ? 'FadeOut' : 'FadeOutUp');
+    assert.equal(nodes[menu]!.props.entering.durationMs, 300);
+    assert.equal(nodes[menu]!.props.exiting.durationMs, 240);
+    if (!reduced) assert.deepEqual(nodes[menu]!.props.entering.initial.transform, [{ translateY: 6 }]);
+    const incident = nodes.find(n => n.props.children === 'Incidentes');
+    assert.equal(incident?.props.numberOfLines, 1);
+  } finally { await act(async () => tree!.unmount()); }
+  }
+});
+
+test('bottom navigation uses 240 ms short travel or fade-only by motion policy and keeps unavailable tabs disabled', async () => {
+  for (const reduced of [false, true]) {
+    const h = createHarness({}, { reduced });
+    const { PassengerBottomNavigation } = h.load('src/features/passenger/PassengerBottomNavigation.tsx');
+    let tree: ReactTestRenderer;
+    await act(async () => { tree = create(React.createElement(PassengerBottomNavigation,
+      { visible: true, bottomInset: 16, onHome() {} })); });
+    try {
+      const nav = id(tree!, 'passenger-bottom-navigation');
+      assert.equal(nav.props.entering.kind, reduced ? 'FadeIn' : 'FadeInDown');
+      assert.equal(nav.props.exiting.kind, reduced ? 'FadeOut' : 'FadeOutDown');
+      assert.equal(nav.props.entering.durationMs, 240);
+      assert.equal(nav.props.exiting.durationMs, 240);
+      if (!reduced) assert.deepEqual(nav.props.entering.initial.transform, [{ translateY: 6 }]);
+      for (const label of ['Viajes', 'Pagos', 'Perfil']) {
+        const tab = tree!.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label)!;
+        assert.equal(tab.props.disabled, true); assert.equal(tab.props.onPress, undefined);
+      }
+    } finally { await act(async () => tree!.unmount()); }
   }
 });
 
@@ -299,7 +386,7 @@ test('confirmation title floats over the persistent map with approved geometry a
       assert.equal(id(tree, 'passenger-top-chrome').findAll(n => n.props.children === 'Confirma tu viaje').length, 0);
       assert.equal(style(surface).flex, homeSurface.flex);
       assert.equal(style(surface).height, homeSurface.height);
-      assert.equal(surface.findAll(n => n.props.testID === 'passenger-confirmation-pill').length, 1);
+      assert.equal(surface.findAll(n => typeof n.type === 'string' && n.props.testID === 'passenger-confirmation-pill').length, 1);
       assert.equal(hasNav(tree), false);
       assert.equal(style(id(tree, 'passenger-sheet-content')).paddingBottom, 54);
       assert.equal(host(tree, 'PassengerMapContent').props.topOcclusion, top + 72);

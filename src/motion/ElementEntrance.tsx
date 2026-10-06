@@ -1,16 +1,32 @@
-import { useEffect, type PropsWithChildren } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { useEffect, useState, type PropsWithChildren } from 'react';
+import type { StyleProp, ViewProps, ViewStyle } from 'react-native';
+import Animated, { cancelAnimation, FadeOut, FadeOutUp, ReduceMotion, useAnimatedStyle, useSharedValue, withDelay } from 'react-native-reanimated';
 import { useMotionPolicy } from './ReducedMotion';
-import { fadeTo } from './helpers';
-import { motionTimings } from './timing';
+import { fadeTo, type ApprovedTiming } from './helpers';
+import { motionDistances, motionTimings } from './timing';
+import { motionTokens } from './tokens';
 
-/** Immediate, interruptible entry. No stagger delays and no interaction blocking. */
-export function ElementEntrance({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
+/** Animate only the mounted unit; keyed list rows never restart on ordinary renders. */
+const exitFade = FadeOut.duration(motionTimings.state.duration).easing(motionTimings.state.easing).reduceMotion(ReduceMotion.Never);
+const exitMove = FadeOutUp.duration(motionTimings.state.duration).easing(motionTimings.state.easing)
+  .withTargetValues({ transform: [{ translateY: -motionDistances.shortEnterY }] })
+  .reduceMotion(ReduceMotion.Never);
+
+export function ElementEntrance({ children, style, staggerIndex, timing = motionTimings.shortEnter, exit = false,
+  pointerEvents, testID }: PropsWithChildren<{
+  style?: StyleProp<ViewStyle>; staggerIndex?: number; timing?: ApprovedTiming; exit?: boolean;
+  pointerEvents?: ViewProps['pointerEvents']; testID?: string;
+}>) {
   const { reducedMotion } = useMotionPolicy();
   const progress = useSharedValue(0);
-  useEffect(() => { progress.set(fadeTo(1, reducedMotion ? motionTimings.focus : motionTimings.navigation));
-    return () => cancelAnimation(progress); }, [progress, reducedMotion]);
-  const motion = useAnimatedStyle(() => ({ opacity: progress.get(), transform: [{ translateY: reducedMotion ? 0 : (1 - progress.get()) * 4 }] }));
-  return <Animated.View style={[style, motion]}>{children}</Animated.View>;
+  const [delay] = useState(() => staggerIndex !== undefined && staggerIndex >= 0 && staggerIndex < 5
+    ? staggerIndex * motionTokens.staggerMs : 0);
+  useEffect(() => {
+    progress.set(reducedMotion || !delay ? fadeTo(1, timing) : withDelay(delay, fadeTo(1, timing)));
+    return () => cancelAnimation(progress);
+  }, [delay, progress, reducedMotion, timing]);
+  const motion = useAnimatedStyle(() => ({ opacity: progress.get(),
+    transform: [{ translateY: reducedMotion ? 0 : (1 - progress.get()) * motionDistances.shortEnterY }] }));
+  return <Animated.View testID={testID} pointerEvents={pointerEvents}
+    exiting={exit ? reducedMotion ? exitFade : exitMove : undefined} style={[style, motion]}>{children}</Animated.View>;
 }

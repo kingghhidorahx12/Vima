@@ -35,6 +35,7 @@ import { locationCtaHeight, mapControlSize } from './mapCameraFootprint';
 import { useLocationVisibility } from '../../map/useLocationVisibility';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { ElementEntrance } from '../../motion/ElementEntrance';
+import { usePressFeedback } from '../../motion/usePressFeedback';
 import { PlaceThumbnail } from './PlaceThumbnail';
 import { mapPersonality } from '../../motion/mapPersonality';
 import { IncidentCard } from './IncidentCard';
@@ -77,6 +78,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [visibleSheetMeasure, setVisibleSheetMeasure] = useState<{ key: string; height: number }>();
   const nativeMap = useRef<VimaMapRef>(null);
   const { reducedMotion } = useMotionPolicy();
+  const homeSearchPress = usePressFeedback();
+  const errorPress = usePressFeedback();
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const [mapUserControlled, setMapUserControlled] = useState(false);
@@ -215,12 +218,13 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
   const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
-    {homeFloatingSearch ? <><Pressable testID="passenger-home-floating-search"
+    {homeFloatingSearch ? <><Animated.View style={homeSearchPress.style}><Pressable testID="passenger-home-floating-search"
+      onPressIn={homeSearchPress.onPressIn} onPressOut={homeSearchPress.onPressOut}
       onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
       style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed]}>
       <VimaGlyph name="search" color={t.colors.graphite} />
       <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
-    </Pressable><View style={styles.homeSearchGap} /></> : null}
+    </Pressable></Animated.View><View style={styles.homeSearchGap} /></> : null}
     <View style={[styles.sheetHeader, homeFloatingSearch && styles.homePanelHeader]}>
       <View style={styles.handle} />
       {sheetTitle ? <VimaText variant={flow.phase === 'home' || assignment ? 'h3' : 'bodyMedium'} style={[styles.center, !!assignment && styles.eta]}
@@ -295,15 +299,20 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const content = <Animated.View key={measureKey} testID="passenger-sheet-viewport"
     style={[styles.fill, homeFloatingSearch && styles.homePanelContent, animatedContent]}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setViewportMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
-    {flow.connection !== 'online' ? <StatusNotice>Sin conexión · Intentando reconectar</StatusNotice> : null}
-    {flow.quoteExpired ? <StatusNotice>La cotización venció. Revisa y confirma la nueva cotización.</StatusNotice> : null}
-    {flow.error ? <Pressable onPress={flow.retry} accessibilityRole="button" accessibilityLabel={flow.error.message}>
+    {flow.connection !== 'online' ? <ElementEntrance timing={motionTimings.state}>
+      <StatusNotice>Sin conexión · Intentando reconectar</StatusNotice></ElementEntrance> : null}
+    {flow.quoteExpired ? <ElementEntrance timing={motionTimings.state}>
+      <StatusNotice>La cotización venció. Revisa y confirma la nueva cotización.</StatusNotice></ElementEntrance> : null}
+    {flow.error ? <ElementEntrance timing={motionTimings.success}><Animated.View style={errorPress.style}><Pressable
+      onPressIn={errorPress.onPressIn} onPressOut={errorPress.onPressOut}
+      onPress={flow.retry} accessibilityRole="button" accessibilityLabel={flow.error.message}>
       <StatusNotice retry>{flow.error.message}</StatusNotice>
-    </Pressable> : null}
+    </Pressable></Animated.View></ElementEntrance> : null}
     <ScrollView ref={scroll} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets
       onTouchStart={() => { dismissKeyboard(); setIncident(null); }} onScrollBeginDrag={dismissKeyboard}
       onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
-      <View testID="passenger-sheet-content" style={[styles.content, !navVisible && { paddingBottom: base + bottomInset }]}
+      <View testID="passenger-sheet-content" style={[styles.content, homeFloatingSearch && styles.homeContent,
+        !navVisible && { paddingBottom: base + bottomInset }]}
         onLayout={(event) => { if (currentMeasureKey.current === measureKey) setContentMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
       {flow.field && pickingMap ? <>
         <VimaText variant="bodySmall" style={styles.center}>Toca el mapa para elegir la ubicación</VimaText>
@@ -337,7 +346,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             style={styles.searchInput} placeholderTextColor={t.colors.gray} />
           {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</View>
         {flow.search.trim() ? <>
-          {flow.places.map((place) => <PlaceRow key={place.id} place={place} resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}
+          {flow.places.map((place, index) => <PlaceRow key={place.id} place={place} staggerIndex={index} exit
+            resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}
           {flow.loadingPlaces && !flow.places.length ? <View accessible accessibilityLabel="Buscando lugares" style={styles.searchSkeleton}>
             <View style={styles.skeletonLine} /><View style={styles.skeletonLineShort} />
           </View> : null}
@@ -443,7 +453,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <VimaButton label="Solicitar viaje" onPress={() => { void flow.submit(); }} haptic="requestRide"
           loading={flow.phase === 'requesting'} disabled={!flow.canSubmit} />
       </> : assignment ? <>
-        <ElementEntrance style={styles.driverCard}>
+        <View style={styles.driverCard}>
           <View style={styles.row}>
             <View style={styles.avatar}><VimaGlyph name="profile" color={t.colors.greenDark} /></View>
             <View style={styles.fill}><VimaText variant="bodyMedium">{assignment.driver.name}</VimaText>
@@ -459,7 +469,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
               <VimaText variant="bodySmall" style={styles.muted}>{assignment.vehicle.color}</VimaText>
               <VimaText variant="h3" selectable>{assignment.vehicle.plate}</VimaText></View>
           </View>
-        </ElementEntrance>
+        </View>
         <View style={styles.row}><VimaButton style={styles.fill} secondary communication icon="phone" label="Llamar" onPress={() => boundaries.call(assignment)} disabled={blocked} />
           <VimaButton style={styles.fill} secondary icon="shield" label="Seguridad" onPress={() => boundaries.safety(assignment)} /></View>
         <TextAction danger label="Cancelar viaje" onPress={() => { void flow.act('cancel'); }} disabled={blocked} />
@@ -468,11 +478,13 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
           <SearchPulse visible={focused && pulseVisible} expanded={flow.phase === 'expanding'} />
         </View>
-        <VimaText variant="h3" style={styles.matchingTitle}>{flow.phase === 'prolonged'
-          ? 'Aún buscamos un conductor' : 'Buscando un conductor\ncerca de ti...'}</VimaText>
-        <VimaText variant="bodySmall" style={[styles.center, styles.muted]}>{flow.phase === 'prolonged'
-          ? 'Puede tomar unos minutos más.\nPuedes editar, programar o cancelar.' : flow.phase === 'expanding'
-            ? 'Puede tomar unos minutos más.' : 'Te conectaremos con el conductor más cercano disponible.'}</VimaText>
+        <ElementEntrance key={`matching-copy:${flow.phase}`} timing={motionTimings.state} style={styles.matchingCopy}>
+          <VimaText variant="h3" style={styles.matchingTitle}>{flow.phase === 'prolonged'
+            ? 'Aún buscamos un conductor' : 'Buscando un conductor\ncerca de ti...'}</VimaText>
+          <VimaText variant="bodySmall" style={[styles.center, styles.muted]}>{flow.phase === 'prolonged'
+            ? 'Puede tomar unos minutos más.\nPuedes editar, programar o cancelar.' : flow.phase === 'expanding'
+              ? 'Puede tomar unos minutos más.' : 'Te conectaremos con el conductor más cercano disponible.'}</VimaText>
+        </ElementEntrance>
         {flow.phase === 'prolonged' ? <>
           <MatchingProgress />
           <View style={styles.matchingActions}>
@@ -539,10 +551,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           </VimaText> : null}
         </>}
       </View>
-      {confirmationPillVisible ? <View testID="passenger-confirmation-pill" pointerEvents="none"
+      {confirmationPillVisible ? <ElementEntrance testID="passenger-confirmation-pill" pointerEvents="none"
         style={[styles.confirmationPill, { top: topFrameShift + confirmationPillTop }]}>
         <VimaText variant="bodyMedium" numberOfLines={1} accessibilityRole="header" style={styles.confirmationPillText}>Confirma tu viaje</VimaText>
-      </View> : null}
+      </ElementEntrance> : null}
       {mapReady && controlsFit ? <View pointerEvents="box-none"
         testID="passenger-map-controls"
         style={[styles.mapControls, { bottom: homeFloatingSearch
@@ -586,7 +598,9 @@ function MatchingProgress() {
   </View>;
 }
 function OriginField({ place, status, onPress }: { place: Place | null; status: OriginStatus; onPress: () => void }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={onPress}
+  const feedback = usePressFeedback();
+  return <Animated.View style={feedback.style}><Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={onPress}
+    onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
     style={({ pressed }) => [styles.originField, pressed && surfaces.pressed]}>
     <View style={styles.originDot} />
     <View style={styles.fill}>
@@ -596,26 +610,31 @@ function OriginField({ place, status, onPress }: { place: Place | null; status: 
       {place?.address ? <VimaText variant="caption" style={styles.muted} numberOfLines={1}>{place.address}</VimaText> : null}
     </View>
     <VimaGlyph name="chevron" />
-  </Pressable>;
+  </Pressable></Animated.View>;
 }
 function AddressField({ label, place, color, onPress, disabled }: { label: string; place?: Place | null; color: string; onPress?: () => void; disabled?: boolean }) {
-  return <Pressable onPress={onPress} disabled={disabled} accessibilityRole={onPress ? 'button' : 'text'} accessibilityLabel={`${label} ${place?.name ?? ''}`}
+  const feedback = usePressFeedback();
+  return <Animated.View style={feedback.style}><Pressable onPress={onPress} disabled={disabled} accessibilityRole={onPress ? 'button' : 'text'} accessibilityLabel={`${label} ${place?.name ?? ''}`}
+    onPressIn={onPress && !disabled ? feedback.onPressIn : undefined} onPressOut={onPress && !disabled ? feedback.onPressOut : undefined}
     style={({ pressed }) => [styles.address, pressed && !disabled && surfaces.pressed]}>
     <SmallPin color={color} />
     <View style={styles.fill}><VimaText variant="caption" style={styles.addressLabel}>{label}</VimaText>
       <VimaText variant="bodySmall" style={!place && styles.muted} numberOfLines={1}>{place?.name ?? label}</VimaText>
       {place ? <VimaText variant="caption" style={styles.muted} numberOfLines={1}>{place.address}</VimaText> : null}</View>
-  </Pressable>;
+  </Pressable></Animated.View>;
 }
-function PlaceRow({ place, onPress, resolveMedia, rich = false }: { place: PlaceSuggestion; onPress: () => void;
-  resolveMedia?: PassengerGateway['resolvePlaceMedia']; rich?: boolean }) {
-  return <ElementEntrance><Pressable accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress}
+function PlaceRow({ place, onPress, resolveMedia, rich = false, staggerIndex, exit = false }: { place: PlaceSuggestion; onPress: () => void;
+  resolveMedia?: PassengerGateway['resolvePlaceMedia']; rich?: boolean; staggerIndex?: number; exit?: boolean }) {
+  const feedback = usePressFeedback();
+  return <ElementEntrance staggerIndex={staggerIndex} exit={exit}><Animated.View style={feedback.style}><Pressable
+    accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress}
+    onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
     style={({ pressed }) => [styles.recent, rich && styles.richRecent, pressed && surfaces.pressed]}>
     <PlaceThumbnail place={place} resolveMedia={resolveMedia} size={rich ? 64 : 48} />
     <View style={styles.fill}><VimaText variant="bodyMedium">{place.name}</VimaText>
       <VimaText variant="bodySmall" style={styles.muted} numberOfLines={rich ? 2 : 1}>{place.address}</VimaText></View>
     <VimaGlyph name="chevron" color={t.colors.gray} />
-  </Pressable></ElementEntrance>;
+  </Pressable></Animated.View></ElementEntrance>;
 }
 function SavedSlotEntry({ label, place, onChange, onRemove }: { label: string; place: Place | null;
   onChange: () => void; onRemove: () => void }) {
@@ -627,19 +646,25 @@ function SavedSlotEntry({ label, place, onChange, onRemove }: { label: string; p
   </View>;
 }
 function QuickPlace({ label, icon, onPress }: { label: string; icon: VimaGlyphName; onPress?: () => void }) {
+  const feedback = usePressFeedback();
   const content = <><VimaGlyph name={icon} color={t.colors.graphite} size={20} /><VimaText variant="caption" numberOfLines={1}>{label}</VimaText></>;
-  return <ElementEntrance style={styles.fill}>{onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
-    style={({ pressed }) => [styles.quickPlace, pressed && surfaces.pressed]}>{content}</Pressable>
+  return <ElementEntrance style={styles.fill}>{onPress ? <Animated.View style={[styles.fill, feedback.style]}><Pressable
+    accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
+    onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
+    style={({ pressed }) => [styles.quickPlace, pressed && surfaces.pressed]}>{content}</Pressable></Animated.View>
     : <View accessible accessibilityLabel={label} style={styles.quickPlace}>{content}</View>}</ElementEntrance>;
 }
 function Metric({ icon, value, label, emphasis = false }: { icon: VimaGlyphName; value: string; label: string; emphasis?: boolean }) {
-  return <View style={[styles.metric, emphasis && styles.metricEmphasis]}><VimaGlyph name={icon} color={emphasis ? t.colors.greenDark : t.colors.graphite} /><VimaText variant="bodyMedium" style={[styles.center, emphasis && styles.priceValue]}>{value}</VimaText>
+  return <View style={[styles.metric, emphasis && styles.metricEmphasis]}><VimaGlyph name={icon} color={emphasis ? t.colors.greenDark : t.colors.graphite} />
+    <ElementEntrance key={value} timing={motionTimings.state}><VimaText variant="bodyMedium" style={[styles.center, emphasis && styles.priceValue]}>{value}</VimaText></ElementEntrance>
     <VimaText variant="caption" style={styles.muted}>{label}</VimaText></View>;
 }
 function TextAction({ label, onPress, disabled, danger = false }: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
-  return <Pressable disabled={disabled} accessibilityRole="button" accessibilityState={{ disabled }}
+  const feedback = usePressFeedback();
+  return <Animated.View style={feedback.style}><Pressable disabled={disabled} accessibilityRole="button" accessibilityState={{ disabled }}
+    onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
     onPress={() => { void semanticHaptics('buttonChip'); onPress(); }} style={({ pressed }) => [styles.textAction, pressed && !disabled && surfaces.pressed]}>
-    <VimaText variant="bodySmall" style={[styles.center, styles.link, danger && styles.dangerText, disabled && styles.muted]}>{label}</VimaText></Pressable>;
+    <VimaText variant="bodySmall" style={[styles.center, styles.link, danger && styles.dangerText, disabled && styles.muted]}>{label}</VimaText></Pressable></Animated.View>;
 }
 
 const [xs, sm, md, lg, base] = t.spacing.scalePx as [number, number, number, number, number];
@@ -668,12 +693,13 @@ const styles = StyleSheet.create({
   sheet: { overflow: 'hidden' },
   homeSheet: { overflow: 'visible', backgroundColor: 'transparent', borderWidth: 0, boxShadow: [] },
   homePanelHeader: { backgroundColor: t.colors.white, borderTopLeftRadius: t.radii.sheetPx,
-    borderTopRightRadius: t.radii.sheetPx, ...elevationStyle('level2', t.colors.carbon) },
-  homePanelContent: { backgroundColor: t.colors.white, ...elevationStyle('level2', t.colors.carbon) },
+    borderTopRightRadius: t.radii.sheetPx, paddingBottom: sm },
+  homePanelContent: { backgroundColor: t.colors.white },
   homeSearchGap: { height: homeSearchGap },
   sheetHeader: { paddingHorizontal: base, alignItems: 'center', paddingTop: sm, paddingBottom: md, gap: sm },
   handle: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[0], borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   content: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingBottom: base, gap: md },
+  homeContent: { gap: sm },
   originField: { ...surfaces.field, minHeight: t.components.inputPrimary.heightPx, flexDirection: 'row', alignItems: 'center', gap: md,
     paddingHorizontal: md, paddingVertical: sm, ...elevationStyle('level1', t.colors.carbon) },
   originDot: { width: sm, height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.green },
@@ -724,6 +750,7 @@ const styles = StyleSheet.create({
   skeletonLine: { width: '62%', height: sm, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   skeletonLineShort: { width: '40%', height: xs, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight },
   matchingActions: { flexDirection: 'row', alignItems: 'center', gap: sm },
+  matchingCopy: { gap: md },
   matchingTitle: { textAlign: 'center', alignSelf: 'center', maxWidth: '88%' },
   progress: { height: t.components.iconSizesPx[1], flexDirection: 'row', alignItems: 'center', marginVertical: sm },
   progressActive: { flex: 1, height: t.borders.standardWidthPx * 2, backgroundColor: t.colors.greenDark },
