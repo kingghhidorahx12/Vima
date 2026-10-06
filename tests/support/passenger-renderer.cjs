@@ -10,13 +10,18 @@ const query = require('@tanstack/react-query');
 function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top: 24, bottom: 16, left: 0, right: 0 } } = {}) {
   const animations = [];
   const delays = [];
+  const repeats = [];
+  const cancellations = [];
+  const appStateListeners = new Set();
   const projection = { point: [190, 120], project: undefined };
   const modules = new Map();
   const mounted = { map: 0, unmountedMap: 0, sheet: 0, haptics: [], keyboardDismiss: 0, blur: 0, inputFocused: false };
   const root = path.resolve(__dirname, '../..');
   const native = Object.fromEntries(['View', 'Text', 'Pressable', 'ScrollView', 'TextInput', 'Image', 'ActivityIndicator'].map((name) => [name, name]));
   native.StyleSheet = { create: (styles) => styles, absoluteFill: { position: 'absolute' } };
-  native.AppState = { currentState: 'active', addEventListener: () => ({ remove() {} }) };
+  native.AppState = { currentState: 'active', addEventListener: (_event, listener) => {
+    appStateListeners.add(listener); return { remove() { appStateListeners.delete(listener); } };
+  } };
   let back;
   native.BackHandler = { addEventListener: (_event, fn) => { back = fn; return { remove() { back = undefined; } }; } };
   native.Keyboard = { dismiss() { mounted.keyboardDismiss++; mounted.inputFocused = false; } };
@@ -28,9 +33,10 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     withTargetValues(value) { return builder(kind, { ...values, target: value }); } });
   const animated = { FadeIn: builder('FadeIn'), FadeOut: builder('FadeOut'),
     FadeInDown: builder('FadeInDown'), FadeOutDown: builder('FadeOutDown'), FadeOutUp: builder('FadeOutUp'),
-    default: { View: 'AnimatedView' }, cancelAnimation() {}, ReduceMotion: { System: 'system', Never: 'never' },
+    default: { View: 'AnimatedView' }, cancelAnimation(value) { cancellations.push(value); }, ReduceMotion: { System: 'system', Never: 'never' },
     useSharedValue: (initial) => { const value = React.useRef(initial); return React.useMemo(() => ({ get: () => value.current, set: (next) => { value.current = next; } }), []); },
-    useAnimatedStyle: (fn) => fn(), withTiming: (value, config) => { animations.push({ value, ...config }); return value; }, withRepeat: (value) => value,
+    useAnimatedStyle: (fn) => fn(), withTiming: (value, config) => { animations.push({ value, ...config }); return value; },
+    withRepeat: (value, count) => { repeats.push({ value, count }); return value; },
     withSequence: (...values) => values.at(-1), withDelay: (duration, value) => { delays.push(duration); return value; } };
   const kv = new Map();
   const overrides = {
@@ -85,7 +91,9 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
   const fakeMapConfig = {};
   const boundaries = { schedule() {}, call() {}, safety() {}, ...boundaryOverrides };
   const client = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
-  return { projection, animations, delays, mounted, client, kv, load, back: () => back?.(), async render(gateway) {
+  return { projection, animations, delays, repeats, cancellations, mounted, client, kv, load,
+    setAppState(state) { native.AppState.currentState = state; for (const listener of appStateListeners) listener(state); },
+    back: () => back?.(), async render(gateway) {
     let tree;
     await renderer.act(async () => { tree = renderer.create(React.createElement(query.QueryClientProvider, { client },
       React.createElement(Screen, { gateway, mapConfig: fakeMapConfig, boundaries })), { createNodeMock(element) {

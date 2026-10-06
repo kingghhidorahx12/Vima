@@ -16,7 +16,7 @@ import { passengerSurfaces as surfaces, surfaceColors } from '../../design/prese
 import { elevationStyle } from '../../design/themes/light';
 import { semanticHaptics } from '../../motion/haptics';
 import { fadeTo } from '../../motion/helpers';
-import { SearchPulse } from '../../motion/SearchPulse';
+import { SearchInputGlow, SearchPulse, useSearchCycle } from '../../motion/SearchPulse';
 import { VimaLaunchSurface } from '../../motion/VimaLaunchSurface';
 import { motionTimings } from '../../motion/timing';
 import { PassengerMap, type PassengerMapConfig } from './PassengerMap';
@@ -132,6 +132,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     confirmationPillVisible ? confirmationPillTop + confirmationPillHeight : 0) + 12;
   const sheetFrameHeight = Math.max(0, height - topFrameShift);
   const homeFloatingSearch = homeNormal && homePanel === 'home' && !reviewing;
+  // Home, a live Search field and matching are mutually exclusive. One clock
+  // follows the active surface and stops when none is visible.
+  const searchCycle = useSearchCycle(focused && (homeFloatingSearch ||
+    !!flow.field && searchAction === 'results' || matching && pulseVisible));
   const homeRecentLimit = 3;
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
@@ -218,7 +222,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
   const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
-    {homeFloatingSearch ? <><Animated.View style={homeSearchPress.style}><Pressable testID="passenger-home-floating-search"
+    {homeFloatingSearch ? <><Animated.View style={homeSearchPress.style}>
+      <SearchInputGlow cycle={searchCycle} home /><Pressable testID="passenger-home-floating-search"
       onPressIn={homeSearchPress.onPressIn} onPressOut={homeSearchPress.onPressOut}
       onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
       style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed]}>
@@ -340,14 +345,17 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           setSearchAction('contribute-map');
         }} />
       </> : flow.field ? <>
-        <View style={[styles.searchField, searchFocused && styles.searchFocused]}><SmallPin color={t.colors.red} />
+        <View style={styles.searchFieldFrame}><SearchInputGlow cycle={searchCycle} focused={searchFocused} />
+        <View testID="passenger-search-field" style={[styles.searchField, searchFocused && styles.searchFocused]}><SmallPin color={t.colors.red} />
           <TextInput ref={input} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección" value={flow.search}
             onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }} returnKeyType="search"
             style={styles.searchInput} placeholderTextColor={t.colors.gray} />
-          {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</View>
+          {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</View></View>
         {flow.search.trim() ? <>
-          {flow.places.map((place, index) => <PlaceRow key={place.id} place={place} staggerIndex={index} exit
-            resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}
+          {flow.places.length ? <View testID="passenger-search-results" style={styles.searchResults}>
+            {flow.places.map((place, index) => <PlaceRow key={place.id} place={place} presentation="list"
+              staggerIndex={index} exit resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}
+          </View> : null}
           {flow.loadingPlaces && !flow.places.length ? <View accessible accessibilityLabel="Buscando lugares" style={styles.searchSkeleton}>
             <View style={styles.skeletonLine} /><View style={styles.skeletonLineShort} />
           </View> : null}
@@ -476,7 +484,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       </> : matching ? <>
         <View onLayout={(event) => { pulseHeight.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height;
           setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
-          <SearchPulse visible={focused && pulseVisible} expanded={flow.phase === 'expanding'} />
+          <SearchPulse visible={focused && pulseVisible} expanded={flow.phase === 'expanding'} cycle={searchCycle} />
         </View>
         <ElementEntrance key={`matching-copy:${flow.phase}`} timing={motionTimings.state} style={styles.matchingCopy}>
           <VimaText variant="h3" style={styles.matchingTitle}>{flow.phase === 'prolonged'
@@ -623,13 +631,14 @@ function AddressField({ label, place, color, onPress, disabled }: { label: strin
       {place ? <VimaText variant="caption" style={styles.muted} numberOfLines={1}>{place.address}</VimaText> : null}</View>
   </Pressable></Animated.View>;
 }
-function PlaceRow({ place, onPress, resolveMedia, rich = false, staggerIndex, exit = false }: { place: PlaceSuggestion; onPress: () => void;
-  resolveMedia?: PassengerGateway['resolvePlaceMedia']; rich?: boolean; staggerIndex?: number; exit?: boolean }) {
+function PlaceRow({ place, onPress, resolveMedia, rich = false, presentation = 'card', staggerIndex, exit = false }: { place: PlaceSuggestion; onPress: () => void;
+  resolveMedia?: PassengerGateway['resolvePlaceMedia']; rich?: boolean; presentation?: 'card' | 'list'; staggerIndex?: number; exit?: boolean }) {
   const feedback = usePressFeedback();
   return <ElementEntrance staggerIndex={staggerIndex} exit={exit}><Animated.View style={feedback.style}><Pressable
     accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress}
     onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
-    style={({ pressed }) => [styles.recent, rich && styles.richRecent, pressed && surfaces.pressed]}>
+    style={({ pressed }) => [presentation === 'list' ? styles.listRow : styles.recent, rich && styles.richRecent,
+      pressed && (presentation === 'list' ? styles.listRowPressed : surfaces.pressed)]}>
     <PlaceThumbnail place={place} resolveMedia={resolveMedia} size={rich ? 64 : 48} />
     <View style={styles.fill}><VimaText variant="bodyMedium">{place.name}</VimaText>
       <VimaText variant="bodySmall" style={styles.muted} numberOfLines={rich ? 2 : 1}>{place.address}</VimaText></View>
@@ -717,6 +726,11 @@ const styles = StyleSheet.create({
   recentHeader: { flexDirection: 'row', alignItems: 'center', marginTop: xs },
   recent: { ...surfaces.card, minHeight: t.components.buttonPrimary.heightPx + sm, flexDirection: 'row', alignItems: 'center', gap: md,
     paddingVertical: sm, paddingHorizontal: md, ...elevationStyle('level1', t.colors.carbon) },
+  searchResults: { gap: 0 },
+  listRow: { minHeight: 56, backgroundColor: t.colors.white, borderBottomWidth: t.borders.standardWidthPx,
+    borderBottomColor: surfaceColors.border, borderRadius: t.radii.smallPx, flexDirection: 'row', alignItems: 'center',
+    gap: sm, paddingHorizontal: sm, paddingVertical: xs },
+  listRowPressed: { backgroundColor: surfaceColors.brandWash },
   richRecent: { minHeight: 72, paddingVertical: xs },
   recentIcon: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[7], alignItems: 'center', justifyContent: 'center',
     borderRadius: t.radii.smallPx, backgroundColor: t.colors.background },
@@ -738,7 +752,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: md, paddingVertical: sm, borderRadius: t.radii.fieldPx, backgroundColor: t.colors.background,
     ...elevationStyle('level1', t.colors.carbon) },
   paymentIcon: { width: 32, height: 32, borderRadius: t.radii.smallPx, backgroundColor: t.colors.white, alignItems: 'center', justifyContent: 'center' },
-  searchFocused: surfaces.focus,
+  searchFocused: { borderColor: t.colors.green },
+  searchFieldFrame: { position: 'relative' },
   searchField: { ...surfaces.card, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.pillPx,
     paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm, ...elevationStyle('level1', t.colors.carbon) },
   searchInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, height: t.components.inputPrimary.heightPx, color: t.colors.carbon },

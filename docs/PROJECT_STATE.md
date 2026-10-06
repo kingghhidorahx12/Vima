@@ -1,9 +1,32 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-motion-1-1-p0`, creada desde
-`codex/passenger-home-android-regressions-p0` @ `3ebb1bd`. Sin merge a main.
+Actualizado 2026-10-05 en `codex/passenger-search-list-glow-p0`, creada desde
+`codex/passenger-motion-1-1-p0` @ `27d48dc`. Sin merge a main.
 
 ## IMPLEMENTADO
+
+### Search lista ligera y glow compartido — 2026-10-05
+
+- Search usa la variante `list` de `PlaceRow`: filas continuas sin elevación
+  individual, radio y padding discretos, thumbnail de 48 dp, título, dirección,
+  chevron y target de 56 dp. Conserva keys, selección, media/fallback,
+  feedback de press y entrada escalonada Motion 1.1. Home conserva Recientes
+  como cards ricas y la geometría de su panel, buscador y sheet.
+- El buscador Home tiene halo verde suave; el campo Search usa la misma
+  familia visual con más intensidad y transición de foco de 160 ms. El halo
+  es una capa absoluta: no modifica tamaño ni layout. Su respiración sutil
+  comparte el único ciclo de 1900 ms con `SearchPulse` de matching mediante
+  `useSearchCycle`, llamado una sola vez por `PassengerScreen`. Home, Search y
+  matching son estados excluyentes; al ocultarse, ir a background o activar
+  Reduced Motion, el ciclo se cancela. Con reducción el halo queda estático
+  y el foco conserva sólo fade. Matching conserva sus dos anillos y vehículo.
+- No cambian Search/Suggest funcional, keyboard, route-fit/Camera, mapa,
+  TomTom/Routing, Pricing, Traffic, matching/assigned funcional, controles,
+  persistencia ni Motion tokens. No hay dependencia ni código nativo nuevo.
+  Android físico permanece pendiente; no se generó APK.
+- Verificación local: TypeScript, lint, suite 155/155, worklets, Expo Doctor
+  21/21, export Hermes Android/iOS, schema/style MapLibre, splash y aislamiento
+  de fixtures/release/credenciales/paths correctos.
 
 ### Motion 1.1 y cierre físico de Home Passenger — 2026-10-05
 

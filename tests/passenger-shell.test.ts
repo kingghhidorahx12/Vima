@@ -16,6 +16,7 @@ const host = (tree: ReactTestRenderer, name: string) => tree.root.findByType(nam
 const id = (tree: ReactTestRenderer, testID: string) => tree.root.find(n => typeof n.type === 'string' && n.props.testID === testID);
 const hasNav = (tree: ReactTestRenderer) => tree.root.findAll(n => typeof n.type === 'string' && n.props.testID === 'passenger-bottom-navigation').length === 1;
 const style = (node: ReactTestInstance) => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean));
+const restingStyle = (node: ReactTestInstance) => Object.assign({}, ...node.props.style({ pressed: false }).filter(Boolean));
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
 
 test('Motion 1.1 press and keyed short entries use approved values without spatial Reduced Motion', async () => {
@@ -47,6 +48,89 @@ test('Motion 1.1 press and keyed short entries use approved values without spati
     assert.equal(h.delays.length, reduced ? 0 : 1); // The sixth result has no delayed entrance.
     await act(async () => entry!.unmount());
   }
+});
+
+test('Home and Search share one 1900 ms glow clock with matching; background and Reduced Motion stop it', async () => {
+  for (const reduced of [false, true]) {
+    const h = createHarness({}, { reduced });
+    const { SearchInputGlow, SearchPulse, useSearchCycle } = h.load('src/motion/SearchPulse.tsx');
+    function Probe({ mode, focused = false }: { mode: 'home' | 'search' | 'matching' | null; focused?: boolean }) {
+      const cycle = useSearchCycle(mode !== null);
+      return mode === 'matching' ? React.createElement(SearchPulse, { visible: true, expanded: false, cycle })
+        : mode ? React.createElement(SearchInputGlow, { cycle, home: mode === 'home', focused }) : null;
+    }
+    let tree: ReactTestRenderer;
+    await act(async () => { tree = create(React.createElement(Probe, { mode: 'home' })); });
+    try {
+      const homeGlow = id(tree!, 'passenger-home-search-glow');
+      assert.equal(style(homeGlow).boxShadow[0].color, '#00D68F');
+      assert.equal(style(homeGlow).opacity, 0.12);
+      const homeOpacity = style(homeGlow).opacity;
+      assert.equal(h.repeats.length, reduced ? 0 : 1);
+      if (!reduced) assert.ok(h.animations.some((animation: { duration: number }) => animation.duration === 1900));
+      await act(async () => tree!.update(React.createElement(Probe, { mode: 'search', focused: true })));
+      await act(async () => tree!.update(React.createElement(Probe, { mode: 'search', focused: true })));
+      const activeGlow = id(tree!, 'passenger-active-search-glow');
+      assert.ok(style(activeGlow).opacity > homeOpacity);
+      assert.equal(h.animations.at(-1).duration, 160);
+      assert.equal(h.repeats.length, reduced ? 0 : 1);
+      await act(async () => tree!.update(React.createElement(Probe, { mode: 'matching' })));
+      assert.equal(h.repeats.length, reduced ? 0 : 1);
+      assert.equal(tree!.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length, 0);
+      const beforeBackground = h.cancellations.length;
+      await act(async () => h.setAppState('background'));
+      assert.ok(h.cancellations.length > beforeBackground);
+      assert.equal(h.repeats.length, reduced ? 0 : 1);
+      await act(async () => h.setAppState('active'));
+      assert.equal(h.repeats.length, reduced ? 0 : 2);
+      const beforeHidden = h.cancellations.length;
+      await act(async () => tree!.update(React.createElement(Probe, { mode: null })));
+      assert.ok(h.cancellations.length > beforeHidden);
+      assert.equal(h.repeats.length, reduced ? 0 : 2);
+    } finally { await act(async () => tree!.unmount()); }
+  }
+});
+
+test('Search results use continuous list rows while Home retains rich recents and fixed geometry', async () => {
+  const h = createHarness(); const fixture = createPassengerFixtureGateway(clock);
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle();
+    assert.equal(restingStyle(id(tree, 'passenger-home-floating-search')).height, 58);
+    assert.ok(id(tree, 'passenger-home-search-glow'));
+    const homeRecent = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel?.includes('Plaza Atlacomulco'));
+    if (homeRecent) assert.ok(restingStyle(homeRecent).boxShadow);
+    await press(tree, '¿A dónde vamos?');
+    const input = host(tree, 'TextInput');
+    const fieldHeight = style(id(tree, 'passenger-search-field')).height;
+    await act(async () => input.props.onFocus());
+    assert.equal(style(id(tree, 'passenger-search-field')).height, fieldHeight);
+    assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00D68F');
+    await act(async () => input.props.onChangeText('Plaza'));
+    await settle();
+    const results = id(tree, 'passenger-search-results');
+    const rows = results.findAllByType('Pressable' as never);
+    assert.ok(rows.length >= 1);
+    for (const row of rows) {
+      const resting = restingStyle(row);
+      assert.equal(resting.boxShadow, undefined);
+      assert.equal(resting.minHeight, 56);
+      assert.equal(resting.borderBottomWidth, 1);
+      assert.ok(row.findAll(n => n.props.size === 48 && typeof n.type === 'function' && n.type.name === 'PlaceThumbnail').length === 1);
+      assert.ok(row.findAll(n => n.props.name === 'chevron').length >= 1);
+      assert.ok(row.props.accessibilityLabel.includes('Plaza'));
+    }
+    const before = h.animations.length;
+    await act(async () => rows[0]!.props.onPressIn());
+    assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [0.98, 120]);
+    await act(async () => rows[0]!.props.onPressOut());
+    assert.ok(h.animations.length > before);
+    assert.ok(h.delays.includes(24));
+    assert.equal(fieldHeight, 52);
+    assert.ok(id(tree, 'passenger-active-search-glow'));
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-home-search-glow').length, 0);
+    assert.equal(h.repeats.length, 1);
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 async function press(tree: ReactTestRenderer, label: string) {
   const node = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label && n.props.onPress);
