@@ -1,9 +1,41 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-final-visual-polish-p0`, creada desde
-`codex/passenger-search-glow-fix-p0` @ `f4381e1`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-motion-visibility-final-p0`, creada desde
+`codex/passenger-final-visual-polish-p0` @ `a58cade`. Sin merge a main.
 
 ## IMPLEMENTADO
+
+### Visibilidad Motion 1.1 y cierre del panel Home/Search — 2026-10-06
+
+- En Search normal de destino, «¿A dónde vamos?» usa el mismo pill flotante de
+  40 dp, centrado y con elevación level1 que «Confirma tu viaje». El header
+  interno conserva handle y espacio tipográfico reservado para no desplazar el
+  input ni cambiar medición/snap; no duplica el texto.
+- Home conserva su panel de 50% y buscador separado de 58 dp. Header y contenido
+  comparten blanco continuo, radio superior de 32 dp e inferior de 32 dp cuando
+  se ve el fondo. Search y reviewing/confirmación mantienen sus radios de 32 dp.
+- El contenido de cada escena Passenger usa presencia con salida y entrada
+  opuestas dentro del sheet persistente: 12 dp derivados de `shortEnterY * 2`,
+  fade y duraciones aprobadas de 300 ms para Home/Search, 240 ms para
+  reviewing/confirmación y 480 ms para matching/assigned. La clave de escena
+  evita reanimar cambios de consulta o datos dentro de la misma fase. Reduced
+  Motion conserva sólo fades. Mapa y `VimaRideSheet` no se remontan.
+- El pill flotante de confirmación conserva su posición/estilo y entra con
+  fade y 6 dp. SearchPulse termina al salir de matching; assigned usa una sola
+  entrada de escena de 480 ms y conserva el haptic existente.
+- Press sigue en .98/120 ms; el buscador Home y filas elevadas comprimen la
+  sombra durante press y conservan el wash aprobado. Foco Search distingue
+  borde verde oscuro y halo más visible con el fade existente de 160 ms;
+  sigue habiendo un único ciclo continuo de 1900 ms. Las filas nuevas mantienen
+  6 dp/160 ms y stagger de 24 ms. Bottom nav mantiene 240 ms y recorre 12 dp;
+  Reduced Motion usa sólo fade.
+- Route-fit, Camera, Search/Suggest/Discover funcional, teclado, persistencia,
+  mapa, pricing, matching funcional, tabs y contratos siguen sin cambios.
+  No se modificaron tokens JSON, dependencias ni código nativo. Android físico
+  sigue PENDIENTE; no se generó EAS Build.
+- Validación local: TypeScript, lint, 160 tests, worklets, Expo Doctor (21/21),
+  export Hermes Android/iOS con schema MapLibre, splash y aislamiento de fixtures,
+  pricing/servidor, rutas y credenciales en release, todos correctos.
 
 ### Cierre visual Home, Search y confirmación — 2026-10-05
 

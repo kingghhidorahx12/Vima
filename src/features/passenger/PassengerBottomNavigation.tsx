@@ -14,7 +14,7 @@ const tabs: readonly { label: string; icon: VimaGlyphName; enabled: boolean }[] 
   { label: 'Pagos', icon: 'payment', enabled: false }, { label: 'Perfil', icon: 'profile', enabled: false },
 ];
 export const bottomNavigationHeight = (bottom: number) => Math.max(72, 56 + bottom);
-const travel = motionDistances.shortEnterY;
+const travel = motionDistances.shortEnterY * 2;
 const fadeEnter = FadeIn.duration(motionTimings.navigation.duration).easing(motionTimings.navigation.easing).reduceMotion(ReduceMotion.Never);
 const fadeExit = FadeOut.duration(motionTimings.navigation.duration).easing(motionTimings.sheetClose.easing).reduceMotion(ReduceMotion.Never);
 const moveEnter = FadeInDown.duration(motionTimings.navigation.duration).easing(motionTimings.navigation.easing)

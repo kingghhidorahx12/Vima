@@ -38,6 +38,9 @@ test('Motion 1.1 press and keyed short entries use approved values without spati
     let entry: ReactTestRenderer;
     await act(async () => { entry = create(React.createElement(ElementEntrance, { staggerIndex: 4 }, React.createElement('View'))); });
     try {
+      const animated = entry!.root.findByType('AnimatedView' as never);
+      assert.equal(style(animated).opacity, 0);
+      assert.deepEqual(style(animated).transform, [{ translateY: reduced ? 0 : 6 }]);
       assert.equal(h.delays.at(-1), reduced ? undefined : 96);
       const count = h.delays.length;
       await act(async () => entry!.update(React.createElement(ElementEntrance, { staggerIndex: 0 }, React.createElement('View'))));
@@ -74,7 +77,7 @@ test('Home and Search share one 1900 ms glow clock with matching; background and
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search', focused: true })));
       const activeGlow = id(tree!, 'passenger-active-search-glow');
       assert.ok(style(activeGlow).opacity > homeOpacity);
-      assert.ok(Math.abs(style(activeGlow).opacity - 0.30) < 1e-9);
+      assert.ok(Math.abs(style(activeGlow).opacity - 0.34) < 1e-9);
       assert.equal(h.animations.at(-1).duration, 160);
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
@@ -114,6 +117,8 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     assert.equal(restingStyle(pill).marginHorizontal, undefined);
     assert.equal(restingStyle(pill).borderRadius, 24);
     assert.equal(restingStyle(pill).borderColor, '#00D68F');
+    assert.ok(restingStyle(pill).boxShadow.length > 0);
+    assert.deepEqual(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).boxShadow, []);
     assert.equal(style(host(tree, 'SheetBoundary')).borderTopLeftRadius, 32);
     assert.equal(style(host(tree, 'SheetBoundary')).borderTopRightRadius, 32);
     assert.equal(style(id(tree, 'passenger-sheet-header').find(n => style(n).backgroundColor === '#FFFFFF')).borderTopLeftRadius, 32);
@@ -133,7 +138,7 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     const fieldHeight = style(id(tree, 'passenger-search-field')).height;
     await act(async () => input.props.onFocus());
     assert.equal(style(id(tree, 'passenger-search-field')).height, fieldHeight);
-    assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00D68F');
+    assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00826F');
     await act(async () => input.props.onBlur());
     assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00D68F');
     assert.ok(id(tree, 'passenger-active-search-glow'));
@@ -242,6 +247,69 @@ test('review and confirmation separate green-outlined address surfaces without c
     assert.equal(h.repeats.length, 2); // Home stops before matching starts its use of the shared cycle.
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length, 0);
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('destination Search moves only its title onto the map and keeps sheet geometry and input position', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle(); await mapLayout(tree);
+    const homeHeader = id(tree, 'passenger-sheet-header');
+    assert.equal(style(homeHeader.find(n => style(n).backgroundColor === '#FFFFFF')).borderTopLeftRadius, 32);
+    assert.equal(style(id(tree, 'passenger-sheet-viewport')).borderBottomLeftRadius, 32);
+    assert.equal(style(id(tree, 'passenger-sheet-viewport')).borderBottomRightRadius, 32);
+    assert.equal(style(id(tree, 'passenger-sheet-viewport')).backgroundColor, '#FFFFFF');
+    await press(tree, '¿A dónde vamos?');
+    const searchTitle = id(tree, 'passenger-destination-search-title');
+    const searchTitleStyle = style(searchTitle);
+    const searchTitleTextStyle = style(searchTitle.findByType('Text' as never));
+    const header = id(tree, 'passenger-sheet-header');
+    assert.equal(header.findAll(n => n.props.children === '¿A dónde vamos?').length, 0);
+    assert.equal(style(id(tree, 'passenger-search-title-reserve')).height, 27);
+    assert.equal(style(searchTitle).height, 40);
+    assert.equal(style(searchTitle).top, 40);
+    assert.equal(style(searchTitle).alignSelf, 'center');
+    assert.deepEqual(style(searchTitle).boxShadow, [{ offsetX: 0, offsetY: 2, blurRadius: 8,
+      spreadDistance: 0, color: 'rgba(11, 15, 14, 0.06)' }]);
+    assert.equal(style(searchTitle.findByType('Text' as never)).fontSize, 16);
+    assert.equal(style(searchTitle.findByType('Text' as never)).fontWeight, '600');
+    assert.equal(id(tree, 'passenger-sheet-viewport').findAll(n => n.props.testID === 'passenger-search-field').length, 1);
+    assert.equal(host(tree, 'SheetBoundary').props.interaction.targetOffset, 84);
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-destination-search-title').length, 0);
+    await press(tree, 'Confirmar ubicaciones');
+    const confirmation = id(tree, 'passenger-confirmation-pill');
+    assert.deepEqual(style(confirmation), searchTitleStyle);
+    assert.deepEqual(style(confirmation.findByType('Text' as never)), searchTitleTextStyle);
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('phase presence exits and enters at approved durations and 12 dp, with one driver-found scene', async () => {
+  for (const reduced of [false, true]) {
+    const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { reduced });
+    const tree: ReactTestRenderer = await h.render(fixture.gateway);
+    const presence = () => id(tree, 'passenger-phase-presence');
+    const check = (duration: number) => {
+      const node = presence();
+      assert.equal(node.props.exiting.durationMs, duration);
+      assert.equal(node.props.exiting.kind, reduced ? 'FadeOut' : 'FadeOutUp');
+      if (reduced) assert.deepEqual(style(node).transform, [{ translateY: 0 }]);
+      else assert.deepEqual(node.props.exiting.target.transform, [{ translateY: -12 }]);
+    };
+    try {
+      await settle(); check(300);
+      assert.ok(h.animations.some((a: { value: number; duration: number }) => a.value === 1 && a.duration === 300));
+      await press(tree, '¿A dónde vamos?'); check(300);
+      await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`); check(240);
+      await press(tree, 'Confirmar ubicaciones'); check(240);
+      await press(tree, 'Solicitar viaje'); check(480);
+      assert.ok(tree.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length === 0);
+      await act(async () => fixture.controls.advance('assigned')); await settle(); check(480);
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length, 0);
+      assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+    } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+  }
 });
 async function press(tree: ReactTestRenderer, label: string) {
   const node = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label && n.props.onPress);
@@ -415,7 +483,10 @@ test('bottom navigation uses 240 ms short travel or fade-only by motion policy a
       assert.equal(nav.props.exiting.kind, reduced ? 'FadeOut' : 'FadeOutDown');
       assert.equal(nav.props.entering.durationMs, 240);
       assert.equal(nav.props.exiting.durationMs, 240);
-      if (!reduced) assert.deepEqual(nav.props.entering.initial.transform, [{ translateY: 6 }]);
+      if (!reduced) {
+        assert.deepEqual(nav.props.entering.initial.transform, [{ translateY: 12 }]);
+        assert.deepEqual(nav.props.exiting.target.transform, [{ translateY: 12 }]);
+      }
       for (const label of ['Viajes', 'Pagos', 'Perfil']) {
         const tab = tree!.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label)!;
         assert.equal(tab.props.disabled, true); assert.equal(tab.props.onPress, undefined);

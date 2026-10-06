@@ -6,15 +6,10 @@ import { fadeTo, type ApprovedTiming } from './helpers';
 import { motionDistances, motionTimings } from './timing';
 import { motionTokens } from './tokens';
 
-/** Animate only the mounted unit; keyed list rows never restart on ordinary renders. */
-const exitFade = FadeOut.duration(motionTimings.state.duration).easing(motionTimings.state.easing).reduceMotion(ReduceMotion.Never);
-const exitMove = FadeOutUp.duration(motionTimings.state.duration).easing(motionTimings.state.easing)
-  .withTargetValues({ transform: [{ translateY: -motionDistances.shortEnterY }] })
-  .reduceMotion(ReduceMotion.Never);
-
 export function ElementEntrance({ children, style, staggerIndex, timing = motionTimings.shortEnter, exit = false,
-  pointerEvents, testID }: PropsWithChildren<{
+  exitTiming = motionTimings.state, distance = motionDistances.shortEnterY, pointerEvents, testID }: PropsWithChildren<{
   style?: StyleProp<ViewStyle>; staggerIndex?: number; timing?: ApprovedTiming; exit?: boolean;
+  exitTiming?: ApprovedTiming; distance?: number;
   pointerEvents?: ViewProps['pointerEvents']; testID?: string;
 }>) {
   const { reducedMotion } = useMotionPolicy();
@@ -26,7 +21,12 @@ export function ElementEntrance({ children, style, staggerIndex, timing = motion
     return () => cancelAnimation(progress);
   }, [delay, progress, reducedMotion, timing]);
   const motion = useAnimatedStyle(() => ({ opacity: progress.get(),
-    transform: [{ translateY: reducedMotion ? 0 : (1 - progress.get()) * motionDistances.shortEnterY }] }));
+    transform: [{ translateY: reducedMotion ? 0 : (1 - progress.get()) * distance }] }));
+  const exitMotion = exit ? reducedMotion
+    ? FadeOut.duration(exitTiming.duration).easing(exitTiming.easing).reduceMotion(ReduceMotion.Never)
+    : FadeOutUp.duration(exitTiming.duration).easing(exitTiming.easing)
+      .withTargetValues({ transform: [{ translateY: -distance }] }).reduceMotion(ReduceMotion.Never)
+    : undefined;
   return <Animated.View testID={testID} pointerEvents={pointerEvents}
-    exiting={exit ? reducedMotion ? exitFade : exitMove : undefined} style={[style, motion]}>{children}</Animated.View>;
+    exiting={exitMotion} style={[style, motion]}>{children}</Animated.View>;
 }

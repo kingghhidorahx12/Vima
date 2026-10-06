@@ -70,7 +70,7 @@ export function SearchInputGlow({ cycle, focused = false, home = false }: {
   }, [focus, focused]);
   const halo = useAnimatedStyle(() => {
     const breath = cycle.running ? 1 - Math.abs(cycle.progress.get() * 2 - 1) : 0;
-    return { opacity: (home ? 0.18 : 0.20) + focus.get() * 0.10 + breath * 0.05 };
+    return { opacity: (home ? 0.18 : 0.20) + focus.get() * 0.14 + breath * 0.05 };
   });
   return <Animated.View testID={home ? 'passenger-home-search-glow' : 'passenger-active-search-glow'}
     pointerEvents="none" style={[styles.inputGlow, home && styles.homeGlow, halo]} />;
