@@ -93,7 +93,7 @@ test('map controls use approved size, elevation, pressed surface and semantic ac
       onOpen: () => {}, onToggle: () => {},
     })); });
     try {
-      const control = tree.root.findByType('Pressable' as never);
+      const control = tree.root.findByProps({ accessibilityLabel: 'Capas del mapa' });
       const flat = (pressed: boolean) => Object.assign({}, ...control.props.style({ pressed }).filter(Boolean));
       assert.equal(flat(false).width, 44); assert.equal(flat(false).height, 44);
       assert.equal(flat(false).backgroundColor, '#FFFFFF');
