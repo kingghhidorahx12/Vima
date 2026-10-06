@@ -52,7 +52,10 @@ export function timing(duration: keyof typeof motionTokens.durationsMs, curve: k
 /** Bind approved semantic rules to exact JSON values. No springs or invented physics. */
 export const motionTimings = {
   press: timing('instant', 'state'), release: timing('fast', 'state'), focus: timing('fast', 'state'),
-  shortEnter: timing('fast', 'enter'), state: timing('normal', 'state'),
+  shortEnter: timing('fast', 'enter'), listEnter: timing('feedback', 'enter'), feedback: timing('feedback', 'state'),
+  scene: timing('normal', 'enter'), sceneExit: timing('normal', 'exit'),
+  sceneSurface: timing('surface', 'enter'), sceneSurfaceExit: timing('surface', 'exit'),
+  state: timing('normal', 'state'),
   navigation: timing('normal', 'enter'), sheetEnter: timing('surface', 'enter'),
   sheetClose: timing('normal', 'exit'), sheetSnap: timing('surface', 'state'),
   map: timing('map', 'state'), success: timing('success', 'enter'),
@@ -60,4 +63,6 @@ export const motionTimings = {
 
 export const motionDistances = {
   shortEnterY: Math.abs(motionTokens.interactionRules.pinEnterTranslateYPx),
+  listEnterY: motionTokens.interactionRules.listEnterTranslateYPx,
+  sceneTransitionY: motionTokens.interactionRules.sceneTransitionTranslateYPx,
 } as const;

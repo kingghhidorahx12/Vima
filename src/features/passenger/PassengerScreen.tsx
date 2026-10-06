@@ -15,7 +15,7 @@ import { visualTokens as t } from '../../design/tokens';
 import { passengerSurfaces as surfaces, surfaceColors } from '../../design/presentation';
 import { elevationStyle } from '../../design/themes/light';
 import { semanticHaptics } from '../../motion/haptics';
-import { SearchInputGlow, SearchPulse, useSearchCycle } from '../../motion/SearchPulse';
+import { SearchInputGlow, SearchPulse, useSearchCycle, useSearchFocusBorder } from '../../motion/SearchPulse';
 import { VimaLaunchSurface } from '../../motion/VimaLaunchSurface';
 import { motionDistances, motionTimings } from '../../motion/timing';
 import { PassengerMap, type PassengerMapConfig } from './PassengerMap';
@@ -38,6 +38,7 @@ import { PlaceThumbnail } from './PlaceThumbnail';
 import { mapPersonality } from '../../motion/mapPersonality';
 import { IncidentCard } from './IncidentCard';
 import type { IncidentDetails } from '../../map/incidentDetails';
+import { SearchEntranceRegistry } from './searchEntrance';
 
 export interface PassengerBoundaries {
   readonly schedule: (quote: RideQuote | undefined) => void;
@@ -76,6 +77,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const nativeMap = useRef<VimaMapRef>(null);
   const homeSearchPress = usePressFeedback();
   const errorPress = usePressFeedback();
+  const backPress = usePressFeedback();
+  const locationErrorPress = usePressFeedback();
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const [mapUserControlled, setMapUserControlled] = useState(false);
@@ -92,6 +95,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const [centered, setCentered] = useState(false);
   const pendingCenter = useRef<Coordinate | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [searchEntrance] = useState(() => new SearchEntranceRegistry());
   useEffect(() => { if (!centered) return; const timer = setTimeout(() => setCentered(false), mapPersonality.feedbackMs); return () => clearTimeout(timer); }, [centered]);
   useEffect(() => { if (!recentering) return; const timer = setTimeout(() => { pendingCenter.current = null; setRecentering(false); }, mapPersonality.feedbackMs * 2); return () => clearTimeout(timer); }, [recentering]);
   const hasDisplayKey = displayKeyAvailable(process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY);
@@ -101,6 +105,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     return () => { active = false; };
   }, []);
   const [searchAction, setSearchAction] = useState<'results' | 'map' | 'contribute-map' | 'contribute-form' | 'contribute-done'>('results');
+  useEffect(() => {
+    if (!flow.field) searchEntrance.mark(null, []);
+    else if (flow.search.trim() && searchAction === 'results') searchEntrance.mark(flow.field, flow.places);
+  }, [flow.field, flow.search, flow.places, searchAction, searchEntrance]);
   const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate | null>(null);
   const [contributionName, setContributionName] = useState('');
   const [contributionReference, setContributionReference] = useState('');
@@ -124,9 +132,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const draftKey = `${flow.origin?.id ?? ''}:${flow.destination?.id ?? ''}:${flow.quote?.pricing ? flow.quote.id : ''}`;
   const reviewing = (flow.phase === 'confirm' && reviewedDraft !== draftKey) || (flow.phase === 'home' && !!flow.destination);
   const scene = flow.field ? 'search' : reviewing ? 'reviewing' : flow.phase === 'home' ? 'home'
-    : flow.phase === 'confirm' || flow.phase === 'requesting' ? 'confirm' : matching ? 'matching' : flow.phase;
-  const sceneTiming = scene === 'home' || scene === 'search' ? motionTimings.sheetEnter
-    : scene === 'matching' || scene === 'assigned' ? motionTimings.success : motionTimings.state;
+    : flow.phase === 'confirm' || flow.phase === 'requesting' ? flow.phase : matching ? 'matching' : flow.phase;
+  const sceneSurface = scene === 'matching' || scene === 'assigned';
+  const sceneTiming = sceneSurface ? motionTimings.sceneSurface : motionTimings.scene;
+  const sceneExitTiming = sceneSurface ? motionTimings.sceneSurfaceExit : motionTimings.sceneExit;
   const confirmationPillVisible = flow.phase === 'confirm' && !reviewing && flow.field === null;
   const topOcclusion = topFrameShift + Math.max(chromeBottom,
     confirmationPillVisible ? confirmationPillTop + confirmationPillHeight : 0) + 12;
@@ -140,6 +149,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   // follows the active surface and stops when none is visible.
   const searchCycle = useSearchCycle(focused && (homeFloatingSearch ||
     !!flow.field && searchAction === 'results' || matching && pulseVisible));
+  const searchBorder = useSearchFocusBorder(searchFocused);
   const homeRecentLimit = 3;
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
@@ -219,13 +229,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
   const blocked = flow.pending || flow.connection !== 'online';
   const searchField = <View style={styles.searchFieldFrame}><SearchInputGlow cycle={searchCycle} focused={searchFocused} />
-    <View testID="passenger-search-field" style={[styles.searchField, styles.brandBorder,
-      searchFocused && styles.activeBrandBorder]}><SmallPin color={t.colors.red} />
+    <Animated.View testID="passenger-search-field" style={[styles.searchField, styles.brandBorder, searchBorder]}><SmallPin color={t.colors.red} />
       <TextInput ref={input} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus
         onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección"
         value={flow.search} onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }}
         returnKeyType="search" style={styles.searchInput} placeholderTextColor={t.colors.gray} />
-      {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</View></View>;
+      {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</Animated.View></View>;
   const addressFields = <View testID="passenger-address-frame" style={styles.addressFrame}>
     <View testID="passenger-address-halo" pointerEvents="none" style={styles.addressHalo} />
     <View testID="passenger-address-panel" style={styles.addressSurface}>
@@ -332,8 +341,15 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   }, []));
   const quotePrice = flow.quote?.pricing?.status === 'priced' ? { amount: flow.quote.pricing.quote.price.totalMinor / 100, currency: 'MXN' } : flow.quote?.price;
   const money = (amount: number, currency: string) => new Intl.NumberFormat('es-MX', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+  let newSearchItems = 0;
+  const searchEntries = flow.field && flow.search.trim() ? flow.places.map((place) => {
+    const identity = place.canonicalId ?? place.id;
+    const fresh = !searchEntrance.has(flow.field!, place);
+    const entranceIndex = fresh ? newSearchItems++ : undefined;
+    return { place, identity, entranceIndex };
+  }) : [];
   const content = <ElementEntrance key={scene} testID="passenger-phase-presence" style={styles.fill}
-    timing={sceneTiming} exit exitTiming={sceneTiming} distance={motionDistances.shortEnterY * 2}>
+    timing={sceneTiming} exit exitTiming={sceneExitTiming} distance={motionDistances.sceneTransitionY}>
     <Animated.View key={measureKey} testID="passenger-sheet-viewport"
     style={[styles.fill, detachedPanel && styles.detachedPanelContent]}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setViewportMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
@@ -387,8 +403,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         </> : null}
         {flow.search.trim() ? <>
           {flow.places.length ? <View testID="passenger-search-results" style={styles.searchResults}>
-            {flow.places.map((place, index) => <PlaceRow key={place.id} place={place} presentation="list"
-              staggerIndex={index} exit resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}
+            {searchEntries.map(({ place, identity, entranceIndex }) => <PlaceRow key={identity} place={place} presentation="list"
+              animateEntry={entranceIndex !== undefined && entranceIndex < 5} staggerIndex={entranceIndex} exit
+              resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}
           </View> : null}
           {flow.loadingPlaces && !flow.places.length ? <View accessible accessibilityLabel="Buscando lugares" style={styles.searchSkeleton}>
             <View style={styles.skeletonLine} /><View style={styles.skeletonLineShort} />
@@ -578,8 +595,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             <VimaGlyph name="notifications" color={t.colors.graphite} />
           </Pressable>
         </> : <>
-          {!matching && !assignment && flow.phase !== 'requesting' ? <Pressable accessibilityRole="button" accessibilityLabel="Volver"
-            onPress={goBack} style={({ pressed }) => [styles.headerSide, pressed && surfaces.pressed]}><VimaGlyph name="back" color={t.colors.graphite} /></Pressable> : null}
+          {!matching && !assignment && flow.phase !== 'requesting' ? <Animated.View style={backPress.style}><Pressable accessibilityRole="button" accessibilityLabel="Volver"
+            onPressIn={backPress.onPressIn} onPressOut={backPress.onPressOut} onPress={goBack}
+            style={({ pressed }) => [styles.headerSide, pressed && surfaces.pressed]}><VimaGlyph name="back" color={t.colors.graphite} /></Pressable></Animated.View> : null}
           {!confirmationPillVisible ? <VimaText variant={assignment || matching ? 'bodyMedium' : 'h3'} style={styles.headerTitle} accessibilityRole="header">
             {assignment ? 'Tu conductor va en camino' : matching ? 'Buscando un conductor' : ''}
           </VimaText> : null}
@@ -607,8 +625,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       {incident && (interaction?.targetOffset ?? sheetFrameHeight) > chromeBottom + 100 ? <IncidentCard details={incident}
         topOffset={topFrameShift + chromeBottom + 12} maxHeight={Math.min(200, (interaction?.targetOffset ?? sheetFrameHeight) - chromeBottom - 24)} onClose={() => setIncident(null)} /> : null}
       {!mapFailed && flow.phase === 'home' && !flow.field && !reviewing && (flow.originStatus === 'loading' || flow.originStatus === 'unavailable') ?
-        <ElementEntrance style={[styles.mapStatus, { top: topFrameShift + chromeBottom + 12 }]}><Pressable accessibilityRole="button" accessibilityLabel="Origen" onPress={() => openField('origin')} style={styles.row}><VimaGlyph name="info" color={t.colors.blue} /><VimaText variant="caption" accessibilityLiveRegion="polite">
-          {flow.originStatus === 'loading' ? 'Obteniendo tu ubicación...' : 'No se pudo obtener tu ubicación'}</VimaText></Pressable></ElementEntrance> : null}
+        <ElementEntrance style={[styles.mapStatus, { top: topFrameShift + chromeBottom + 12 }]}><Animated.View style={locationErrorPress.style}><Pressable accessibilityRole="button" accessibilityLabel="Origen"
+          onPressIn={locationErrorPress.onPressIn} onPressOut={locationErrorPress.onPressOut}
+          onPress={() => openField('origin')} style={styles.row}><VimaGlyph name="info" color={t.colors.blue} /><VimaText variant="caption" accessibilityLiveRegion="polite">
+          {flow.originStatus === 'loading' ? 'Obteniendo tu ubicación...' : 'No se pudo obtener tu ubicación'}</VimaText></Pressable></Animated.View></ElementEntrance> : null}
       {mapFailed ? <View style={[styles.mapStatus, { top: topFrameShift + chromeBottom + 12 }]}><VimaGlyph name="warning" color={t.colors.amber} />
         <VimaText variant="caption">No se pudo cargar el mapa</VimaText></View> : null}
     </View>
@@ -668,10 +688,13 @@ function AddressField({ label, place, color, onPress, disabled, embedded = false
       {place ? <VimaText variant="caption" style={styles.muted} numberOfLines={1}>{place.address}</VimaText> : null}</View>
   </Pressable></Animated.View>;
 }
-function PlaceRow({ place, onPress, resolveMedia, rich = false, presentation = 'card', staggerIndex, exit = false }: { place: PlaceSuggestion; onPress: () => void;
-  resolveMedia?: PassengerGateway['resolvePlaceMedia']; rich?: boolean; presentation?: 'card' | 'list'; staggerIndex?: number; exit?: boolean }) {
+function PlaceRow({ place, onPress, resolveMedia, rich = false, presentation = 'card', animateEntry = false, staggerIndex, exit = false }: { place: PlaceSuggestion; onPress: () => void;
+  resolveMedia?: PassengerGateway['resolvePlaceMedia']; rich?: boolean; presentation?: 'card' | 'list'; animateEntry?: boolean;
+  staggerIndex?: number; exit?: boolean }) {
   const feedback = usePressFeedback();
-  return <ElementEntrance staggerIndex={staggerIndex} exit={exit}><Animated.View style={feedback.style}><Pressable
+  return <ElementEntrance testID={presentation === 'list' && exit ? 'passenger-search-row-presence' : undefined}
+    timing={animateEntry ? motionTimings.listEnter : undefined} distance={animateEntry ? motionDistances.listEnterY : 0}
+    staggerIndex={animateEntry ? staggerIndex : undefined} enter={animateEntry} exit={exit}><Animated.View style={feedback.style}><Pressable
     accessibilityRole="button" accessibilityLabel={`${place.name}, ${place.address}`} onPress={onPress}
     onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
     style={({ pressed }) => [presentation === 'list' ? styles.listRow : styles.recent, rich && styles.richRecent,
@@ -711,8 +734,9 @@ function Metric({ icon, value, label, emphasis = false }: { icon: VimaGlyphName;
 }
 function TextAction({ label, onPress, disabled, danger = false }: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
   const feedback = usePressFeedback();
-  return <Animated.View style={feedback.style}><Pressable disabled={disabled} accessibilityRole="button" accessibilityState={{ disabled }}
-    onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
+  return <Animated.View style={feedback.style}><Pressable disabled={disabled} accessibilityRole="button" accessibilityLabel={label}
+    accessibilityState={{ disabled }}
+    onPressIn={disabled ? undefined : feedback.onPressIn} onPressOut={disabled ? undefined : feedback.onPressOut}
     onPress={() => { void semanticHaptics('buttonChip'); onPress(); }} style={({ pressed }) => [styles.textAction, pressed && !disabled && surfaces.pressed]}>
     <VimaText variant="bodySmall" style={[styles.center, styles.link, danger && styles.dangerText, disabled && styles.muted]}>{label}</VimaText></Pressable></Animated.View>;
 }

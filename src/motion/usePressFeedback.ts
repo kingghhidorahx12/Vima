@@ -13,6 +13,6 @@ export function usePressFeedback() {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: reducedMotion ? 1 : scale.get() }] }));
   const onPressIn = () => { cancelAnimation(scale);
     scale.set(moveTo(motionTokens.interactionRules.buttonPressScale, reducedMotion, motionTimings.press)); };
-  const onPressOut = () => { cancelAnimation(scale); scale.set(moveTo(1, reducedMotion, motionTimings.press)); };
+  const onPressOut = () => { cancelAnimation(scale); scale.set(moveTo(1, reducedMotion, motionTimings.release)); };
   return { style, onPressIn, onPressOut };
 }

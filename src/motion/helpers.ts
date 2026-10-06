@@ -1,7 +1,7 @@
 import { ReduceMotion, withTiming, type WithTimingConfig } from 'react-native-reanimated';
 export { motionSystemStatus } from './tokens';
 
-/** Both duration and easing must come from approved Motion System v1. */
+/** Both duration and easing must come from approved Motion System v1.2. */
 export type ApprovedTiming = Required<Pick<WithTimingConfig, 'duration' | 'easing'>>;
 
 export function moveTo(value: number, reducedMotion: boolean, timing?: ApprovedTiming): number {

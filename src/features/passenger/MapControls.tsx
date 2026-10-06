@@ -51,7 +51,7 @@ function LayerMenuRow({ layer, available, checked, onPress }: {
   return <Animated.View style={feedback.style}><Pressable accessibilityRole="switch"
     accessibilityLabel={layer === 'traffic' ? 'Tráfico' : 'Incidentes'}
     accessibilityState={{ checked: available && checked, disabled: !available }} disabled={!available}
-    onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut} onPress={onPress}
+    onPressIn={available ? feedback.onPressIn : undefined} onPressOut={available ? feedback.onPressOut : undefined} onPress={onPress}
     style={({ pressed }) => [styles.menuRow, layer === 'incidents' && styles.menuDivider, pressed && styles.rowPressed]}>
     <VimaGlyph name={layer === 'traffic' ? 'traffic' : 'warning'}
       color={available && checked ? t.colors.green : t.colors.graphite} />
@@ -103,7 +103,7 @@ function MapControl({ label, icon, onPress, disabled = false, active = false, ex
   return <Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled}
       accessibilityState={{ disabled, busy, expanded: icon === 'layers' ? expanded : undefined }}
-      onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut} onPress={onPress}
+      onPressIn={disabled ? undefined : feedback.onPressIn} onPressOut={disabled ? undefined : feedback.onPressOut} onPress={onPress}
       style={({ pressed }) => [styles.button, active && styles.buttonActive,
         pressed && styles.buttonPressed, disabled && styles.buttonDisabled]}>
       {busy && !reducedMotion ? <ActivityIndicator size="small" color={t.colors.green} />
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   location: { ...surfaces.floating, borderRadius: t.radii.pillPx, minHeight: locationCtaHeight, flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: t.spacing.scalePx[2], gap: t.spacing.scalePx[1] },
   buttonActive: { borderColor: t.colors.green },
-  buttonPressed: { backgroundColor: t.colors.background },
+  buttonPressed: { backgroundColor: t.colors.background, boxShadow: [] },
   buttonDisabled: { opacity: 0.5 },
   stack: { alignItems: 'flex-end', gap: t.spacing.scalePx[1] },
   button: { width: mapControlSize, height: mapControlSize, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   menuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[2],
     backgroundColor: t.colors.white, borderRadius: t.radii.fieldPx, ...elevationStyle('level1', t.colors.carbon) },
   menuDivider: { borderTopWidth: t.borders.standardWidthPx, borderTopColor: surfaceColors.border },
-  rowPressed: { backgroundColor: t.colors.background },
+  rowPressed: { backgroundColor: t.colors.background, boxShadow: [] },
   menuLabel: { flex: 1 }, unavailable: { color: t.colors.gray },
   switch: { width: 36, height: 22, borderRadius: t.radii.pillPx, backgroundColor: t.colors.grayLight,
     padding: 2, justifyContent: 'center' },

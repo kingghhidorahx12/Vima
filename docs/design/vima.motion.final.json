@@ -1,12 +1,13 @@
 {
   "meta": {
-    "name": "Vima Motion System v1",
-    "status": "FINAL P0",
+    "name": "Vima Motion System v1.2",
+    "status": "FINAL P0 v1.2",
     "scope": "P0 beta"
   },
   "durationsMs": {
-    "instant": 120,
+    "instant": 110,
     "fast": 160,
+    "feedback": 180,
     "normal": 240,
     "surface": 300,
     "map": 420,
@@ -19,13 +20,16 @@
     "state": "cubic-bezier(0.4, 0, 0.2, 1)",
     "exit": "cubic-bezier(0.4, 0, 1, 1)"
   },
-  "staggerMs": 24,
+  "staggerMs": 28,
   "springPolicy": {
     "genericSpring": false,
     "rule": "Usar timings/easings aprobados por defecto. Spring físico solo para drag/snap si la arquitectura lo requiere; no inventar stiffness/damping/mass creativos."
   },
   "interactionRules": {
-    "buttonPressScale": 0.98,
+    "buttonPressScale": 0.97,
+    "listEnterTranslateYPx": 9,
+    "sceneTransitionTranslateYPx": 12,
+    "inputFocusHaloBoost": 0.18,
     "inputErrorShakeMaxPx": 3,
     "screenPushTranslateXPx": 16,
     "searchPulseScaleFrom": 0.65,

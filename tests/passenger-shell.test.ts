@@ -50,7 +50,7 @@ const assertDetachedSurface = (tree: ReactTestRenderer) => {
   assert.equal(style(viewport).borderBottomRightRadius, 0);
 };
 
-test('Motion 1.1 press and keyed short entries use approved values without spatial Reduced Motion', async () => {
+test('Motion 1.2 press/release and keyed entries use approved values without spatial Reduced Motion', async () => {
   for (const reduced of [false, true]) {
     const h = createHarness({}, { reduced });
     const { VimaButton } = h.load('src/design/components/VimaButton.tsx');
@@ -62,9 +62,9 @@ test('Motion 1.1 press and keyed short entries use approved values without spati
       const before = h.animations.length;
       await act(async () => pressable.props.onPressIn());
       assert.equal(h.animations.length - before, reduced ? 0 : 1);
-      if (!reduced) assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [0.98, 120]);
+      if (!reduced) assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [0.97, 110]);
       await act(async () => pressable.props.onPressOut());
-      if (!reduced) assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [1, 120]);
+      if (!reduced) assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [1, 160]);
     } finally { await act(async () => button!.unmount()); }
     let entry: ReactTestRenderer;
     await act(async () => { entry = create(React.createElement(ElementEntrance, { staggerIndex: 4 }, React.createElement('View'))); });
@@ -72,7 +72,7 @@ test('Motion 1.1 press and keyed short entries use approved values without spati
       const animated = entry!.root.findByType('AnimatedView' as never);
       assert.equal(style(animated).opacity, 0);
       assert.deepEqual(style(animated).transform, [{ translateY: reduced ? 0 : 6 }]);
-      assert.equal(h.delays.at(-1), reduced ? undefined : 96);
+      assert.equal(h.delays.at(-1), reduced ? undefined : 112);
       const count = h.delays.length;
       await act(async () => entry!.update(React.createElement(ElementEntrance, { staggerIndex: 0 }, React.createElement('View'))));
       assert.equal(h.delays.length, count); // Same keyed unit never restaggers on re-render.
@@ -82,6 +82,33 @@ test('Motion 1.1 press and keyed short entries use approved values without spati
     assert.equal(h.delays.length, reduced ? 0 : 1); // The sixth result has no delayed entrance.
     await act(async () => entry!.unmount());
   }
+});
+
+test('Passenger Home, Search and address controls have exactly one 0.97 press owner', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  const pressFeedback = async (label: string) => {
+    const control = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label && !n.props.disabled);
+    assert.ok(control?.props.onPressIn, label);
+    const before = h.animations.filter((a: { value: number }) => a.value === 0.97).length;
+    await act(async () => control.props.onPressIn());
+    assert.equal(h.animations.filter((a: { value: number }) => a.value === 0.97).length, before + 1, label);
+    await act(async () => control.props.onPressOut());
+    assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [1, 160], label);
+  };
+  try {
+    await settle();
+    for (const label of ['¿A dónde vamos?', 'Casa', 'Trabajo', 'Favoritos', 'Ver todos',
+      `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`]) await pressFeedback(label);
+    await press(tree, '¿A dónde vamos?');
+    await pressFeedback('Volver');
+    await pressFeedback(`${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    await pressFeedback('Origen');
+    await pressFeedback(`Destino ${fixturePlaces[1]!.name}`);
+    await pressFeedback('Confirmar ubicaciones');
+    assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-address-halo').length, 1);
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
 test('Home and Search share one 1900 ms glow clock with matching; background and Reduced Motion stop it', async () => {
@@ -108,7 +135,7 @@ test('Home and Search share one 1900 ms glow clock with matching; background and
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search', focused: true })));
       const activeGlow = id(tree!, 'passenger-active-search-glow');
       assert.ok(style(activeGlow).opacity > homeOpacity);
-      assert.ok(Math.abs(style(activeGlow).opacity - 0.34) < 1e-9);
+      assert.ok(Math.abs(style(activeGlow).opacity - 0.38) < 1e-9);
       assert.equal(h.animations.at(-1).duration, 160);
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
       await act(async () => tree!.update(React.createElement(Probe, { mode: 'search' })));
@@ -191,12 +218,12 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     const fieldHeight = style(id(tree, 'passenger-search-field')).height;
     await act(async () => input.props.onFocus());
     assert.equal(style(id(tree, 'passenger-search-field')).height, fieldHeight);
+    await act(async () => input.props.onChangeText('Plaza')); await settle();
     assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00826F');
     await act(async () => input.props.onBlur());
+    await act(async () => input.props.onChangeText('Plaz')); await settle();
     assert.equal(style(id(tree, 'passenger-search-field')).borderColor, '#00D68F');
     assert.ok(id(tree, 'passenger-active-search-glow'));
-    await act(async () => input.props.onChangeText('Plaza'));
-    await settle();
     const results = id(tree, 'passenger-search-results');
     const rows = results.findAllByType('Pressable' as never);
     assert.ok(rows.length >= 1);
@@ -211,10 +238,10 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     }
     const before = h.animations.length;
     await act(async () => rows[0]!.props.onPressIn());
-    assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [0.98, 120]);
+    assert.deepEqual([h.animations.at(-1).value, h.animations.at(-1).duration], [0.97, 110]);
     await act(async () => rows[0]!.props.onPressOut());
     assert.ok(h.animations.length > before);
-    assert.ok(h.delays.includes(24));
+    assert.ok(h.delays.includes(28));
     assert.equal(fieldHeight, 52);
     assert.ok(id(tree, 'passenger-active-search-glow'));
     assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-home-search-glow').length, 0);
@@ -245,6 +272,52 @@ test('Search suggestions and saved, recent, popular and local collections keep o
     }
     assert.equal(h.delays.length, 0); // Initial collections do not stagger on re-render.
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('Search animates only the first five unseen canonical places, never details updates or rerenders', async () => {
+  for (const reduced of [false, true]) {
+    const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { reduced });
+    const initial = Array.from({ length: 7 }, (_, index) => ({ ...fixturePlaces[0]!, id: `result-${index}`,
+      canonicalId: index === 2 ? undefined : `canonical-${index}`, name: `Lugar ${index}`, address: `Calle ${index}` }));
+    let offered = initial;
+    const tree: ReactTestRenderer = await h.render({ ...fixture.gateway, recentPlaces: async () => [],
+      findPlaces: async () => offered });
+    const rows = () => tree.root.findAll(n => typeof n.type === 'function' && n.type.name === 'PlaceRow' && n.props.exit);
+    try {
+      await settle(); await press(tree, '¿A dónde vamos?');
+      const input = host(tree, 'TextInput');
+      await act(async () => input.props.onChangeText('zz')); await settle();
+      const scenePresence = id(tree, 'passenger-phase-presence');
+      assert.equal(rows().length, 7);
+      assert.deepEqual(rows().map(row => row.props.animateEntry), [true, true, true, true, true, false, false]);
+      assert.deepEqual(rows().slice(0, 5).map(row => row.props.staggerIndex), [0, 1, 2, 3, 4]);
+      const firstPresence = rows()[0]!.find(n => typeof n.type === 'function' && n.type.name === 'ElementEntrance');
+      assert.equal(firstPresence.props.distance, 9);
+      assert.equal(firstPresence.props.timing.duration, 180);
+      if (reduced) assert.deepEqual(style(firstPresence.findByType('AnimatedView' as never)).transform, [{ translateY: 0 }]);
+      if (reduced) assert.equal(h.delays.length, 0);
+      else for (const delay of [28, 56, 84, 112]) assert.ok(h.delays.includes(delay));
+      assert.ok(h.animations.some((a: { value: number; duration: number }) => a.value === 1 && a.duration === 180));
+      const listEnters = h.animations.filter((a: { value: number; duration: number }) => a.value === 1 && a.duration === 180).length;
+      await act(async () => input.props.onFocus());
+      assert.equal(rows().every(row => !row.props.animateEntry), true);
+      assert.equal(h.animations.filter((a: { value: number; duration: number }) => a.value === 1 && a.duration === 180).length,
+        listEnters);
+      offered = [{ ...initial[0]!, id: 'provider-details-update', name: 'Lugar 0 actualizado' },
+        ...initial.slice(1).map(place => place.id === 'result-2' ? { ...place, canonicalId: 'canonical-2' } : place),
+        { ...fixturePlaces[0]!, id: 'new-result', canonicalId: 'canonical-new', name: 'Lugar nuevo', address: 'Calle nueva' }];
+      await act(async () => input.props.onChangeText('zzz')); await settle();
+      assert.equal(id(tree, 'passenger-phase-presence'), scenePresence);
+      assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+      assert.equal(rows().length, 8);
+      assert.equal(rows().find(row => row.props.place.canonicalId === 'canonical-0')?.props.place.id, 'provider-details-update');
+      assert.equal(rows().find(row => row.props.place.canonicalId === 'canonical-0')?.props.animateEntry, false);
+      assert.equal(rows().find(row => row.props.place.canonicalId === 'canonical-2')?.props.animateEntry, false);
+      assert.equal(rows().filter(row => row.props.animateEntry).length, 1);
+      assert.equal(rows().find(row => row.props.place.canonicalId === 'canonical-new')?.props.staggerIndex, 0);
+      assert.equal(rows().find(row => row.props.place.canonicalId === 'canonical-new')?.props.animateEntry, true);
+    } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+  }
 });
 
 test('Reduced Motion keeps permanent green borders and stationary halos in Home and Search', async () => {
@@ -421,6 +494,7 @@ test('review, confirmation and requesting measure addresses inside content; late
     const requestingOrder = id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-frame' ||
       n.props.label === 'Duración' || n.props.label === 'Solicitar viaje').map(n => n.props.testID ?? n.props.label);
     assert.deepEqual(requestingOrder, ['passenger-address-frame', 'Duración', 'Solicitar viaje']);
+    assert.equal(id(tree, 'passenger-phase-presence').props.exiting.durationMs, 240);
     assert.equal(id(tree, 'passenger-panel-header').findAll(n => n.props.children === 'Confirma tu viaje').length, 0);
     assert.ok(finishRequest);
     await act(async () => finishRequest!()); await settle();
@@ -433,7 +507,7 @@ test('review, confirmation and requesting measure addresses inside content; late
   } finally { finishRequest?.(); await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('phase presence exits and enters at approved durations and 12 dp, with one driver-found scene', async () => {
+test('one keyed phase presence uses 12 dp with 240/300 ms and preserves driver-found haptic', async () => {
   for (const reduced of [false, true]) {
     const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { reduced });
     const tree: ReactTestRenderer = await h.render(fixture.gateway);
@@ -446,14 +520,14 @@ test('phase presence exits and enters at approved durations and 12 dp, with one 
       else assert.deepEqual(node.props.exiting.target.transform, [{ translateY: -12 }]);
     };
     try {
-      await settle(); check(300);
-      assert.ok(h.animations.some((a: { value: number; duration: number }) => a.value === 1 && a.duration === 300));
-      await press(tree, '¿A dónde vamos?'); check(300);
+      await settle(); check(240);
+      assert.ok(h.animations.some((a: { value: number; duration: number }) => a.value === 1 && a.duration === 240));
+      await press(tree, '¿A dónde vamos?'); check(240);
       await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`); check(240);
       await press(tree, 'Confirmar ubicaciones'); check(240);
-      await press(tree, 'Solicitar viaje'); check(480);
+      await press(tree, 'Solicitar viaje'); check(300);
       assert.ok(tree.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length === 0);
-      await act(async () => fixture.controls.advance('assigned')); await settle(); check(480);
+      await act(async () => fixture.controls.advance('assigned')); await settle(); check(300);
       assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length, 0);
       assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
     } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }

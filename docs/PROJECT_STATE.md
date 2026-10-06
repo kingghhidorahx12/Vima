@@ -1,12 +1,39 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-addresses-in-panel-final-p0`, creada desde
-`codex/passenger-home-life-final-p0` @ `789304c`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-motion-1-2-p0`, creada desde
+`codex/passenger-addresses-in-panel-final-p0` @ `8c07632`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Motion 1.2 Passenger — 2026-10-06
+
+- El JSON aprobado de Motion 1.2 conserva easings, política sin springs, SearchCycle
+  de 1900 ms, mapa de 420 ms, SearchPulse y haptics. Instant baja a 110 ms;
+  feedback dura 180 ms, stagger 28 ms y press llega a 0.97 con salida de 160 ms.
+  Las entradas nuevas de Search usan 9 dp/180 ms hasta cinco ítems; la escena
+  usa 12 dp con 240 ms o 300 ms en matching/assigned. El settle del pin se
+  deriva del total de mapa para conservar sus 420 ms.
+- Los controles Passenger usan una sola respuesta de scale por Pressable activo.
+  Search interpola el borde verde a verde oscuro y eleva el halo al ganar foco
+  durante 160 ms. Un registro de identidades (canonicalId o id) evita reentradas
+  por detalles tardíos y rerenders; las colecciones existentes conservan press
+  sin entradas repetitivas.
+- VimaButton mantiene el mismo frame al cambiar enabled/disabled o
+  label/icon/spinner. El wash y la opacidad de estado transicionan en 180 ms;
+  loading conserva un indicador visible también con Reduced Motion. El bottom
+  nav conserva altura y disponibilidad, con press 0.97, wash y color de estado
+  preparado para una transición de 180 ms. Reduced Motion elimina scale,
+  desplazamiento y stagger, pero conserva fades funcionales.
+- La geometría del mapa, Camera, route-fit, medidas del sheet, snaps, composición, lógica de viaje,
+  pricing, routing, matching y persistencia no cambiaron. Android físico sigue
+  PENDIENTE de comprobar; no se realizó EAS Build ni hubo cambios nativos.
+- Validación: TypeScript, lint, suite 167/167, gateway 28/28, worklets, splash,
+  Hermes Android/iOS, aislamiento de fixtures y release, límites de credenciales
+  en ambos bundles y schema MapLibre pasaron. Expo Doctor quedó en 20/21 sólo
+  por los cinco patches SDK 57 ya conocidos; no se actualizaron dependencias.
 
 ### Direcciones integradas al panel Passenger — 2026-10-06
 

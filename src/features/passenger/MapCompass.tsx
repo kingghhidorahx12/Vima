@@ -25,7 +25,7 @@ export function MapCompass({ bearing, ready, onPress }: {
     style={[styles.position, fade]}>
     <Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel="Orientar mapa al norte" disabled={!visible}
-      onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
+      onPressIn={visible ? feedback.onPressIn : undefined} onPressOut={visible ? feedback.onPressOut : undefined}
       onPress={onPress} style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
       <View testID="passenger-compass-needle" style={[styles.needle, { transform: [{ rotate: `${-angle}deg` }] }]}>
         <View testID="passenger-compass-north-outline" style={styles.northOutline} />
@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   position: { width: 44, height: 44 },
   button: { width: 44, height: 44, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
     alignItems: 'center', justifyContent: 'center', ...elevationStyle('level1', t.colors.carbon) },
-  pressed: { backgroundColor: t.colors.background },
+  pressed: { backgroundColor: t.colors.background, boxShadow: [] },
   needle: { width: 24, height: 24 },
   northOutline: { position: 'absolute', top: 0, left: 6, width: 0, height: 0,
     borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 13,

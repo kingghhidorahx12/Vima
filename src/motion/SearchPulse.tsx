@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
-import Animated, { cancelAnimation, ReduceMotion, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { cancelAnimation, interpolateColor, ReduceMotion, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated';
 import { visualTokens as t } from '../design/tokens';
 import { VimaGlyph } from '../design/components/VimaGlyph';
 import { useMotionPolicy } from './ReducedMotion';
@@ -59,6 +59,17 @@ export function SearchPulse({ visible, expanded, cycle }: { visible: boolean; ex
 }
 
 /** A stationary exterior halo. Focus changes fade; only the shared cycle breathes. */
+export function useSearchFocusBorder(focused: boolean) {
+  const progress = useSharedValue(focused ? 1 : 0);
+  useEffect(() => {
+    cancelAnimation(progress);
+    progress.set(fadeTo(Number(focused), motionTimings.focus));
+    return () => cancelAnimation(progress);
+  }, [focused, progress]);
+  return useAnimatedStyle(() => ({ borderColor: interpolateColor(progress.get(), [0, 1],
+    [t.colors.green, t.colors.greenDark]) }));
+}
+
 export function SearchInputGlow({ cycle, focused = false, home = false }: {
   cycle: SearchCycle; focused?: boolean; home?: boolean;
 }) {
@@ -70,7 +81,7 @@ export function SearchInputGlow({ cycle, focused = false, home = false }: {
   }, [focus, focused]);
   const halo = useAnimatedStyle(() => {
     const breath = cycle.running ? 1 - Math.abs(cycle.progress.get() * 2 - 1) : 0;
-    return { opacity: (home ? 0.18 : 0.20) + focus.get() * 0.14 + breath * 0.05 };
+    return { opacity: (home ? 0.18 : 0.20) + focus.get() * m.interactionRules.inputFocusHaloBoost + breath * 0.05 };
   });
   return <Animated.View testID={home ? 'passenger-home-search-glow' : 'passenger-active-search-glow'}
     pointerEvents="none" style={[styles.inputGlow, home && styles.homeGlow, halo]} />;

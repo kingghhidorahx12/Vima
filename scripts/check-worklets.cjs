@@ -13,5 +13,7 @@ for (const filename of ['src/motion/ElementEntrance.tsx', 'src/motion/mapPersona
 // PassengerScreen delegates its former local animated style to ElementEntrance.
 // Keep checking the transformed worklet above and the actual scene wiring here.
 const passenger = fs.readFileSync('src/features/passenger/PassengerScreen.tsx', 'utf8');
-assert.match(passenger, /<ElementEntrance key=\{scene\}[^>]*exit exitTiming=\{sceneTiming\} distance=\{motionDistances\.shortEnterY \* 2\}/);
+assert.match(passenger, /<ElementEntrance key=\{scene\}[^>]*timing=\{sceneTiming\} exit exitTiming=\{sceneExitTiming\} distance=\{motionDistances\.sceneTransitionY\}/);
+assert.match(passenger, /const sceneTiming = sceneSurface \? motionTimings\.sceneSurface : motionTimings\.scene;/);
+assert.match(passenger, /const sceneExitTiming = sceneSurface \? motionTimings\.sceneSurfaceExit : motionTimings\.sceneExit;/);
 console.log('Passenger scene presence uses transformed ElementEntrance worklet');

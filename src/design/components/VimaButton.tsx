@@ -1,9 +1,11 @@
+import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { semanticHaptics } from '../../motion/haptics';
 import type { HapticEvent } from '../../motion/hapticEvents';
-import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { usePressFeedback } from '../../motion/usePressFeedback';
+import { fadeTo } from '../../motion/helpers';
+import { motionTimings } from '../../motion/timing';
 import { VimaText } from '../primitives';
 import { primaryGradient, visualTokens as t } from '../tokens';
 import { VimaGlyph, type VimaGlyphName } from './VimaGlyph';
@@ -16,22 +18,41 @@ export function VimaButton({ label, onPress, disabled = false, loading = false, 
   haptic?: HapticEvent; style?: StyleProp<ViewStyle>; communication?: boolean; gradient?: boolean; compact?: boolean; danger?: boolean;
   icon?: VimaGlyphName;
 }) {
-  const { reducedMotion } = useMotionPolicy();
   const feedback = usePressFeedback();
+  const enabledProgress = useSharedValue(disabled ? 0 : 1);
+  const loadingProgress = useSharedValue(loading ? 1 : 0);
+  useEffect(() => {
+    enabledProgress.set(fadeTo(disabled ? 0 : 1, motionTimings.feedback));
+    return () => cancelAnimation(enabledProgress);
+  }, [disabled, enabledProgress]);
+  useEffect(() => {
+    loadingProgress.set(fadeTo(loading ? 1 : 0, motionTimings.feedback));
+    return () => cancelAnimation(loadingProgress);
+  }, [loading, loadingProgress]);
+  const disabledWash = useAnimatedStyle(() => ({ opacity: 1 - enabledProgress.get() }));
+  const contentFade = useAnimatedStyle(() => ({ opacity: (1 - loadingProgress.get()) *
+    (0.65 + enabledProgress.get() * 0.35) }));
+  const spinnerFade = useAnimatedStyle(() => ({ opacity: loadingProgress.get() }));
   const labelColor = disabled ? t.colors.gray : danger ? t.colors.red : communication ? t.colors.accentBluePressed : secondary ? t.colors.carbon : t.colors.white;
   return <ElementEntrance style={style}><Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }}
       disabled={disabled || loading}
-      onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
+      onPressIn={disabled || loading ? undefined : feedback.onPressIn} onPressOut={disabled || loading ? undefined : feedback.onPressOut}
       onPress={() => { void semanticHaptics(haptic); onPress(); }}
       style={({ pressed }) => [styles.button, compact && styles.compact, gradient && !secondary && !disabled && styles.gradient,
         secondary && styles.secondary, communication && styles.communication, danger && styles.danger,
         pressed && !disabled && styles.pressed, disabled && styles.disabled]}>
-      <View style={[styles.content, loading && !reducedMotion && styles.hidden]}>
-        {icon ? <VimaGlyph name={icon} color={labelColor} /> : null}
-        <VimaText variant={compact ? 'caption' : 'bodyMedium'} style={[styles.label, { color: labelColor }]}>{label}</VimaText>
+      <Animated.View pointerEvents="none" style={[styles.disabledWash, disabledWash]} />
+      <View style={styles.loadingFrame}>
+        <Animated.View style={[styles.content, contentFade]}>
+          {icon ? <VimaGlyph name={icon} color={labelColor} /> : null}
+          <VimaText variant={compact ? 'caption' : 'bodyMedium'} style={[styles.label, { color: labelColor }]}>{label}</VimaText>
+        </Animated.View>
+        <Animated.View pointerEvents="none" accessibilityElementsHidden={!loading}
+          style={[styles.spinnerFrame, spinnerFade]}>
+          <ActivityIndicator accessibilityLabel="Cargando" animating={loading} color={labelColor} />
+        </Animated.View>
       </View>
-      {loading && !reducedMotion ? <ActivityIndicator style={StyleSheet.absoluteFill} color={labelColor} /> : null}
     </Pressable>
   </Animated.View></ElementEntrance>;
 }
@@ -47,6 +68,10 @@ const styles = StyleSheet.create({
   communication: { backgroundColor: t.colors.accentBlueSoft, borderColor: t.colors.accentBlueGlow },
   danger: { backgroundColor: surfaceColors.dangerWash, borderColor: surfaceColors.border },
   content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: t.spacing.scalePx[1] },
-  disabled: { backgroundColor: t.colors.background, borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border, boxShadow: [] },
-  label: { textAlign: 'center', flexShrink: 1 }, hidden: { opacity: 0 },
+  disabled: { borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border, boxShadow: [] },
+  disabledWash: { ...StyleSheet.absoluteFill, borderRadius: t.components.buttonPrimary.radiusPx,
+    backgroundColor: t.colors.background },
+  loadingFrame: { position: 'relative' },
+  spinnerFrame: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
+  label: { textAlign: 'center', flexShrink: 1 },
 });

@@ -36,7 +36,12 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     FadeInDown: builder('FadeInDown'), FadeOutDown: builder('FadeOutDown'), FadeOutUp: builder('FadeOutUp'),
     default: { View: 'AnimatedView' }, cancelAnimation(value) { cancellations.push(value); }, ReduceMotion: { System: 'system', Never: 'never' },
     useSharedValue: (initial) => { const value = React.useRef(initial); return React.useMemo(() => ({ get: () => value.current, set: (next) => { value.current = next; } }), []); },
-    useAnimatedStyle: (fn) => fn(), withTiming: (value, config) => { animations.push({ value, ...config }); return value; },
+    useAnimatedStyle: (fn) => fn(), interpolateColor: (value, range, colors) => {
+      const fraction = Math.max(0, Math.min(1, (value - range[0]) / (range[1] - range[0])));
+      const channels = [1, 3, 5].map(offset => Math.round(parseInt(colors[0].slice(offset, offset + 2), 16) * (1 - fraction) +
+        parseInt(colors[1].slice(offset, offset + 2), 16) * fraction));
+      return `#${channels.map(channel => channel.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+    }, withTiming: (value, config) => { animations.push({ value, ...config }); return value; },
     withRepeat: (value, count) => { repeats.push({ value, count }); return value; },
     withSequence: (...values) => values.at(-1), withDelay: (duration, value) => { delays.push(duration); return value; } };
   const kv = new Map();
