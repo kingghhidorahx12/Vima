@@ -94,7 +94,7 @@ test('Home logo, internal surfaces, sheet, primary action and navigation follow 
       const label = tab.findAllByType('Text' as never).at(-1)!;
       const labelStyle = Object.assign({}, ...[label.props.style].flat(Infinity).filter(Boolean));
       assert.equal(labelStyle.color,
-        index === 0 ? '#00D68F' : '#2A2E2D');
+        index === 0 ? '#00826F' : '#2A2E2D');
     }
   } finally { await h.act(async () => nav.unmount()); }
 });

@@ -1,12 +1,32 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-shared-address-panel-p0`, creada desde
-`codex/passenger-floating-fields-final-p0` @ `b0b8e5d`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-shell-compact-polish-p0`, creada desde
+`codex/passenger-shared-address-panel-p0` @ `ad028f3`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Alineación Home, halo de direcciones y nav compacto — 2026-10-06
+
+- Home conserva el buscador de 58 dp, su posición, borde, halo, copy y Motion.
+  La lupa de 21 dp queda centrada en un frame de 24 × 24 dp; el texto sigue en
+  `bodyMedium`, sin desplazamientos verticales manuales. El gap interno es 10 dp.
+- Reviewing, confirm y requesting conservan una sola card exterior para Origen,
+  paradas y Destino. Un halo absoluto estático queda detrás de esa card, con
+  radio compartido, sombra verde blur 16/spread 4 y opacity 0.18. No ocupa
+  layout, no añade halo por fila ni ciclo de animación.
+- Bottom nav usa altura real `6 + 48 + max(10, bottomInset)` dp (64 dp de base),
+  tabs de 48 dp, gap icono/label de 2 dp y safe-area inferior. Inicio activo usa
+  `greenDark` (#00826F); tabs inactivas siguen graphite. Handlers, disponibilidad,
+  press, transición Motion 1.1 y Reduced Motion no cambiaron.
+- Route-fit, Camera, mapa, sheet, navegación funcional, pricing y persistencia
+  permanecen intactos. Sin dependencias ni cambios nativos. Android físico
+  PENDIENTE; no se generó EAS Build.
+- Validación local: TypeScript, lint, 161 tests, worklets, Expo Doctor 21/21,
+  schema MapLibre, export Hermes Android/iOS, splash y aislamiento de fixtures,
+  pricing/servidor, rutas y credenciales de release, todos correctos.
 
 ### Bloque único de direcciones y radio superior Passenger — 2026-10-06
 

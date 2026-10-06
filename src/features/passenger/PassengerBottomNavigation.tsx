@@ -13,7 +13,11 @@ const tabs: readonly { label: string; icon: VimaGlyphName; enabled: boolean }[] 
   { label: 'Inicio', icon: 'home', enabled: true }, { label: 'Viajes', icon: 'clock', enabled: false },
   { label: 'Pagos', icon: 'payment', enabled: false }, { label: 'Perfil', icon: 'profile', enabled: false },
 ];
-export const bottomNavigationHeight = (bottom: number) => Math.max(72, 56 + bottom);
+const navigationTopPadding = 6;
+const navigationTabHeight = 48;
+const navigationBottomPadding = (bottom: number) => Math.max(10, bottom);
+export const bottomNavigationHeight = (bottom: number) =>
+  navigationTopPadding + navigationTabHeight + navigationBottomPadding(bottom);
 const travel = motionDistances.shortEnterY * 2;
 const fadeEnter = FadeIn.duration(motionTimings.navigation.duration).easing(motionTimings.navigation.easing).reduceMotion(ReduceMotion.Never);
 const fadeExit = FadeOut.duration(motionTimings.navigation.duration).easing(motionTimings.sheetClose.easing).reduceMotion(ReduceMotion.Never);
@@ -27,7 +31,7 @@ export function PassengerBottomNavigation({ visible, bottomInset, onHome }: { vi
   const { reducedMotion } = useMotionPolicy();
   return visible ? <Animated.View testID="passenger-bottom-navigation"
     entering={reducedMotion ? fadeEnter : moveEnter} exiting={reducedMotion ? fadeExit : moveExit}
-    style={[styles.navigation, { height: bottomNavigationHeight(bottomInset), paddingBottom: Math.max(8, bottomInset) }]}>
+    style={[styles.navigation, { height: bottomNavigationHeight(bottomInset), paddingBottom: navigationBottomPadding(bottomInset) }]}>
     {tabs.map(tab => <NavTab key={tab.label} tab={tab} onHome={onHome} />)}
   </Animated.View> : null;
 }
@@ -38,13 +42,14 @@ function NavTab({ tab, onHome }: { tab: typeof tabs[number]; onHome: () => void 
       accessibilityHint={tab.enabled ? undefined : 'Módulo no disponible'} onPress={tab.enabled ? onHome : undefined}
       onPressIn={tab.enabled ? feedback.onPressIn : undefined} onPressOut={tab.enabled ? feedback.onPressOut : undefined}
       style={({ pressed }) => [styles.tab, pressed && tab.enabled && passengerSurfaces.pressed]}>
-      <VimaGlyph name={tab.icon} color={tab.enabled ? t.colors.green : t.colors.graphite} />
-      <VimaText variant="caption" style={[styles.label, { color: tab.enabled ? t.colors.green : t.colors.graphite }]}>{tab.label}</VimaText>
+      <VimaGlyph name={tab.icon} color={tab.enabled ? t.colors.greenDark : t.colors.graphite} />
+      <VimaText variant="caption" style={[styles.label, { color: tab.enabled ? t.colors.greenDark : t.colors.graphite }]}>{tab.label}</VimaText>
     </Pressable></Animated.View>;
 }
 const styles = StyleSheet.create({
-  navigation: { flexDirection: 'row', backgroundColor: t.colors.white, paddingTop: 8 },
+  navigation: { flexDirection: 'row', backgroundColor: t.colors.white, paddingTop: navigationTopPadding },
   tabFrame: { flex: 1 },
-  tab: { minHeight: 48, justifyContent: 'center', alignItems: 'center', gap: 4, borderRadius: t.radii.fieldPx },
+  tab: { height: navigationTabHeight, minHeight: 44, justifyContent: 'center', alignItems: 'center', gap: 2,
+    borderRadius: t.radii.fieldPx },
   label: { ...textStyle({ variant: 'caption' }), fontFamily: interFamilies[500] },
 });

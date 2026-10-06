@@ -231,19 +231,22 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         value={flow.search} onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }}
         returnKeyType="search" style={styles.searchInput} placeholderTextColor={t.colors.gray} />
       {flow.loadingPlaces ? <ActivityIndicator size="small" color={t.colors.accentBlue} /> : null}</View></View>;
-  const addressFields = <View testID="passenger-address-panel" style={styles.addressSurface}>
-    <View style={styles.addressInterior}>
-      {reviewing ? <OriginField embedded place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
-        : <AddressField embedded rowTestID="passenger-origin-row" label="Origen" place={flow.origin}
-          color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />}
-      {!reviewing ? flow.quote?.stops.map((place) => <Fragment key={place.id}>
+  const addressFields = <View testID="passenger-address-frame" style={styles.addressFrame}>
+    <View testID="passenger-address-halo" pointerEvents="none" style={styles.addressHalo} />
+    <View testID="passenger-address-panel" style={styles.addressSurface}>
+      <View style={styles.addressInterior}>
+        {reviewing ? <OriginField embedded place={flow.origin} status={flow.originStatus} onPress={() => openField('origin')} />
+          : <AddressField embedded rowTestID="passenger-origin-row" label="Origen" place={flow.origin}
+            color={t.colors.green} onPress={() => openField('origin')} disabled={blocked} />}
+        {!reviewing ? flow.quote?.stops.map((place) => <Fragment key={place.id}>
+          <View testID="passenger-address-divider" style={styles.addressDivider} />
+          <AddressField embedded rowTestID="passenger-stop-row" label={place.name} place={place} color={t.colors.gray} disabled />
+        </Fragment>) : null}
         <View testID="passenger-address-divider" style={styles.addressDivider} />
-        <AddressField embedded rowTestID="passenger-stop-row" label={place.name} place={place} color={t.colors.gray} disabled />
-      </Fragment>) : null}
-      <View testID="passenger-address-divider" style={styles.addressDivider} />
-      <AddressField embedded rowTestID="passenger-destination-row" label="Destino" place={flow.destination}
-        color={t.colors.red} onPress={() => openField('destination')}
-        disabled={!reviewing && blocked} />
+        <AddressField embedded rowTestID="passenger-destination-row" label="Destino" place={flow.destination}
+          color={t.colors.red} onPress={() => openField('destination')}
+          disabled={!reviewing && blocked} />
+      </View>
     </View>
   </View>;
   const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
@@ -255,7 +258,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
       style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed,
         pressed && styles.pressedElevation, styles.brandBorder, pressed && styles.activeBrandBorder]}>
-      <VimaGlyph name="search" color={t.colors.graphite} />
+      <View testID="passenger-home-search-icon-frame" style={styles.homeSearchIconFrame}>
+        <VimaGlyph name="search" color={t.colors.graphite} size={21} />
+      </View>
       <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
     </Pressable></Animated.View> : destinationSearchFloating ? <View testID="passenger-floating-accessory"
       style={styles.floatingSearchFrame}>{searchField}</View> : addressesFloating ? <View testID="passenger-floating-accessory"
@@ -750,8 +755,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: md },
   homeSearchFrame: { position: 'relative', alignSelf: 'stretch', marginHorizontal: base, height: homeSearchHeight },
   homeSearch: { ...surfaces.card, width: '100%', height: homeSearchHeight, borderRadius: 24,
-    flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md,
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: md,
     ...elevationStyle('level1', t.colors.carbon) },
+  homeSearchIconFrame: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   brandBorder: { borderColor: t.colors.green },
   activeBrandBorder: { borderColor: t.colors.greenDark },
   pressedElevation: { boxShadow: [] },
@@ -776,9 +782,12 @@ const styles = StyleSheet.create({
   pinShape: { width: t.components.iconSizesPx[0], height: t.components.iconSizesPx[0], borderRadius: t.radii.pillPx,
     borderBottomRightRadius: t.radii.smallPx / 2, transform: [{ rotate: '45deg' }] },
   pinCore: { position: 'absolute', width: xs, height: xs, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white, top: sm, left: sm },
+  addressFrame: { position: 'relative' },
+  addressHalo: { ...StyleSheet.absoluteFill, borderRadius: t.radii.cardPx,
+    backgroundColor: surfaceColors.brandWash, opacity: 0.18,
+    boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 16, spreadDistance: 4, color: t.colors.green }] },
   addressSurface: { backgroundColor: t.colors.white, borderRadius: t.radii.cardPx,
-    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.green,
-    boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 12, spreadDistance: 2, color: surfaceColors.brandWash }] },
+    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.green },
   addressInterior: { borderRadius: t.radii.cardPx, overflow: 'hidden' },
   addressDivider: { height: t.borders.standardWidthPx, marginHorizontal: md, backgroundColor: surfaceColors.border },
   embeddedAddressField: { minHeight: 46, paddingVertical: sm, borderWidth: 0,

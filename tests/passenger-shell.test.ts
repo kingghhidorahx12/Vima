@@ -116,6 +116,20 @@ test('Search results and Home rich recents use continuous list rows with fixed g
     assert.equal(restingStyle(pill).width, '100%');
     assert.equal(restingStyle(pill).marginHorizontal, undefined);
     assert.equal(restingStyle(pill).borderRadius, 24);
+    assert.equal(restingStyle(pill).gap, 10);
+    assert.equal(restingStyle(pill).alignItems, 'center');
+    const iconFrame = id(tree, 'passenger-home-search-icon-frame');
+    assert.equal(style(iconFrame).width, 24);
+    assert.equal(style(iconFrame).height, 24);
+    assert.equal(style(iconFrame).alignItems, 'center');
+    assert.equal(style(iconFrame).justifyContent, 'center');
+    const searchGlyph = iconFrame.findAll(n => String(n.type) === 'Text')[0]!;
+    assert.equal(style(searchGlyph).fontSize, 21);
+    assert.equal(style(searchGlyph).lineHeight, 21);
+    const searchText = pill.findAll(n => n.props.children === '¿A dónde vamos?' && String(n.type) === 'Text')[0]!;
+    assert.equal(style(searchText).fontSize, 16);
+    assert.equal(style(searchText).top, undefined);
+    assert.equal(style(searchText).transform, undefined);
     assert.equal(restingStyle(pill).borderColor, '#00D68F');
     assert.ok(restingStyle(pill).boxShadow.length > 0);
     assert.deepEqual(Object.assign({}, ...pill.props.style({ pressed: true }).filter(Boolean)).boxShadow, []);
@@ -212,6 +226,8 @@ test('review and confirmation share one green address panel without changing map
   const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
   const tree: ReactTestRenderer = await h.render(fixture.gateway);
   const checkAddresses = () => {
+    const frame = id(tree, 'passenger-address-frame');
+    const halo = id(tree, 'passenger-address-halo');
     const panel = id(tree, 'passenger-address-panel');
     const origin = id(tree, 'passenger-origin-row');
     const destination = id(tree, 'passenger-destination-row');
@@ -224,7 +240,16 @@ test('review and confirmation share one green address panel without changing map
     assert.equal(style(panel).backgroundColor, '#FFFFFF');
     assert.equal(style(panel).borderColor, '#00D68F');
     assert.equal(style(panel).borderRadius, 16);
-    assert.equal(style(panel).boxShadow.length, 1);
+    assert.equal(style(panel).boxShadow, undefined);
+    assert.equal(frame.findAll(n => n.props.testID === 'passenger-address-halo').length, 1);
+    assert.equal(style(frame).position, 'relative');
+    assert.equal(halo.props.pointerEvents, 'none');
+    assert.equal(style(halo).position, 'absolute');
+    assert.deepEqual([style(halo).top, style(halo).right, style(halo).bottom, style(halo).left], [0, 0, 0, 0]);
+    assert.equal(style(halo).borderRadius, style(panel).borderRadius);
+    assert.equal(style(halo).opacity, 0.18);
+    assert.deepEqual(style(halo).boxShadow, [{ offsetX: 0, offsetY: 0, blurRadius: 16,
+      spreadDistance: 4, color: '#00D68F' }]);
     for (const row of [origin, destination]) {
       const s = restingStyle(row);
       assert.equal(s.borderWidth, 0);
@@ -495,13 +520,20 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       const nav = id(tree, 'passenger-bottom-navigation');
       assert.equal(surface.findAll(n => n.props.testID === 'passenger-bottom-navigation').length, 0);
       assert.equal(style(nav).marginHorizontal, undefined);
-      assert.equal(style(nav).paddingBottom, Math.max(8, bottom!));
-      assert.equal(style(nav).height, Math.max(72, 56 + bottom!));
+      assert.equal(style(nav).paddingTop, 6);
+      assert.equal(style(nav).paddingBottom, Math.max(10, bottom!));
+      assert.equal(style(nav).height, 54 + Math.max(10, bottom!));
       const tabs = nav.findAllByType('Pressable' as never);
       assert.deepEqual(tabs.map(n => n.props.accessibilityLabel), ['Inicio', 'Viajes', 'Pagos', 'Perfil']);
       assert.deepEqual(tabs.map(n => n.props.accessibilityState.disabled), [false, true, true, true]);
       assert.deepEqual(tabs.map(n => n.props.accessibilityState.selected), [true, false, false, false]);
       assert.ok(tabs.slice(1).every(n => n.props.onPress === undefined));
+      assert.ok(tabs.every(n => restingStyle(n).height >= 44));
+      assert.ok(tabs.every(n => restingStyle(n).gap === 2));
+      for (const [index, tab] of tabs.entries()) {
+        const expected = index === 0 ? '#00826F' : '#2A2E2D';
+        assert.ok(tab.findAll(n => style(n).color === expected).length >= 2);
+      }
       assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
     } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
   }
