@@ -1,12 +1,28 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-panel-radius-40-final-p0`, creada desde
-`codex/passenger-radius-search-compact-final-p0` @ `84625ef`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-compass-icon-final-p0`, creada desde
+`codex/passenger-panel-radius-40-final-p0` @ `fc87d63`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Cierre visual aprobado Home/Search/Confirmación: brújula — 2026-10-06
+
+- El control `MapCompass` usa el glyph `explore` de Material Symbols
+  (`U+E87A`), una rosa de los vientos presente en la fuente incluida, en
+  lugar de la flecha `navigation` (`U+E55D`). Sigue encima de Capas en la
+  columna derecha. Tamaño, superficie, color, bearing, acción al norte,
+  visibilidad, fade, press y Reduced Motion no cambiaron.
+- El cierre visual de código de Home, Search y Confirmación conserva los
+  layouts aprobados. Android físico sigue PENDIENTE de comprobación; no se
+  generó EAS Build ni hubo cambios nativos.
+- Validación local: TypeScript, lint, 161 tests, worklets, schema MapLibre,
+  Hermes Android/iOS, splash y aislamiento de fixtures, servidor, rutas,
+  credenciales y release correctos. Expo Doctor pasó 20/21 únicamente por
+  los mismos cinco patches pendientes del SDK 57; no se actualizaron
+  dependencias.
 
 ### Radio superior Passenger de 40 dp — 2026-10-06
 

@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { act, create, type ReactTestRenderer, type ReactTestInstance } from 'react-test-renderer';
 import { createPassengerFixtureGateway } from '../src/dev/passenger/gateway.ts';
 import { fixturePlaces, fixtureQuote } from '../src/dev/passenger/fixtures.ts';
+import { glyphCodepoints } from '../src/design/glyphs.ts';
 import { routeFitCandidate, usePassengerRouteFit } from '../src/features/passenger/usePassengerRouteFit.ts';
 
 const require = createRequire(import.meta.url);
@@ -669,6 +670,8 @@ test('bottom nav exists only in normal Home and returns after internal back with
 });
 
 test('rotating reveals the compass above Layers with only a 160 ms fade under either motion policy', async () => {
+  assert.equal(glyphCodepoints.compass, 0xe87a); // Material Symbols explore: compass rose.
+  assert.notEqual(glyphCodepoints.compass, 0xe55d); // Previous navigation arrow.
   for (const reduced of [false, true]) {
     const h = createHarness({}, { reduced });
     const fixture = createPassengerFixtureGateway(clock);
@@ -680,6 +683,9 @@ test('rotating reveals the compass above Layers with only a 160 ms fade under ei
       const before = h.animations.length;
       await act(async () => host(tree, 'NativeMapBoundary').props.onRegionIsChanging({ nativeEvent: { bearing: 90 } }));
       const compass = id(tree, 'passenger-compass');
+      const glyph = compass.findAll(n => typeof n.type === 'function' && n.type.name === 'VimaGlyph')[0]!;
+      assert.equal(glyph.props.name, 'compass');
+      assert.equal(glyph.findByType('Text' as never).props.children, String.fromCodePoint(glyphCodepoints.compass));
       assert.equal(compass.props.pointerEvents, 'auto');
       assert.equal(style(compass).top, undefined); assert.equal(style(compass).right, undefined);
       assert.equal(style(compass).transform, undefined); // Appearance adds no translation or scale.
