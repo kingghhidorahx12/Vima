@@ -31,6 +31,7 @@ import { defaultTrafficLayers, displayKeyAvailable, type TrafficLayerPreferences
 import { mapLayerStorage } from '../../services/storage/mapLayers';
 import { MapControls, LocationCTA, CenteredToast } from './MapControls';
 import { MapCompass } from './MapCompass';
+import { locationCtaHeight, mapControlSize } from './mapCameraFootprint';
 import { useLocationVisibility } from '../../map/useLocationVisibility';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { ElementEntrance } from '../../motion/ElementEntrance';
@@ -55,7 +56,7 @@ export interface PassengerScreenProps {
 
 const confirmationPillTop = 12;
 const confirmationPillHeight = 40;
-const homeSearchHeight = 76;
+const homeSearchHeight = 58;
 const homeSearchGap = 10;
 const homeSearchAccessoryHeight = homeSearchHeight + homeSearchGap;
 
@@ -73,12 +74,13 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const [height, setHeight] = useState(0);
   const [mapWidth, setMapWidth] = useState(0);
-  const [visibleSheetHeight, setVisibleSheetHeight] = useState<number>();
+  const [visibleSheetMeasure, setVisibleSheetMeasure] = useState<{ key: string; height: number }>();
   const nativeMap = useRef<VimaMapRef>(null);
   const { reducedMotion } = useMotionPolicy();
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const [mapUserControlled, setMapUserControlled] = useState(false);
+  const [homePanNeedsRecenter, setHomePanNeedsRecenter] = useState(false);
   const [mapBearing, setMapBearing] = useState(0);
   const [northRequest, setNorthRequest] = useState<number>();
   const [mapLayers, setMapLayers] = useState<TrafficLayerPreferences>(defaultTrafficLayers);
@@ -127,14 +129,18 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     confirmationPillVisible ? confirmationPillTop + confirmationPillHeight : 0) + 12;
   const sheetFrameHeight = Math.max(0, height - topFrameShift);
   const homeFloatingSearch = homeNormal && homePanel === 'home' && !reviewing;
-  // The detached search no longer consumes panel height; keep Home rows within its fixed footprint.
-  const homeRecentLimit = Math.max(1, Math.min(3, Math.floor((sheetFrameHeight * 0.69 - 210) / 88)));
+  const homeRecentLimit = 3;
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
   // Key only the measured content, never the persistent map/sheet. Search typing and late
   // quotes do not replace the input; review and confirm get independent native layouts.
   const measureKey = JSON.stringify(flow.field ? ['search', flow.field, searchAction] :
     [flow.phase, homePanel, reviewing, flow.quote?.id, flow.origin?.id, flow.destination?.id, flow.quote?.route.geometry]);
+  const viewportKey = `${measureKey}:${sheetFrameHeight}`;
+  const visibleSheetHeight = visibleSheetMeasure?.key === viewportKey ? visibleSheetMeasure.height : undefined;
+  const reportVisibleSheetHeight = useCallback((value: number) => {
+    setVisibleSheetMeasure({ key: viewportKey, height: value });
+  }, [viewportKey]);
   const currentMeasureKey = useRef(measureKey);
   useLayoutEffect(() => { currentMeasureKey.current = measureKey; }, [measureKey]);
   const headerHeight = headerMeasure?.key === measureKey ? headerMeasure.height : 0;
@@ -143,7 +149,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const interaction = useMemo(() => {
     if (sheetFrameHeight <= 0) return undefined;
     if (homeFloatingSearch) {
-      const panelHeight = sheetFrameHeight * 0.69;
+      const panelHeight = sheetFrameHeight * 0.50;
       const targetOffset = sheetFrameHeight - panelHeight;
       return createRideSheetInteraction(sheetFrameHeight + homeSearchAccessoryHeight, targetOffset, [targetOffset]);
     }
@@ -165,10 +171,21 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       height - (settledSheetHeight ?? height) > topOcclusion,
     measuredSheetHeight: settledSheetHeight, confirmationRequest: routeFitRequestId });
   const contentOpacity = useSharedValue(1);
-  const usefulHeight = visibleSheetHeight === undefined ? topFrameShift + (interaction?.targetOffset ?? sheetFrameHeight)
+  // The sheet reports its actual visible footprint, including Home's detached search.
+  // Before that measurement arrives, the interaction yields the same top edge.
+  const usefulHeight = visibleSheetHeight === undefined
+    ? Math.max(0, height - (interaction ? (interaction.height ?? sheetFrameHeight) - interaction.targetOffset : 0))
     : Math.max(0, height - visibleSheetHeight);
+  const bottomFootprint = Math.max(0, height - usefulHeight);
+  const controlClearance = mapControlSize * 2 + t.spacing.scalePx[1]! + t.spacing.scalePx[1]!;
+  const controlsFit = homeFloatingSearch ? usefulHeight - topOcclusion >= controlClearance
+    : (interaction?.targetOffset ?? sheetFrameHeight) > 130;
+  const locationFits = homeFloatingSearch ? usefulHeight - topOcclusion >= locationCtaHeight + t.spacing.scalePx[1]!
+    : usefulHeight - topFrameShift > 130;
   const locationVisibility = useLocationVisibility(nativeMap, flow.currentLocation?.coordinate, mapWidth, usefulHeight,
     mapReady && focused, topFrameShift + chromeBottom);
+  const locationCtaVisible = mapReady && locationFits &&
+    (locationVisibility.outside || centered || homeFloatingSearch && homePanNeedsRecenter && !!flow.currentLocation);
   const announcedAssignment = useRef<string | undefined>(undefined);
   useEffect(() => {
     scrollOffset.current = 0;
@@ -188,7 +205,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     transform: [{ translateY: reducedMotion ? 0 : (1 - contentOpacity.get()) * 6 }] }));
   const openField = (target: 'origin' | 'destination') => {
     setRouteFitRequestId(undefined);
-    setIncident(null); setMapUserControlled(false); setSearchAction('results'); setSelectedCoordinate(null); flow.openField(target);
+    setIncident(null); setMapUserControlled(false); setHomePanNeedsRecenter(false);
+    setSearchAction('results'); setSelectedCoordinate(null); flow.openField(target);
   };
   const openSearch = (query = '') => { dismissKeyboard(); openField('destination'); flow.setSearch(query); };
   const sheetTitle = flow.field ? pickingMap ? 'Elegir en el mapa' : searchAction === 'contribute-form' ? 'Agregar lugar' :
@@ -201,7 +219,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
       style={({ pressed }) => [styles.homeSearch, pressed && surfaces.pressed]}>
       <VimaGlyph name="search" color={t.colors.graphite} />
-      <VimaText variant="h3">¿A dónde vamos?</VimaText>
+      <VimaText variant="bodyMedium">¿A dónde vamos?</VimaText>
     </Pressable><View style={styles.homeSearchGap} /></> : null}
     <View style={[styles.sheetHeader, homeFloatingSearch && styles.homePanelHeader]}>
       <View style={styles.handle} />
@@ -217,7 +235,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     if (draft) { setReviewedDraft(undefined); boundaries.schedule(draft); }
   };
   const openSavedPicker = (target: 'home' | 'work' | 'favorite') => {
-    dismissKeyboard(); setRouteFitRequestId(undefined); setIncident(null); setMapUserControlled(false);
+    dismissKeyboard(); setRouteFitRequestId(undefined); setIncident(null);
+    setMapUserControlled(false); setHomePanNeedsRecenter(false);
     setSearchAction('results'); setSelectedCoordinate(null); flow.openSavedPicker(target);
   };
   const toggleMapLayer = (layer: keyof TrafficLayerPreferences) => {
@@ -235,7 +254,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     setRouteFitRequestId(undefined);
     void semanticHaptics('buttonChip');
     if (!flow.field && homePanel !== 'home') setHomePanel('home');
-    dismissKeyboard(); setMapUserControlled(false); setSearchAction('results'); void flow.choosePlace(place, target);
+    dismissKeyboard(); setMapUserControlled(false); setHomePanNeedsRecenter(false);
+    setSearchAction('results'); void flow.choosePlace(place, target);
   };
   const confirmMapSelection = () => {
     if (!selectedCoordinate) return;
@@ -251,7 +271,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const goHome = () => {
     setRouteFitRequestId(undefined); dismissKeyboard(); setIncident(null); setLayersOpen(false);
     setSearchAction('results'); setSelectedCoordinate(null);
-    flow.returnHome(); setHomePanel('home'); setReviewedDraft(undefined); setMapUserControlled(false);
+    flow.returnHome(); setHomePanel('home'); setReviewedDraft(undefined);
+    setMapUserControlled(false); setHomePanNeedsRecenter(false);
   };
   const goBack = () => {
     setRouteFitRequestId(undefined);
@@ -260,7 +281,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     if (layersOpen) { setLayersOpen(false); return; }
     if (flow.field) { setSearchAction('results'); setSelectedCoordinate(null); flow.closeField(); return; }
     if (homePanel !== 'home') { setHomePanel('home'); return; }
-    flow.returnHome(); setReviewedDraft(undefined); setMapUserControlled(false);
+    flow.returnHome(); setReviewedDraft(undefined); setMapUserControlled(false); setHomePanNeedsRecenter(false);
   };
   // Scope Android back to the focused shell; active rides keep explicit cancellation.
   const backAction = useRef(goBack);
@@ -385,19 +406,19 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         {flow.recents.map(place => <PlaceRow key={place.id} place={place} rich resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'home' ? <>
-        <View style={styles.recentHeader}><VimaText variant="h3" style={styles.fill}>Lugares guardados</VimaText>
-          <TextAction label="Ver todos" onPress={() => setHomePanel('saved')} /></View>
+        <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Lugares guardados</VimaText>
+          <TextAction label="Ver todos" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('saved'); }} /></View>
         <View style={styles.quickRow}>
-          <QuickPlace label={flow.savedSlots.home ? 'Casa' : '+ Casa'} icon="home"
+          <QuickPlace label="Casa" icon="home"
             onPress={() => flow.savedSlots.home ? choosePlace(flow.savedSlots.home, 'destination') : openSavedPicker('home')} />
           <View style={styles.quickDivider} />
-          <QuickPlace label={flow.savedSlots.work ? 'Trabajo' : '+ Trabajo'} icon="work"
+          <QuickPlace label="Trabajo" icon="work"
             onPress={() => flow.savedSlots.work ? choosePlace(flow.savedSlots.work, 'destination') : openSavedPicker('work')} />
           <View style={styles.quickDivider} />
-          <QuickPlace label="Favoritos" icon="favorite" onPress={() => setHomePanel('favorites')} />
+          <QuickPlace label="Favoritos" icon="favorite" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('favorites'); }} />
         </View>
-        <View style={styles.recentHeader}><VimaText variant="h3" style={styles.fill}>Viajes recientes</VimaText>
-          <TextAction label="Ver todos" onPress={() => setHomePanel('recents')} /></View>
+        <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Viajes recientes</VimaText>
+          <TextAction label="Ver todos" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('recents'); }} /></View>
         {flow.recents.slice(0, homeRecentLimit).map((place) => <PlaceRow key={place.id} place={place} rich resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
@@ -479,9 +500,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           locationVisibility.settled();
           const target = pendingCenter.current;
           if (target && !event.nativeEvent.userInteraction && event.nativeEvent.center.every((value, i) => Math.abs(value - target[i]!) < 0.00001)) {
-            pendingCenter.current = null; setRecentering(false); setCentered(true); void semanticHaptics('pinCorrect');
+            pendingCenter.current = null; setRecentering(false); setCentered(true); setHomePanNeedsRecenter(false);
+            void semanticHaptics('pinCorrect');
           }
-        }, onTouchStart: () => { pendingCenter.current = null; setRecentering(false); dismissKeyboard(); setMapUserControlled(true); },
+        }, onTouchStart: () => { pendingCenter.current = null; setRecentering(false); dismissKeyboard();
+          setMapUserControlled(true); if (homeFloatingSearch) setHomePanNeedsRecenter(true); },
           onPress: event => { setIncident(null); if (pickingMap) setSelectedCoordinate(normalizeCoordinate(event.nativeEvent.lngLat)); },
           onDidFinishLoadingMap: () => { setMapReady(true); setMapFailed(false); }, onDidFailLoadingMap: () => setMapFailed(true) }}
         mapContent={<PassengerMap quote={flow.quote} assignment={assignment} origin={flow.origin} destination={flow.destination}
@@ -493,10 +516,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
           cameraMode={reviewing || flow.phase === 'confirm' || mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
           topOcclusion={topOcclusion}
-          locationCtaVisible={mapReady && usefulHeight - topFrameShift > 130 && (locationVisibility.outside || centered)}
+          locationCtaVisible={locationCtaVisible}
+          homeBottomOcclusion={homeFloatingSearch ? bottomFootprint : undefined}
           layersMenuOpen={layersOpen}
           sheetHeight={interaction ? sheetFrameHeight - interaction.targetOffset : sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
-        sheet={{ interaction, header, style: [styles.sheet, homeFloatingSearch && styles.homeSheet], onVisibleHeightChange: setVisibleSheetHeight }}
+        sheet={{ interaction, header, style: [styles.sheet, homeFloatingSearch && styles.homeSheet], onVisibleHeightChange: reportVisibleSheetHeight }}
         renderPhase={() => content} />
       <View testID="passenger-top-chrome" pointerEvents="box-none" onTouchStart={dismissKeyboard}
         style={[styles.topChrome, homeNormal && styles.homeTopChrome, { top: homeNormal ? topInset + 8 : topFrameShift + 8 }]}>
@@ -519,16 +543,20 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         style={[styles.confirmationPill, { top: topFrameShift + confirmationPillTop }]}>
         <VimaText variant="bodyMedium" numberOfLines={1} accessibilityRole="header" style={styles.confirmationPillText}>Confirma tu viaje</VimaText>
       </View> : null}
-      {mapReady && (interaction?.targetOffset ?? sheetFrameHeight) > 130 ? <View pointerEvents="box-none"
+      {mapReady && controlsFit ? <View pointerEvents="box-none"
         testID="passenger-map-controls"
-        style={[styles.mapControls, { bottom: (interaction ? sheetFrameHeight - interaction.targetOffset : 0) + t.spacing.scalePx[2]! }]}>
+        style={[styles.mapControls, { bottom: homeFloatingSearch
+          ? bottomFootprint + t.spacing.scalePx[1]!
+          : (interaction ? sheetFrameHeight - interaction.targetOffset : 0) + t.spacing.scalePx[2]! }]}>
         <MapControls available={hasDisplayKey} layers={mapLayers}
           compass={<MapCompass bearing={mapBearing} ready={mapReady && !mapFailed}
             onPress={() => setNorthRequest(value => (value ?? 0) + 1)} />}
           open={layersOpen} onOpen={() => setLayersOpen((value) => !value)} onToggle={toggleMapLayer} />
       </View> : null}
-      {mapReady && usefulHeight - topFrameShift > 130 && (locationVisibility.outside || centered) ?
-        <View pointerEvents="box-none" style={[styles.locationCTA, { bottom: height - usefulHeight + t.spacing.scalePx[2]! }]}>
+      {locationCtaVisible ?
+        <View testID="passenger-location-cta" pointerEvents="box-none"
+          style={[styles.locationCTA, { bottom: (homeFloatingSearch ? bottomFootprint + t.spacing.scalePx[1]!
+            : height - usefulHeight + t.spacing.scalePx[2]!) }]}>
           {centered ? <CenteredToast /> : <LocationCTA busy={recentering} onPress={recenterMap} />}
         </View> : null}
       {incident && (interaction?.targetOffset ?? sheetFrameHeight) > chromeBottom + 100 ? <IncidentCard details={incident}
@@ -599,7 +627,7 @@ function SavedSlotEntry({ label, place, onChange, onRemove }: { label: string; p
   </View>;
 }
 function QuickPlace({ label, icon, onPress }: { label: string; icon: VimaGlyphName; onPress?: () => void }) {
-  const content = <><VimaGlyph name={icon} color={t.colors.graphite} /><VimaText variant="bodySmall" numberOfLines={1}>{label}</VimaText></>;
+  const content = <><VimaGlyph name={icon} color={t.colors.graphite} size={20} /><VimaText variant="caption" numberOfLines={1}>{label}</VimaText></>;
   return <ElementEntrance style={styles.fill}>{onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
     style={({ pressed }) => [styles.quickPlace, pressed && surfaces.pressed]}>{content}</Pressable>
     : <View accessible accessibilityLabel={label} style={styles.quickPlace}>{content}</View>}</ElementEntrance>;
@@ -627,7 +655,8 @@ const styles = StyleSheet.create({
   headerLockup: { width: 672 * 32 / 200, height: 32, ...elevationStyle('level1', t.colors.carbon) },
   headerSide: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center',
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.white },
-  notification: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
+  notification: { position: 'absolute', top: 0, right: 0, width: 52, height: 52,
+    alignItems: 'center', justifyContent: 'center',
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
     ...elevationStyle('level2', t.colors.carbon) },
   headerTitle: { flex: 1, textAlign: 'center', color: t.colors.carbon },
@@ -653,9 +682,9 @@ const styles = StyleSheet.create({
     height: homeSearchHeight, borderRadius: 24,
     flexDirection: 'row', alignItems: 'center', gap: md, paddingHorizontal: md,
     ...elevationStyle('level1', t.colors.carbon) },
-  quickRow: { ...surfaces.card, height: 48, flexDirection: 'row', alignItems: 'center',
+  quickRow: { ...surfaces.card, height: 44, flexDirection: 'row', alignItems: 'center',
     borderRadius: t.radii.pillPx, ...elevationStyle('level1', t.colors.carbon) },
-  quickPlace: { flex: 1, height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+  quickPlace: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: xs, gap: xs },
   quickDivider: { width: t.borders.standardWidthPx, height: 24, backgroundColor: surfaceColors.border },
   savedEntry: { ...surfaces.card, gap: sm, padding: md, ...elevationStyle('level1', t.colors.carbon) },

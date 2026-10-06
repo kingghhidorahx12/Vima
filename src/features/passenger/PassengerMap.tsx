@@ -23,10 +23,10 @@ export interface PassengerMapConfig {
   readonly viewport: (quote: RideQuote | undefined, assignment: Assignment | undefined, origin: Place | null) => CameraTarget;
   readonly vehicleMotion: VehicleMotionConfig;
 }
-export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, topOcclusion = 0, locationCtaVisible = false, searchPresentationActive,
+export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, topOcclusion = 0, homeBottomOcclusion, locationCtaVisible = false, searchPresentationActive,
   cameraMode = 'automatic', recenter, fitRoute, northRequest, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
   quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
-  ready: boolean; sheetHeight: number; topOcclusion?: number; locationCtaVisible?: boolean; layersMenuOpen?: boolean; searchPresentationActive?: boolean; cameraMode?: CameraMode;
+  ready: boolean; sheetHeight: number; topOcclusion?: number; homeBottomOcclusion?: number; locationCtaVisible?: boolean; layersMenuOpen?: boolean; searchPresentationActive?: boolean; cameraMode?: CameraMode;
   recenter?: RecenterIntent; fitRoute?: Omit<PassengerRouteFitIntent, 'sheetHeight'> & { sheetHeight?: number }; northRequest?: number;
   layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
   onIncidentSelect?: (details: IncidentDetails) => void;
@@ -40,10 +40,13 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
     // outside the map; the sheet contributes only its visible height.
     return { ...view, padding: { ...view.padding, top: Math.max(view.padding?.top ?? 0, topOcclusion), bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
   }, [assignment, config, origin, quote, sheetHeight, topOcclusion]);
-  // Padding is expressed around the visible map viewport: 28 dp more below
-  // moves the centered coordinate 14 dp up. Route fits keep `target` unchanged.
-  const centeredPadding = useMemo(() => ({ ...target.padding,
+  // Preserve previous non-Home recenter behavior. Normal Home uses the measured
+  // search top as its bottom viewport boundary for both initial and explicit centers.
+  const previousRecenterPadding = useMemo(() => ({ ...target.padding,
     bottom: (target.padding.bottom ?? 0) + 28 }), [target]);
+  const centeredPadding = useMemo(() => home && homeBottomOcclusion !== undefined
+    ? { ...target.padding, bottom: (target.padding.bottom ?? 0) - sheetHeight + homeBottomOcclusion }
+    : previousRecenterPadding, [home, homeBottomOcclusion, target, sheetHeight, previousRecenterPadding]);
   const homeTarget = useMemo(() => home ? { ...target, padding: centeredPadding } : target,
     [home, target, centeredPadding]);
   const horizontalFitPadding = Math.max(target.padding.left ?? 0, target.padding.right ?? 0, passengerPinClearance.side);

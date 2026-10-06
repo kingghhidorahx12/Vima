@@ -1,12 +1,46 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-05 en `codex/passenger-home-layout-polish-p0`, creada sobre
-`codex/passenger-saved-places-home-p0` @ `568b497`. Sin reset ni merge a main.
+Actualizado 2026-10-05 en `codex/passenger-home-android-regressions-p0`, creada
+desde `codex/passenger-home-layout-polish-p0` @ `0030739`. Sin merge a main.
 
 ## IMPLEMENTADO
 
+### Correcciones físicas de Home Passenger — 2026-10-05
+
+- Home normal usa un panel principal del 50% del frame útil, con ScrollView
+  para Lugares guardados y hasta tres Recientes. El buscador sigue en el mismo
+  `VimaRideSheet`: superficie separada de 58 dp, gap de 10 dp y tipografía
+  `bodyMedium`. Los títulos de ambas secciones usan la misma escala contenida.
+- La fila Casa/Trabajo/Favoritos mide 44 dp, con iconos de 20 dp y etiquetas
+  siempre «Casa»/«Trabajo». Un slot vacío sigue abriendo su configuración;
+  uno configurado sigue seleccionando el destino directamente. Persistencia,
+  gestión, media y fallback de Recientes no cambian.
+- Notificaciones mide 52×52 dp, conserva `level2`, su posición con safe area y
+  su estado deshabilitado. El lockup y el resto del top chrome no cambian.
+- El borde superior medido del buscador define la misma frontera inferior del
+  viewport Home para Brújula/Capas, `LocationCTA` y cámara. Antes de la medida
+  nativa se usa la geometría de la interacción del mismo sheet. Los controles
+  y `Tu ubicación` quedan encima del buscador; el CTA reaparece tras pan.
+  Home inicial y Recenter usan el mismo centro óptico, sin el viejo incremento
+  fijo de 28 dp calibrado para otra altura. Reduced Motion conserva su política.
+- Las geometrías de Search, reviewing, confirm, request, matching y assigned,
+  así como los dos route-fits (incluido `confirmationBottomPadding=28`), siguen
+  como en `0030739`. No cambian navegación, bottom nav, edge-to-edge, mapa/sheet
+  persistentes, TomTom, routing, pricing, matching ni contratos. Sin cambios
+  nativos ni EAS Build.
+- TypeScript, lint, suite completa (150/150, incluido schema/style MapLibre),
+  worklets 19/19, Expo Doctor 21/21, export Hermes Android/iOS y checks de
+  splash, credenciales, fixtures, release y paths correctos.
+- PENDIENTE ANDROID FÍSICO: verificar panel y scroll de tres Recientes,
+  buscador separado, jerarquía de Notificaciones, Brújula/Capas y `Tu ubicación`
+  siempre visibles sobre el buscador, pan + Recenter, y ambos fits con pins
+  completos. La implementación no se marca como probada en dispositivo.
+
 ### Cierre de composición Home y controles Passenger — 2026-10-05
 
+- Los valores de Home 69%/76 dp/48 dp de esta entrega son históricos y fueron
+  sustituidos por la corrección física indicada arriba; los demás estados y
+  el fit de confirmación se conservan.
 - Sólo Home normal usa un panel principal de 69% del frame útil. El buscador
   «¿A dónde vamos?» permanece dentro del mismo `VimaRideSheet`, como superficie
   blanca de 76 dp y radio 24, separada 10 dp del panel. El panel comienza en

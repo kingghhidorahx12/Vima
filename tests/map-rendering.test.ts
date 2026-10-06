@@ -177,7 +177,7 @@ test('explicit Recenter works during Search lock without automatic refit', async
   await h.act(async () => tree.unmount());
 });
 
-test('Home and recenter move the visible center 14 dp up without changing route-fit padding', async () => {
+test('normal Home and recenter use the measured search boundary while route-fit keeps its padding', async () => {
   const h = createMapHarness({ reduced: true });
   const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
   const origin = { id: 'origin', name: 'Origen', address: '', coordinate: [-99, 19] };
@@ -187,7 +187,7 @@ test('Home and recenter move the visible center 14 dp up without changing route-
     route: { width: 4, opacity: 1 }, vehicle: { radius: 12, color: '#000' } };
   const scene = (home: boolean, sequence?: number, fit = false) => React.createElement(PassengerMap, {
     origin, destination: home ? null : destination, quote: fit ? { origin, destination, route } : undefined,
-    home, ready: true, sheetHeight: 300, topOcclusion: 72, config,
+    home, ready: true, sheetHeight: 300, topOcclusion: 72, homeBottomOcclusion: home ? 418 : undefined, config,
     cameraMode: fit ? 'user-controlled' : 'automatic',
     recenter: sequence ? { coordinate: origin.coordinate, sequence } : undefined,
     fitRoute: fit ? { sequence: 1, coordinates: [origin.coordinate, destination.coordinate] } : undefined,
@@ -196,11 +196,11 @@ test('Home and recenter move the visible center 14 dp up without changing route-
   const stops = () => h.calls.filter((call: unknown[]) => call[0] === 'setStop').map((call: unknown[]) => call[1] as {
     padding: { top: number; bottom: number; left?: number; right?: number }; bounds?: number[] });
   assert.equal(stops()[0]!.padding.top, 72);
-  assert.equal(stops()[0]!.padding.bottom, 348); // Base 20 + sheet 300 + 28 gives a 14 dp upward shift.
+  assert.equal(stops()[0]!.padding.bottom, 438); // Base 20 + the actual 418 dp search/sheet footprint.
   await h.act(async () => tree.update(scene(true, 1)));
-  assert.equal(stops().at(-1)!.padding.bottom, 348);
+  assert.deepEqual(stops().at(-1)!.padding, stops()[0]!.padding);
   await h.act(async () => tree.update(scene(false, 2)));
-  assert.equal(stops().at(-1)!.padding.bottom, 348); // Recenter also shifts outside Home.
+  assert.equal(stops().at(-1)!.padding.bottom, 348); // Prior non-Home recenter remains unchanged.
   await h.act(async () => tree.update(scene(false, undefined, true)));
   const fitted = stops().at(-1)!;
   assert.ok(fitted.bounds);

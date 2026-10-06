@@ -876,8 +876,8 @@ test('Home keeps three rich recents, empty and configured slots, and direct dest
     assert.equal(nativeNode(tree, 'PassengerMapContent').props.destination.id, recent[0]!.id);
     assert.equal(searches, 0);
     await h.act(async () => h.back()); await settle(h);
-    assert.ok(tree.root.findAllByType('Pressable' as never).some(n => n.props.accessibilityLabel === '+ Casa'));
-    await h.act(async () => press(tree, '+ Casa')); await settle(h);
+    assert.ok(tree.root.findAllByType('Pressable' as never).some(n => n.props.accessibilityLabel === 'Casa'));
+    await h.act(async () => press(tree, 'Casa')); await settle(h);
     assert.equal(searches, 0); // Opening the slot picker never searches for the word "Casa".
     await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`)); await settle(h);
     assert.equal(slots.home?.id, fixturePlaces[1]!.id);
