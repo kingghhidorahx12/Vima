@@ -10,6 +10,29 @@ sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
 
+### Transición estable entre escenas Passenger — 2026-10-06
+
+- En Android físico se observó un flash blanco en Search → reviewing y un ghost
+  de dos escenas en confirm → Home. La causa era el `ElementEntrance` exterior
+  con `key={scene}` y `exiting`: retenía el árbol anterior mientras el nuevo
+  empezaba con opacidad cero.
+- `PassengerScenePresence` mantiene un único wrapper y un único árbol de escena.
+  Reemplaza el contenido sin salida retenida y aplica una sola entrada
+  interrumpible de 12 dp y 240 ms, o 300 ms para matching/assigned, con el
+  easing Motion 1.2 existente. Su opacidad mínima es 0.8; otro cambio cancela
+  la animación anterior y continúa desde el progreso en curso. Reduced Motion
+  mantiene sólo el fade, sin desplazamiento. Las entradas internas siguen
+  usando `ElementEntrance`.
+- `measureKey` conserva el remount permitido del viewport; no se alteraron
+  mediciones, sheet, mapa, Camera, route-fit, lógica ni tokens Motion.
+  **Android físico PENDIENTE** de repetir específicamente Search → reviewing y
+  confirm → Home, también con cambios rápidos y Reduced Motion. Sin cambio
+  nativo ni EAS Build.
+- Validación: TypeScript, lint, suite 169/169, gateway 29/29, worklets,
+  splash, schema/style MapLibre, export Hermes Android/iOS y aislamiento de
+  fixtures/release/credenciales pasaron. Expo Doctor 20/21 conserva únicamente
+  los cinco patches SDK 57 conocidos; no se actualizaron dependencias.
+
 ### Cierre estable del menú Capas — 2026-10-06
 
 - `MapControls` conserva Tráfico e Incidentes en una sola superficie de altura

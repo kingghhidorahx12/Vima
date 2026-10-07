@@ -494,7 +494,7 @@ test('review, confirmation and requesting measure addresses inside content; late
     const requestingOrder = id(tree, 'passenger-sheet-content').findAll(n => n.props.testID === 'passenger-address-frame' ||
       n.props.label === 'Duración' || n.props.label === 'Solicitar viaje').map(n => n.props.testID ?? n.props.label);
     assert.deepEqual(requestingOrder, ['passenger-address-frame', 'Duración', 'Solicitar viaje']);
-    assert.equal(id(tree, 'passenger-phase-presence').props.exiting.durationMs, 240);
+    assert.equal(id(tree, 'passenger-phase-presence').props.exiting, undefined);
     assert.equal(id(tree, 'passenger-panel-header').findAll(n => n.props.children === 'Confirma tu viaje').length, 0);
     assert.ok(finishRequest);
     await act(async () => finishRequest!()); await settle();
@@ -507,30 +507,68 @@ test('review, confirmation and requesting measure addresses inside content; late
   } finally { finishRequest?.(); await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('one keyed phase presence uses 12 dp with 240/300 ms and preserves driver-found haptic', async () => {
+test('one stable phase presence uses 12 dp with 240/300 ms and preserves the inner scene animations', async () => {
   for (const reduced of [false, true]) {
     const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { reduced });
     const tree: ReactTestRenderer = await h.render(fixture.gateway);
     const presence = () => id(tree, 'passenger-phase-presence');
+    const firstPresence = presence();
     const check = (duration: number) => {
       const node = presence();
-      assert.equal(node.props.exiting.durationMs, duration);
-      assert.equal(node.props.exiting.kind, reduced ? 'FadeOut' : 'FadeOutUp');
-      if (reduced) assert.deepEqual(style(node).transform, [{ translateY: 0 }]);
-      else assert.deepEqual(node.props.exiting.target.transform, [{ translateY: -12 }]);
+      assert.equal(node, firstPresence);
+      assert.equal(node.props.exiting, undefined);
+      assert.equal(node.props.entering, undefined);
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-phase-presence').length, 1);
+      assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-sheet-content').length, 1);
+      assert.deepEqual(style(node).transform, [{ translateY: 0 }]); // settled in the renderer double
+      assert.ok(style(node).opacity > 0);
+      assert.ok(h.animations.some((a: { value: number; duration: number }) => a.value === 1 && a.duration === duration));
     };
     try {
-      await settle(); check(240);
-      assert.ok(h.animations.some((a: { value: number; duration: number }) => a.value === 1 && a.duration === 240));
+      await settle();
       await press(tree, '¿A dónde vamos?'); check(240);
       await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`); check(240);
       await press(tree, 'Confirmar ubicaciones'); check(240);
       await press(tree, 'Solicitar viaje'); check(300);
       assert.ok(tree.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length === 0);
       await act(async () => fixture.controls.advance('assigned')); await settle(); check(300);
+      assert.ok(h.cancellations.length >= 5);
       assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-active-search-glow').length, 0);
       assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
     } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+  }
+});
+
+test('phase transition remains visible, interruptible, and spatially still under Reduced Motion', async () => {
+  for (const reduced of [false, true]) {
+    const h = createHarness({}, { reduced });
+    const { PassengerScenePresence, passengerSceneStyle, passengerSceneOpacityFloor } =
+      h.load('src/motion/PassengerScenePresence.tsx');
+    assert.ok(passengerSceneOpacityFloor > 0);
+    assert.deepEqual(passengerSceneStyle(0, reduced), {
+      opacity: passengerSceneOpacityFloor, transform: [{ translateY: reduced ? 0 : 12 }],
+    });
+    assert.deepEqual(passengerSceneStyle(1, reduced), {
+      opacity: 1, transform: [{ translateY: 0 }],
+    });
+    const render = (scene: string) => React.createElement(PassengerScenePresence, { scene }, React.createElement('View'));
+    let tree: ReactTestRenderer;
+    await act(async () => { tree = create(render('home')); });
+    const node = id(tree!, 'passenger-phase-presence');
+    try {
+      assert.equal(style(node).opacity, 1); // First Home paint is not an entrance from zero.
+      await act(async () => tree!.update(render('search')));
+      await act(async () => tree!.update(render('reviewing')));
+      await act(async () => tree!.update(render('confirm')));
+      await act(async () => tree!.update(render('home')));
+      assert.equal(id(tree!, 'passenger-phase-presence'), node);
+      assert.equal(tree!.root.findAll(n => n.props.testID === 'passenger-phase-presence').length, 1);
+      assert.equal(node.props.exiting, undefined);
+      assert.equal(h.animations.filter((a: { value: number; duration: number }) => a.value === 1 && a.duration === 240).length, 4);
+      assert.ok(h.cancellations.length >= 4);
+      await act(async () => tree!.update(render('matching')));
+      assert.equal(h.animations.at(-1).duration, 300);
+    } finally { await act(async () => tree!.unmount()); }
   }
 });
 async function press(tree: ReactTestRenderer, label: string) {

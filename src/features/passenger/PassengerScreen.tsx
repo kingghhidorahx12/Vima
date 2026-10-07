@@ -33,6 +33,7 @@ import { MapCompass } from './MapCompass';
 import { locationCtaHeight, mapControlSize } from './mapCameraFootprint';
 import { useLocationVisibility } from '../../map/useLocationVisibility';
 import { ElementEntrance } from '../../motion/ElementEntrance';
+import { PassengerScenePresence } from '../../motion/PassengerScenePresence';
 import { usePressFeedback } from '../../motion/usePressFeedback';
 import { PlaceThumbnail } from './PlaceThumbnail';
 import { mapPersonality } from '../../motion/mapPersonality';
@@ -133,9 +134,6 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const reviewing = (flow.phase === 'confirm' && reviewedDraft !== draftKey) || (flow.phase === 'home' && !!flow.destination);
   const scene = flow.field ? 'search' : reviewing ? 'reviewing' : flow.phase === 'home' ? 'home'
     : flow.phase === 'confirm' || flow.phase === 'requesting' ? flow.phase : matching ? 'matching' : flow.phase;
-  const sceneSurface = scene === 'matching' || scene === 'assigned';
-  const sceneTiming = sceneSurface ? motionTimings.sceneSurface : motionTimings.scene;
-  const sceneExitTiming = sceneSurface ? motionTimings.sceneSurfaceExit : motionTimings.sceneExit;
   const confirmationPillVisible = flow.phase === 'confirm' && !reviewing && flow.field === null;
   const topOcclusion = topFrameShift + Math.max(chromeBottom,
     confirmationPillVisible ? confirmationPillTop + confirmationPillHeight : 0) + 12;
@@ -348,8 +346,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const entranceIndex = fresh ? newSearchItems++ : undefined;
     return { place, identity, entranceIndex };
   }) : [];
-  const content = <ElementEntrance key={scene} testID="passenger-phase-presence" style={styles.fill}
-    timing={sceneTiming} exit exitTiming={sceneExitTiming} distance={motionDistances.sceneTransitionY}>
+  const content = <PassengerScenePresence scene={scene} style={styles.fill}>
     <Animated.View key={measureKey} testID="passenger-sheet-viewport"
     style={[styles.fill, detachedPanel && styles.detachedPanelContent]}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setViewportMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
@@ -549,7 +546,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       </> : null}
       </View>
     </ScrollView>
-  </Animated.View></ElementEntrance>;
+  </Animated.View></PassengerScenePresence>;
   return <View testID="passenger-root" style={styles.root}>
     <StatusBar style="dark" />
     <View testID="passenger-map-surface" collapsable={false} style={styles.primarySurface}
