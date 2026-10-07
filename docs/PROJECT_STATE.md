@@ -1,13 +1,36 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-07 en `codex/request-matching-driver-p0`,
-desde `codex/passenger-origin-sheet-offsets-fix-p0` @ `f007a532`.
+Actualizado 2026-10-07 en `codex/vimatext-body-crash-fix-p0`,
+desde `codex/request-matching-driver-p0` @ `0f7055bf`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Crash Android `Missing approved text: body` — 2026-10-07
+
+- El gate live Passenger montaba `VimaText variant="body"`; esa variante sólo
+  pertenece al API interno `textStyle` y no existe en el theme público. El prop
+  aceptaba cualquier `string`, por lo que TypeScript no detectó el error y el
+  guard runtime detuvo el arranque.
+- Los tres callsites del gate y los siete del Driver DEV usan ahora
+  `bodyRegular`, conservando el peso visual regular. No se cambió layout, diseño,
+  Motion, mapa, gateway, matching ni lógica funcional.
+- `VimaTextVariant` deriva de `keyof typeof lightTheme.text`; `body` falla ahora
+  en TypeScript. `VimaSurfaceVariant` se cerró igualmente sobre
+  `keyof typeof lightTheme.surfaces`, ya que todos sus callsites son estáticos y
+  aprobados y no requirió refactor adicional.
+- **VERIFICADO automatizado:** TypeScript, lint, suite **195/195**, gateway/
+  matching **48/48**, worklets y Hermes Android/iOS pasan. Las siete variantes
+  públicas renderizan, el estado inicial de `LiveAccountGate` Passenger monta
+  sin la excepción y el bundle DEV compila para Android/iOS. La
+  cobertura type-level usa `@ts-expect-error` para impedir que `body` vuelva al
+  API público. Aislamiento release/fixtures/credenciales/paths y splash pasan.
+  Expo Doctor conserva **20/21** sólo por los cinco patches SDK 57 conocidos;
+  no se actualizaron dependencias. Android físico Home y Search → reviewing
+  siguen **PENDIENTES**. Cambio sólo JS/TS; no requiere nuevo Development Build.
 
 ### Request/matching autoritativo y Driver DEV mínimo — 2026-10-07
 

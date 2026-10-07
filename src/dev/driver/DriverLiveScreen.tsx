@@ -84,8 +84,8 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     <PassengerUserLocation active={foreground && focused} place={{ id: 'driver-current', name: '', address: '', coordinate: location.coordinate }} />
   </> : undefined} renderPhase={() => <ScrollView style={styles.panel} contentContainerStyle={styles.content}>
     <VimaText variant="h2">Driver P0 · {data?.profile.driver.name ?? accountId}</VimaText>
-    <VimaText variant="body">{accountId} · {connection === 'online' ? 'Conectado' : connection === 'reconnecting' ? 'Reconectando' : 'Sin conexión'}</VimaText>
-    <VimaText variant="body">{data ? labels[data.availability] : available ? 'Cargando estado…' : 'Matching no configurado'}</VimaText>
+    <VimaText variant="bodyRegular">{accountId} · {connection === 'online' ? 'Conectado' : connection === 'reconnecting' ? 'Reconectando' : 'Sin conexión'}</VimaText>
+    <VimaText variant="bodyRegular">{data ? labels[data.availability] : available ? 'Cargando estado…' : 'Matching no configurado'}</VimaText>
     {data && !assigned ? <View style={styles.actions}>
       <VimaButton label={availability === 'PAUSED' ? 'Reanudar disponibilidad' : 'Disponible'} disabled={busy || !!pending.current || availability === 'AVAILABLE'}
         onPress={() => { void act(id => client.availability('AVAILABLE', id)); }} />
@@ -93,16 +93,16 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
         onPress={() => { void act(id => client.availability('OFFLINE', id)); }} />
     </View> : null}
     {offer ? <View style={styles.content}><VimaText variant="h3">Oferta · {Math.max(0, Math.ceil((offer.expiresAt - now) / 1000))} s</VimaText>
-      <VimaText variant="body">{offer.pickup.name} · {offer.pickup.address}</VimaText><VimaText variant="body">Recogida a {offer.etaMinutes} min</VimaText>
+      <VimaText variant="bodyRegular">{offer.pickup.name} · {offer.pickup.address}</VimaText><VimaText variant="bodyRegular">Recogida a {offer.etaMinutes} min</VimaText>
       <VimaButton label="Aceptar" disabled={busy || !!pending.current || now >= offer.expiresAt} onPress={() => { void act(id => client.offerAction(offer.id, 'accept', id)); }} />
       <VimaButton secondary label="Rechazar" disabled={busy || !!pending.current} onPress={() => { void act(id => client.offerAction(offer.id, 'reject', id)); }} />
     </View> : null}
     {assigned ? <View style={styles.content}><VimaText variant="h3">Asignación confirmada</VimaText>
-      <VimaText variant="body">{assigned.value.id}</VimaText><VimaText variant="body">{assigned.pickup.name} · {assigned.pickup.address}</VimaText>
+      <VimaText variant="bodyRegular">{assigned.value.id}</VimaText><VimaText variant="bodyRegular">{assigned.pickup.name} · {assigned.pickup.address}</VimaText>
       <VimaButton secondary danger label="Cancelar asignación" disabled={busy || !!pending.current}
         onPress={() => { void act(id => client.cancelAssignment(assigned.requestId, id)); }} />
     </View> : null}
-    {error || state.error ? <VimaText variant="body" accessibilityRole="alert">{error || 'No se pudo leer el estado.'}</VimaText> : null}
+    {error || state.error ? <VimaText variant="bodyRegular" accessibilityRole="alert">{error || 'No se pudo leer el estado.'}</VimaText> : null}
     {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void act(); }} /> : null}
   </ScrollView>} /></SafeAreaView>;
 }

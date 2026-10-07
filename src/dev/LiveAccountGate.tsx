@@ -39,8 +39,8 @@ export function LiveAccountGate({ role, children }: { role: MatchingIdentity['ro
   if (!__DEV__) return null;
   if (session && !editing) return children(session);
   return <SafeAreaView style={styles.screen}><VimaText variant="h2">Cuenta DEV · {role === 'driver' ? 'Driver' : 'Passenger'}</VimaText>
-    {session ? <VimaText variant="body">{session.identity.accountId}</VimaText> : null}
-    <VimaText variant="body">Token de la configuración externa del gateway. Requiere HTTPS confiable.</VimaText>
+    {session ? <VimaText variant="bodyRegular">{session.identity.accountId}</VimaText> : null}
+    <VimaText variant="bodyRegular">Token de la configuración externa del gateway. Requiere HTTPS confiable.</VimaText>
     <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={token} onChangeText={setToken}
       placeholder="Token de prueba" accessibilityLabel="Token de prueba" style={styles.input} />
     <VimaButton label="Guardar y conectar" disabled={busy || !token.trim()} onPress={() => {
@@ -51,7 +51,7 @@ export function LiveAccountGate({ role, children }: { role: MatchingIdentity['ro
       setSession(undefined); client.clear(); setToken(''); setError('');
     }); }} />
     {session ? <VimaButton secondary label="Volver" onPress={() => setEditing(false)} /> : null}
-    {error ? <VimaText variant="body" accessibilityRole="alert">{error}</VimaText> : null}
+    {error ? <VimaText variant="bodyRegular" accessibilityRole="alert">{error}</VimaText> : null}
     <View style={styles.links}><Link href="/dev/passenger">Modo Passenger</Link><Link href="/dev/driver">Modo Driver</Link></View>
   </SafeAreaView>;
 }

@@ -48,11 +48,14 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
   const kv = new Map();
   const nativeHeights = new Map();
   const overrides = {
-    'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => insets },
+    'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => insets, SafeAreaView: 'SafeAreaView' },
     'react-native-reanimated': { __esModule: true, ...animated },
     'expo-image': { Image: 'ExpoImage' },
     'expo-status-bar': { StatusBar: 'StatusBar' },
-    'expo-router': { useFocusEffect: React.useEffect },
+    'expo-router': { useFocusEffect: React.useEffect, Link: 'Link' },
+    'expo-dev-client': { registerDevMenuItems: async () => {} },
+    'expo-secure-store': { WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'device-only', getItemAsync: async () => null,
+      setItemAsync: async () => {}, deleteItemAsync: async () => {} },
     'expo-sqlite/kv-store': { __esModule: true, default: {
       getItem: async key => kv.get(key) ?? null, setItem: async (key, value) => { kv.set(key, value); },
     } },
@@ -99,7 +102,8 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
   const fakeMapConfig = {};
   const boundaries = { schedule() {}, call() {}, safety() {}, ...boundaryOverrides };
   const client = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
-  return { projection, animations, delays, repeats, cancellations, mounted, client, kv, nativeHeights, load,
+  return { projection, animations, delays, repeats, cancellations, mounted, client, QueryClientProvider: query.QueryClientProvider,
+    kv, nativeHeights, load,
     setAppState(state) { native.AppState.currentState = state; for (const listener of appStateListeners) listener(state); },
     back: () => back?.(), async render(gateway) {
     let tree;

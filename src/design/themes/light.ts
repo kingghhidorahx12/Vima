@@ -39,6 +39,9 @@ export const lightTheme = {
   },
 } as const;
 
+export type VimaTextVariant = keyof typeof lightTheme.text;
+export type VimaSurfaceVariant = keyof typeof lightTheme.surfaces;
+
 /** Shadow color is not specified by the handoff; require an explicit approved color. */
 export function elevationStyle(level: keyof typeof visualTokens.elevation, color: string): Pick<ViewStyle, 'boxShadow'> {
   if (level === 'level0') return { boxShadow: [] };

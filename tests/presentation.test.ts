@@ -3,10 +3,37 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import React from 'react';
 import renderer from 'react-test-renderer';
+import { lightTheme } from '../src/design/themes/light.ts';
 
 const require = createRequire(import.meta.url);
 const { createHarness } = require('./support/passenger-renderer.cjs');
 Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+Reflect.set(globalThis, '__DEV__', true);
+
+test('approved VimaText variants render and the Passenger DEV account gate mounts without an invalid body variant', async () => {
+  const h = createHarness();
+  const { VimaText } = h.load('src/design/primitives/index.tsx');
+  const { LiveAccountGate } = h.load('src/dev/LiveAccountGate.tsx');
+  const variants = ['h1', 'h2', 'h3', 'bodyRegular', 'bodyMedium', 'bodySmall', 'caption'] as const;
+  let tree!: renderer.ReactTestRenderer;
+  await h.act(async () => { tree = renderer.create(React.createElement(React.Fragment, null,
+    ...variants.map(variant => React.createElement(VimaText, { key: variant, variant }, variant)))); });
+  try {
+    const texts = tree.root.findAllByType('Text' as never);
+    assert.equal(texts.length, variants.length);
+    variants.forEach((variant, index) => assert.deepEqual(texts[index]!.props.style[1], lightTheme.text[variant]));
+  } finally { await h.act(async () => tree.unmount()); }
+
+  // A render prop is the component's declared children contract.
+  // eslint-disable-next-line react/no-children-prop
+  await h.act(async () => { tree = renderer.create(React.createElement(h.QueryClientProvider, { client: h.client },
+    React.createElement(LiveAccountGate, { role: 'passenger', children: () => null }))); });
+  try {
+    const copy = tree.root.findAllByType('Text' as never).map(node => node.props.children).flat(Infinity).join(' ');
+    assert.match(copy, /Cuenta DEV ·\s+Passenger/);
+    assert.match(copy, /Token de la configuración externa/);
+  } finally { await h.act(async () => tree.unmount()); h.client.clear(); }
+});
 
 test('button loading crossfades in one frame, remains visible under Reduced Motion and blocks duplicate taps', async () => {
   for (const reduced of [false, true]) {
