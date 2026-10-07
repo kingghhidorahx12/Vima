@@ -1,14 +1,37 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-canonical-p0`, consolidada desde
-`codex/passenger-pricing-commercial-p0` @ `5e51ef54` y
-`codex/passenger-layers-close-glitch-p0` @ `8c13b4e5`, ambas descendientes de
-`codex/passenger-motion-1-2-p0` @ `bccd7fe`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-origin-sheet-offsets-fix-p0`,
+desde `codex/passenger-measurement-no-remount-p0` @ `e0aa6e85`.
+Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Origen único y offsets fraccionarios del sheet — 2026-10-06
+
+- Home y Search conservan el punto azul de ubicación actual. Al entrar en
+  reviewing y estados posteriores, el origen visible prefiere el draft actual
+  sobre la quote. Si el pin verde y el punto azul comparten exactamente las
+  coordenadas, sólo se monta el pin verde; si las posiciones difieren, ambos
+  permanecen visibles. Una quote nueva o renovada del mismo draft no cambia
+  la identidad del marker ni reinicia su entrada; editar realmente la posición
+  del origen sí puede ejecutar la entrada aprobada.
+- `allowedSheetGeometry` acepta exclusivamente diferencias de redondeo
+  IEEE-754, con tolerancia proporcional a la magnitud y derivada de
+  `Number.EPSILON`. Canonicaliza límites y target a offsets permitidos exactos,
+  sin ampliar los bounds devueltos. Valores no finitos, listas vacías, offsets
+  fuera de rango y targets sin offset permitido continúan rechazándose.
+- Pruebas automatizadas cubren las transiciones de markers, quote y alturas
+  fraccionarias del sheet. **Android físico PENDIENTE** de revalidar Search →
+  reviewing, llegada/renovación de quote y edición repetida de destino con
+  teclado/cambios de altura. Camera, route-fit, Motion 1.2 y geometría funcional
+  del sheet no cambiaron. Sin cambio nativo ni EAS Build.
+- TypeScript, lint, suite 174/174, gateway 29/29, worklets, schema/style
+  MapLibre, splash, Hermes Android/iOS y aislamiento de fixtures/release/
+  credenciales pasaron. Expo Doctor queda en 20/21 sólo por los cinco patches
+  SDK 57 conocidos; no se actualizaron dependencias.
 
 ### Mediciones Passenger sin remount visible — 2026-10-06
 

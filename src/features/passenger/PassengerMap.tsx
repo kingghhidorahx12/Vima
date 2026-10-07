@@ -50,6 +50,12 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
   const homeTarget = useMemo(() => home ? { ...target, padding: centeredPadding } : target,
     [home, target, centeredPadding]);
   const horizontalFitPadding = Math.max(target.padding.left ?? 0, target.padding.right ?? 0, passengerPinClearance.side);
+  const visibleOrigin = !searchPresentationActive && !home ? origin ?? quote?.origin : null;
+  const manualOrigin = manualSelection?.kind === 'origin' ? manualSelection.coordinate : null;
+  const samePosition = (coordinate: Place['coordinate']) => currentLocation?.coordinate[0] === coordinate[0]
+    && currentLocation.coordinate[1] === coordinate[1];
+  const showCurrentLocation = !!currentLocation && !(visibleOrigin && samePosition(visibleOrigin.coordinate))
+    && !(manualOrigin && samePosition(manualOrigin));
   return <>
     <Camera target={ready ? homeTarget : undefined} recenterPadding={ready ? centeredPadding : undefined} northRequest={ready ? northRequest : undefined}
       mode={searchPresentationActive ? 'search-locked' : cameraMode}
@@ -68,8 +74,8 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
       activeTone="accentBlue" state="active" appearance={config.route} active={active} /> : null}
     {!searchPresentationActive ? <VehicleLayer id="passenger-assigned-vehicle" kind="circle" sample={sample}
       appearance={config.vehicle} motion={config.vehicleMotion} /> : null}
-    {currentLocation ? <PassengerUserLocation place={currentLocation} active={active} /> : null}
-    {!searchPresentationActive && !home && (quote?.origin ?? origin) ? <PassengerMapPin place={(quote?.origin ?? origin)!} kind="origin" /> : null}
+    {showCurrentLocation ? <PassengerUserLocation place={currentLocation!} active={active} /> : null}
+    {visibleOrigin ? <PassengerMapPin place={visibleOrigin} kind="origin" /> : null}
     {!searchPresentationActive && (quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}
     {manualSelection ? <PassengerMapPin place={{ id: 'manual-selection', name: '', address: '', coordinate: manualSelection.coordinate }}
       kind={manualSelection.kind} /> : null}

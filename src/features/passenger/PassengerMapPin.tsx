@@ -1,6 +1,6 @@
 import { MapMarker as Marker } from '../../map/MapMarker';
 import { StyleSheet, View } from 'react-native';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence } from 'react-native-reanimated';
 import { visualTokens as t } from '../../design/tokens';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
@@ -15,7 +15,8 @@ import type { Place } from './model';
 export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' | 'destination' }) {
   const color = kind === 'origin' ? t.colors.green : t.colors.red;
   const { reducedMotion } = useMotionPolicy();
-  const entrance = pinEntrance(reducedMotion);
+  const entrance = useMemo(() => pinEntrance(reducedMotion), [reducedMotion]);
+  const [longitude, latitude] = place.coordinate;
   const translateY = useSharedValue(entrance.fromY);
   const opacity = useSharedValue(0);
   const accent = useSharedValue(0);
@@ -28,7 +29,7 @@ export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' 
       fadeTo(entrance.settleY, entrance.enter), fadeTo(0, entrance.settle)));
     opacity.set(fadeTo(1, entrance.fade));
     return () => { cancelAnimation(translateY); cancelAnimation(opacity); cancelAnimation(accent); };
-  }, [accent, place.id, reducedMotion, entrance.fromY, entrance.settleY, entrance.enter, entrance.settle, entrance.fade, opacity, translateY]);
+  }, [accent, longitude, latitude, reducedMotion, entrance, opacity, translateY]);
   const animated = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: translateY.get() }] }));
   const halo = useAnimatedStyle(() => locationRingFrame(accent.get(), !reducedMotion));
   return <Marker id={`passenger-${kind}-pin`} coordinate={place.coordinate} anchor="bottom">

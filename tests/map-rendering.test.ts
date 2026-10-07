@@ -152,11 +152,68 @@ test('map viewport clips native markers and Search locks camera while hiding onl
   assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, 0);
   await h.act(async () => tree.update(scene(false, 420)));
   assert.equal(tree.root.findByType('MapLibreMap' as never).instance, map);
-  assert.equal(tree.root.findAllByType('MapLibreMarker' as never).length, 3);
+  assert.equal(tree.root.findAllByType('MapLibreMarker' as never).length, 2);
   assert.equal(tree.root.findAllByType('MapLibreSource' as never).length, 2);
   const fits = h.calls.filter((call: unknown[]) => call[0] === 'setStop').length;
   await h.act(async () => tree.update(scene(false, 500, 'user-controlled')));
   assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'setStop').length, fits);
+  await h.act(async () => tree.unmount());
+});
+
+test('Passenger origin replaces coincident blue location once and survives quote updates', async () => {
+  const h = createMapHarness({ reduced: true });
+  const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+  const currentLocation = { id: 'current', name: 'Actual', address: '', coordinate: [-99, 19] };
+  const origin = { id: 'draft-origin', name: 'Origen', address: '', coordinate: [-99, 19] };
+  const destination = { id: 'destination', name: 'Destino', address: '', coordinate: [-98, 20] };
+  const config = { viewport: () => ({ center: [-99, 19], zoom: 14 }), route: { width: 4, opacity: 1 },
+    vehicle: { radius: 12, color: '#000' } };
+  const route = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [origin.coordinate, destination.coordinate] } };
+  const scene = (home: boolean, searching: boolean, quoteId?: string, chosenOrigin = origin) =>
+    React.createElement(PassengerMap, { origin: chosenOrigin, destination, currentLocation,
+      quote: quoteId ? { id: quoteId, origin: { ...origin, id: `quote-${quoteId}`, coordinate: [...origin.coordinate] },
+        destination, route: { ...route, id: quoteId } } : undefined,
+      home, searchPresentationActive: searching, ready: true, sheetHeight: 300, config });
+  const tree: ReactTestRenderer = await h.render(scene(true, false));
+  const markers = () => tree.root.findAllByType('MapLibreMarker' as never);
+  const ids = () => markers().map(marker => marker.props.id);
+  assert.deepEqual(ids(), ['passenger-user-location', 'passenger-destination-pin']);
+  await h.act(async () => tree.update(scene(false, true)));
+  assert.deepEqual(ids(), ['passenger-user-location']);
+  await h.act(async () => tree.update(scene(false, false)));
+  assert.deepEqual(ids(), ['passenger-origin-pin', 'passenger-destination-pin']);
+  const originMarker = markers().find(marker => marker.props.id === 'passenger-origin-pin')!.instance;
+  const markerMounts = h.calls.filter((call: unknown[]) => call[0] === 'mount' && call[1] === 'MapLibreMarker').length;
+  await h.act(async () => tree.update(scene(false, false, 'first')));
+  await h.act(async () => tree.update(scene(false, false, 'renewed')));
+  assert.deepEqual(ids(), ['passenger-origin-pin', 'passenger-destination-pin']);
+  assert.equal(markers().find(marker => marker.props.id === 'passenger-origin-pin')!.instance, originMarker);
+  assert.equal(h.calls.filter((call: unknown[]) => call[0] === 'mount' && call[1] === 'MapLibreMarker').length, markerMounts);
+  await h.act(async () => tree.update(scene(false, false, 'renewed',
+    { ...origin, id: 'manual', coordinate: [-99.01, 19] })));
+  assert.deepEqual(ids(), ['passenger-user-location', 'passenger-origin-pin', 'passenger-destination-pin']);
+  assert.deepEqual(markers().find(marker => marker.props.id === 'passenger-origin-pin')!.props.lngLat, [-99.01, 19]);
+  await h.act(async () => tree.unmount());
+});
+
+test('pin entrance follows coordinate changes, not quote-style place object replacements', async () => {
+  const h = createMapHarness({ reduced: false });
+  const { PassengerMapPin } = h.load('src/features/passenger/PassengerMapPin.tsx');
+  const place = { id: 'draft', name: 'Origen', address: '', coordinate: [-99, 19] };
+  const scene = (id: string, coordinate: number[]) => React.createElement(PassengerMapPin,
+    { place: { ...place, id, coordinate }, kind: 'origin' });
+  const tree: ReactTestRenderer = await h.render(scene('draft', [-99, 19]));
+  const marker = tree.root.findByType('MapLibreMarker' as never).instance;
+  const timings = () => h.calls.filter((call: unknown[]) => call[0] === 'timing').length;
+  const initialTimings = timings();
+  await h.act(async () => tree.update(scene('quote-1', [-99, 19])));
+  await h.act(async () => tree.update(scene('quote-2', [-99, 19])));
+  assert.equal(timings(), initialTimings);
+  assert.equal(tree.root.findByType('MapLibreMarker' as never).instance, marker);
+  assert.equal(tree.root.findByType('MapLibreMarker' as never).props.id, 'passenger-origin-pin');
+  await h.act(async () => tree.update(scene('edited', [-99.01, 19])));
+  assert.ok(timings() > initialTimings);
+  assert.equal(tree.root.findByType('MapLibreMarker' as never).instance, marker);
   await h.act(async () => tree.unmount());
 });
 

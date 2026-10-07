@@ -66,6 +66,45 @@ test('multi-snap sheets settle only at explicitly allowed offsets', () => {
   assert.throws(() => allowedSheetGeometry(1000, 480, [480, 800]));
 });
 
+test('fractional Passenger sheet offsets canonicalize IEEE-754 roundoff without widening bounds', () => {
+  for (const height of [731.37, 749.33]) {
+    const base = rideSheetGeometry(height, 1);
+    const minimumVisible = height * 0.24;
+    const maximumVisible = height * 0.88;
+    for (const visibleHeight of [minimumVisible, maximumVisible]) {
+      const target = height - visibleHeight;
+      const geometry = allowedSheetGeometry(height, target, [target]);
+      const expected = visibleHeight === minimumVisible ? base.maxOffset : base.minOffset;
+      assert.equal(geometry.targetOffset, expected);
+      assert.deepEqual(geometry.allowedOffsets, [expected]);
+      assert.equal(geometry.minOffset, base.minOffset);
+      assert.equal(geometry.maxOffset, base.maxOffset);
+    }
+    const middle = height * 0.48;
+    const equivalentMiddle = height - height * 0.52;
+    const middleGeometry = allowedSheetGeometry(height, equivalentMiddle, [middle]);
+    assert.equal(middleGeometry.targetOffset, middle);
+    assert.deepEqual(middleGeometry.allowedOffsets, [middle]);
+    const roundingStep = Number.EPSILON * height;
+    const lowerBound = allowedSheetGeometry(height, base.minOffset - roundingStep,
+      [base.minOffset - roundingStep]);
+    const upperBound = allowedSheetGeometry(height, base.maxOffset + roundingStep,
+      [base.maxOffset + roundingStep]);
+    assert.equal(lowerBound.targetOffset, base.minOffset);
+    assert.deepEqual(lowerBound.allowedOffsets, [base.minOffset]);
+    assert.equal(upperBound.targetOffset, base.maxOffset);
+    assert.deepEqual(upperBound.allowedOffsets, [base.maxOffset]);
+    assert.throws(() => allowedSheetGeometry(height, base.minOffset - 0.01, [base.minOffset - 0.01]));
+    assert.throws(() => allowedSheetGeometry(height, base.maxOffset + 0.01, [base.maxOffset + 0.01]));
+    assert.throws(() => allowedSheetGeometry(height, middle + 0.01, [middle]));
+  }
+  assert.throws(() => allowedSheetGeometry(731.37, NaN, [300]));
+  assert.throws(() => allowedSheetGeometry(731.37, Infinity, [300]));
+  assert.throws(() => allowedSheetGeometry(731.37, 300, [NaN]));
+  assert.throws(() => allowedSheetGeometry(731.37, 300, [Infinity]));
+  assert.throws(() => allowedSheetGeometry(731.37, 300, []));
+});
+
 test('Reduced Motion moves a settled sheet immediately; normal motion uses the approved snap timing', () => {
   const require = createRequire(import.meta.url);
   const { transformSync } = require('@babel/core') as {

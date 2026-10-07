@@ -24,10 +24,24 @@ export function nearestSheetSnap(offset: number, offsets: readonly number[]): nu
 /** Global token offsets bound dragging; only state-approved offsets can be final positions. */
 export function allowedSheetGeometry(height: number, targetOffset: number, allowedOffsets: readonly number[]) {
   const { minOffset, maxOffset } = rideSheetGeometry(height, 1);
-  if (!Number.isFinite(targetOffset) || targetOffset < minOffset || targetOffset > maxOffset
-    || !allowedOffsets.length || !allowedOffsets.includes(targetOffset)
-    || allowedOffsets.some((offset) => !Number.isFinite(offset) || offset < minOffset || offset > maxOffset)) {
+  // Four arithmetic roundings cover equivalent height/percentage formulas without
+  // introducing a visual-distance tolerance or widening the returned bounds.
+  const equivalent = (a: number, b: number) => Math.abs(a - b)
+    <= Number.EPSILON * Math.max(Math.abs(height), Math.abs(a), Math.abs(b)) * 4;
+  const canonicalBound = (offset: number) => {
+    if (!Number.isFinite(offset) || (offset < minOffset && !equivalent(offset, minOffset))
+      || (offset > maxOffset && !equivalent(offset, maxOffset))) return undefined;
+    if (equivalent(offset, minOffset)) return minOffset;
+    if (equivalent(offset, maxOffset)) return maxOffset;
+    return offset;
+  };
+  const canonicalAllowed = allowedOffsets.map(canonicalBound);
+  const canonicalTarget = canonicalBound(targetOffset);
+  const matched = canonicalAllowed.find((offset) => offset !== undefined && canonicalTarget !== undefined
+    && equivalent(offset, canonicalTarget));
+  if (!allowedOffsets.length || canonicalTarget === undefined || canonicalAllowed.some((offset) => offset === undefined)
+    || matched === undefined) {
     throw new Error('Invalid allowed sheet offsets for this state.');
   }
-  return { height, minOffset, maxOffset, targetOffset, allowedOffsets: [...allowedOffsets] };
+  return { height, minOffset, maxOffset, targetOffset: matched, allowedOffsets: canonicalAllowed as number[] };
 }
