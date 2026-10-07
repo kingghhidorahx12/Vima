@@ -1,12 +1,32 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-pricing-commercial-p0`, creada desde
+Actualizado 2026-10-06 en `codex/passenger-canonical-p0`, consolidada desde
+`codex/passenger-pricing-commercial-p0` @ `5e51ef54` y
+`codex/passenger-layers-close-glitch-p0` @ `8c13b4e5`, ambas descendientes de
 `codex/passenger-motion-1-2-p0` @ `bccd7fe`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Cierre estable del menú Capas — 2026-10-06
+
+- `MapControls` conserva Tráfico e Incidentes en una sola superficie de altura
+  medida por layout. Un slot animado y anclado al botón Capas colapsa su altura
+  y ambos gaps junto con el fade; el menú no entra al reflow del stack.
+  La brújula acompaña ese colapso y el botón Capas permanece fijo.
+- El glyph X se conserva hasta la finalización del cierre. Un nuevo tap cancela
+  el progreso previo y descarta callbacks de cierres obsoletos; al cerrar por
+  completo, el menú deja de recibir toques y se oculta a accesibilidad. Reduced
+  Motion mantiene el fade y elimina el translate decorativo. No hay timers ni
+  cambios en tokens, switches, haptics, Camera, route-fit o geometría del shell.
+- Android físico sigue PENDIENTE de comprobar diez ciclos de apertura/cierre,
+  interrupción rápida y Reduced Motion. No se realizó EAS Build ni hubo cambios
+  nativos.
+- Validación: TypeScript, lint, suite 167/167, gateway 28/28, worklets, splash,
+  Hermes Android/iOS, aislamiento de fixtures/release y límite de credenciales
+  pasaron. Expo Doctor quedó en 20/21 por los mismos cinco patches SDK 57.
 
 ### Pricing comercial Atlacomulco y efectivo live — 2026-10-06
 

@@ -684,30 +684,89 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
   }
 });
 
-test('Layers opens between the fixed compass and its own button with a compact anchor gap', async () => {
+test('Layers closes as one measured surface without flex reflow, stale close or reduced-motion travel', async () => {
   for (const reduced of [false, true]) {
   const h = createHarness({}, { reduced });
   const { MapControls } = h.load('src/features/passenger/MapControls.tsx');
+  let toggled = 0;
+  function Scene() {
+    const [open, setOpen] = React.useState(false);
+    return React.createElement(MapControls, {
+      available: true, layers: { traffic: false, incidents: false }, open,
+      onOpen: () => setOpen(value => !value), onToggle: () => { toggled++; },
+      compass: React.createElement('View', { testID: 'compass-marker' }),
+    });
+  }
   let tree: ReactTestRenderer;
-  await act(async () => { tree = create(React.createElement(MapControls, {
-    available: true, layers: { traffic: false, incidents: false }, open: true,
-    onOpen() {}, onToggle() {}, compass: React.createElement('View', { testID: 'compass-marker' }),
-  })); });
+  await act(async () => { tree = create(React.createElement(Scene)); });
   try {
+    const slot = () => id(tree!, 'passenger-layers-slot');
+    const menu = () => id(tree!, 'passenger-layers-menu');
+    const button = () => tree!.root.find(n => n.props.accessibilityLabel === 'Capas del mapa');
+    const glyph = (codepoint: number) => button().findAll(n => n.type === ('Text' as never) &&
+      n.props.children === String.fromCodePoint(codepoint)).length;
+    // The host mock evaluates animated styles on render; native Reanimated updates them on the UI thread.
+    const press = async () => {
+      await act(async () => button().props.onPress());
+      await act(async () => tree!.update(React.createElement(Scene)));
+    };
+    const closeCompletion = () => h.animations.findLast((animation: { value: number; completion?: (finished: boolean) => void }) =>
+      animation.value === 0 && animation.completion)?.completion;
+    const firstMenu = menu();
+    const firstRows = firstMenu.findAll(n => n.props.accessibilityRole === 'switch');
+    assert.equal(firstRows.length, 2);
+    assert.equal(style(slot()).height, 8);
+    assert.equal(menu().props.pointerEvents, 'none');
+    assert.equal(menu().props.accessibilityElementsHidden, true);
+    assert.equal(glyph(glyphCodepoints.layers), 1);
+    await act(async () => menu().props.onLayout({ nativeEvent: { layout: { height: 112 } } }));
+    await press();
+    assert.equal(style(slot()).height, 128);
+    assert.equal(style(menu()).minWidth, 192);
+    assert.deepEqual([style(menu()).position, style(menu()).bottom], ['absolute', 8]);
+    assert.equal(menu().props.entering, undefined);
+    assert.equal(menu().props.exiting, undefined);
+    assert.equal(h.animations.findLast((animation: { value: number }) => animation.value === 1)?.duration, 300);
+    assert.equal(style(tree!.root.findByType('AnimatedView' as never)).gap, undefined);
+    assert.equal(glyph(glyphCodepoints.close), 1);
+    assert.equal(menu().props.pointerEvents, 'auto');
     const nodes = tree!.root.findAll(n => typeof n.type === 'string');
     const compass = nodes.findIndex(n => n.props.testID === 'compass-marker');
-    const menu = nodes.findIndex(n => n.props.testID === 'passenger-layers-menu');
+    const menuIndex = nodes.findIndex(n => n.props.testID === 'passenger-layers-menu');
     const layers = nodes.findIndex(n => n.props.accessibilityLabel === 'Capas del mapa');
-    assert.ok(compass >= 0 && compass < menu && menu < layers);
-    assert.equal(style(nodes[menu]!).minWidth, 192);
-    assert.equal(style(tree!.root.findByType('AnimatedView' as never)).gap, 8);
-    assert.equal(nodes[menu]!.props.entering.kind, reduced ? 'FadeIn' : 'FadeInDown');
-    assert.equal(nodes[menu]!.props.exiting.kind, reduced ? 'FadeOut' : 'FadeOutUp');
-    assert.equal(nodes[menu]!.props.entering.durationMs, 300);
-    assert.equal(nodes[menu]!.props.exiting.durationMs, 240);
-    if (!reduced) assert.deepEqual(nodes[menu]!.props.entering.initial.transform, [{ translateY: 6 }]);
+    assert.ok(compass >= 0 && compass < menuIndex && menuIndex < layers);
     const incident = nodes.find(n => n.props.children === 'Incidentes');
     assert.equal(incident?.props.numberOfLines, 1);
+    await act(async () => firstRows[0]!.props.onPress());
+    assert.equal(toggled, 1);
+    await press();
+    const interruptedClose = closeCompletion();
+    assert.ok(interruptedClose);
+    assert.equal(menu(), firstMenu);
+    assert.equal(menu().findAll(n => n.props.accessibilityRole === 'switch')[0], firstRows[0]);
+    assert.equal(menu().findAll(n => n.props.accessibilityRole === 'switch').length, 2);
+    assert.equal(style(slot()).height, 8);
+    assert.equal(glyph(glyphCodepoints.close), 1);
+    assert.equal(menu().props.pointerEvents, 'none');
+    assert.equal(menu().props.accessibilityElementsHidden, true);
+    assert.equal(style(menu()).transform[0].translateY, reduced ? 0 : -6);
+    assert.equal(h.animations.findLast((animation: { value: number; completion?: unknown }) =>
+      animation.value === 0 && animation.completion)?.duration, 240);
+    await press();
+    await act(async () => interruptedClose!(true));
+    assert.equal(glyph(glyphCodepoints.close), 1);
+    for (let cycle = 0; cycle < 10; cycle++) {
+      await press();
+      assert.equal(glyph(glyphCodepoints.close), 1);
+      const completion = closeCompletion();
+      assert.ok(completion);
+      await act(async () => completion!(true));
+      assert.equal(glyph(glyphCodepoints.layers), 1);
+      assert.equal(menu(), firstMenu);
+      assert.equal(style(slot()).height, 8);
+      assert.equal(menu().props.pointerEvents, 'none');
+      if (cycle < 9) await press();
+    }
   } finally { await act(async () => tree!.unmount()); }
   }
 });

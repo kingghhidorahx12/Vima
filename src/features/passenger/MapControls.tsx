@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import Animated, { cancelAnimation, FadeIn, FadeInDown, FadeOut, FadeOutUp, ReduceMotion, useAnimatedStyle, useSharedValue, withDelay } from 'react-native-reanimated';
+import Animated, { cancelAnimation, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { fadeTo } from '../../motion/helpers';
 import { mapPersonality } from '../../motion/mapPersonality';
@@ -17,12 +17,7 @@ import type { TrafficLayerPreferences } from '../../map/traffic';
 import { ElementEntrance } from '../../motion/ElementEntrance';
 import { locationCtaHeight, mapControlSize, mapLayersMenuWidth } from './mapCameraFootprint';
 
-const menuEnter = FadeInDown.duration(motionTimings.sheetSnap.duration).easing(motionTimings.sheetSnap.easing)
-  .withInitialValues({ transform: [{ translateY: motionDistances.shortEnterY }] }).reduceMotion(ReduceMotion.Never);
-const menuExit = FadeOutUp.duration(motionTimings.state.duration).easing(motionTimings.sheetClose.easing)
-  .withTargetValues({ transform: [{ translateY: -motionDistances.shortEnterY }] }).reduceMotion(ReduceMotion.Never);
-const menuFadeIn = FadeIn.duration(motionTimings.sheetSnap.duration).easing(motionTimings.sheetSnap.easing).reduceMotion(ReduceMotion.Never);
-const menuFadeOut = FadeOut.duration(motionTimings.state.duration).easing(motionTimings.sheetClose.easing).reduceMotion(ReduceMotion.Never);
+const menuGap = t.spacing.scalePx[1]!;
 
 export function MapControls({ available, layers, open, onOpen, onToggle, compass }: {
   available: boolean; layers: TrafficLayerPreferences; open: boolean;
@@ -31,16 +26,50 @@ export function MapControls({ available, layers, open, onOpen, onToggle, compass
 }) {
   const tap = (action: () => void) => { void semanticHaptics('toggle'); action(); };
   const { reducedMotion } = useMotionPolicy();
+  const [menuHeight, setMenuHeight] = useState(0);
+  const [closed, setClosed] = useState(!open);
+  const revision = useRef(0);
+  const progress = useSharedValue(open ? 1 : 0);
+  const travel = useSharedValue(open || reducedMotion ? 0 : motionDistances.shortEnterY);
+  const finishClose = useCallback((closingRevision: number) => {
+    if (closingRevision !== revision.current) return;
+    setClosed(true);
+    travel.set(reducedMotion ? 0 : motionDistances.shortEnterY);
+  }, [reducedMotion, travel]);
+  useEffect(() => {
+    const currentRevision = ++revision.current;
+    cancelAnimation(progress);
+    cancelAnimation(travel);
+    if (open) {
+      progress.set(withTiming(1, { ...motionTimings.sheetSnap, reduceMotion: ReduceMotion.Never }));
+      travel.set(withTiming(0, motionTimings.sheetSnap));
+    } else {
+      progress.set(withTiming(0, { duration: motionTimings.state.duration,
+        easing: motionTimings.sheetClose.easing, reduceMotion: ReduceMotion.Never },
+        (finished) => {
+          if (finished) runOnJS(finishClose)(currentRevision);
+        }));
+      travel.set(withTiming(reducedMotion ? 0 : -motionDistances.shortEnterY,
+        { duration: motionTimings.state.duration, easing: motionTimings.sheetClose.easing }));
+    }
+    return () => { cancelAnimation(progress); cancelAnimation(travel); };
+  }, [finishClose, open, progress, reducedMotion, travel]);
+  const slotMotion = useAnimatedStyle(() => ({ height: menuGap + progress.get() * (menuHeight + menuGap) }));
+  const menuMotion = useAnimatedStyle(() => ({ opacity: progress.get(),
+    transform: [{ translateY: reducedMotion ? 0 : travel.get() }] }));
   return <ElementEntrance style={styles.stack}>
     {compass}
-    {open ? <Animated.View testID="passenger-layers-menu" entering={reducedMotion ? menuFadeIn : menuEnter}
-      exiting={reducedMotion ? menuFadeOut : menuExit} style={styles.menu}>
-      {!available ? <VimaText variant="caption" style={styles.unavailable}>Capas no disponibles</VimaText> : null}
-      {(['traffic', 'incidents'] as const).map((layer) => <LayerMenuRow key={layer} layer={layer}
-        available={available} checked={layers[layer]} onPress={() => tap(() => onToggle(layer))} />)}
-    </Animated.View> : null}
-    <MapControl label="Capas del mapa" icon="layers" active={open || available && (layers.traffic || layers.incidents)}
-      expanded={open} onPress={() => tap(onOpen)} />
+    <Animated.View testID="passenger-layers-slot" pointerEvents="box-none" style={[styles.menuSlot, slotMotion]}>
+      <Animated.View testID="passenger-layers-menu" pointerEvents={open ? 'auto' : 'none'}
+        accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
+        onLayout={(event) => setMenuHeight(event.nativeEvent.layout.height)} style={[styles.menu, menuMotion]}>
+        {!available ? <VimaText variant="caption" style={styles.unavailable}>Capas no disponibles</VimaText> : null}
+        {(['traffic', 'incidents'] as const).map((layer) => <LayerMenuRow key={layer} layer={layer}
+          available={available} checked={layers[layer]} onPress={() => tap(() => onToggle(layer))} />)}
+      </Animated.View>
+    </Animated.View>
+    <MapControl label="Capas del mapa" icon="layers" active={open || !closed || available && (layers.traffic || layers.incidents)}
+      expanded={open || !closed} onPress={() => { revision.current += 1; setClosed(false); tap(onOpen); }} />
   </ElementEntrance>;
 }
 
@@ -118,14 +147,16 @@ const styles = StyleSheet.create({
   buttonActive: { borderColor: t.colors.green },
   buttonPressed: { backgroundColor: t.colors.background, boxShadow: [] },
   buttonDisabled: { opacity: 0.5 },
-  stack: { alignItems: 'flex-end', gap: t.spacing.scalePx[1] },
+  stack: { alignItems: 'flex-end' },
+  menuSlot: { width: mapLayersMenuWidth, overflow: 'hidden' },
   button: { width: mapControlSize, height: mapControlSize, borderRadius: t.radii.pillPx, backgroundColor: t.colors.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border,
     ...elevationStyle('level2', t.colors.carbon) },
   toast: { minWidth: 170, paddingHorizontal: t.spacing.scalePx[2], paddingVertical: t.spacing.scalePx[1],
     borderRadius: t.radii.pillPx, backgroundColor: t.colors.accentBlueSoft, borderWidth: t.borders.standardWidthPx,
     borderColor: t.colors.white, ...elevationStyle('level1', t.colors.carbon), flexDirection: 'row', gap: t.spacing.scalePx[1], alignItems: 'center' },
-  menu: { ...surfaces.floating, minWidth: mapLayersMenuWidth, padding: t.spacing.scalePx[2] },
+  menu: { ...surfaces.floating, position: 'absolute', right: 0, bottom: menuGap,
+    minWidth: mapLayersMenuWidth, padding: t.spacing.scalePx[2] },
   menuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[2],
     backgroundColor: t.colors.white, borderRadius: t.radii.fieldPx, ...elevationStyle('level1', t.colors.carbon) },
   menuDivider: { borderTopWidth: t.borders.standardWidthPx, borderTopColor: surfaceColors.border },
