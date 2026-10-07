@@ -1,13 +1,53 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-origin-sheet-offsets-fix-p0`,
-desde `codex/passenger-measurement-no-remount-p0` @ `e0aa6e85`.
+Actualizado 2026-10-07 en `codex/request-matching-driver-p0`,
+desde `codex/passenger-origin-sheet-offsets-fix-p0` @ `f007a532`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Request/matching autoritativo y Driver DEV mínimo — 2026-10-07
+
+- Request real con quote owned/priced congelada, cancelación pre-assignment,
+  ofertas de 20 s a grupos de hasta dos Drivers por ETA real, assignment y
+  cancelación Driver que vuelve a búsqueda sobre la misma request/deadline.
+  Un coordinador serializa commits; TomTom corre fuera del lock y sus resultados
+  se revalidan. No se implementó lifecycle posterior al assignment.
+- Auth externa `VIMA_AUTH_CONFIG_PATH`, role/ownership por endpoint, tokens
+  comparados sin loguearlos. Gate técnico DEV guarda/cambia/limpia el token en
+  SecureStore. Se mantiene el rechazo de bearer sobre HTTP.
+- Snapshot versionado `.runtime/matching-v1.json`, temporal + fsync + rename,
+  idempotencia/revisions duraderas y recuperación de expiraciones. Corrupción
+  falla cerrada. No se persisten bearer ni perfiles reconstruibles.
+- Passenger live conserva shell/draft/quote y usa request/fetch/execute reales,
+  RealtimeTransport de invalidaciones + Query/reconcile. 60/120 son hitos UI
+  locales; NO_DRIVER_FOUND usa expired. Cancelación después de assigned queda
+  deshabilitada. Driver `/dev/driver` reutiliza DriverRideShell/primitivas con
+  disponibilidad, ubicación foreground, offer Accept/Reject y Cancelar asignación.
+- Recuperación de create ambiguo conserva quote e ID originales aunque se
+  renueve la query; Back no abandona ese intento sin reconciliar. Un rechazo
+  definitivo libera el intento. No hay éxito optimista de request/comandos.
+- **VERIFICADO automatizado:** TypeScript, lint, suite **194/194**, gateway/
+  pricing/matching **48/48** (20 tests nuevos contando la recuperación renderizada
+  de Passenger), carreras/restart y E2E HTTP con rutas y pricing sintéticos.
+  Worklets, schema/style MapLibre (suite), Hermes release Android/iOS, splash,
+  fixture/release/server/credential/path isolation y `git diff --check` pasan.
+  Expo Doctor **20/21**: únicamente los cinco patches SDK 57 conocidos; sin
+  actualizar dependencias. Warnings existentes de Node typeless y renderer
+  de tests no bloquean las pruebas.
+- Export DEV Android/iOS con Driver/gate incluido y fixture isolation correcto.
+  Scan adicional de configuración/credenciales server-only ausentes pasa en DEV.
+  Aplicar también `check-mobile-boundary` a DEV detecta el header público
+  `TomTom-Api-Key` de Orbis Display ya existente en `VimaMap`, no una key secreta
+  ni código matching del servidor. Se conserva el check sin relajar y pasa en
+  release; no se modificó Map Display/Traffic para ocultar ese resultado.
+- **PENDIENTE físico y TomTom E2E live:** no hay HTTPS físico ni dos dispositivos
+  disponibles en esta sesión; tampoco configuración auth/pricing/key en el
+  entorno servidor. No se afirma PASS físico. Runbook, endpoints y escenarios:
+  [MATCHING_P0.md](MATCHING_P0.md). Sin dependencias ni cambios nativos.
 
 ### Origen único y offsets fraccionarios del sheet — 2026-10-06
 

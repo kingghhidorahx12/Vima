@@ -16,7 +16,7 @@ export function createQuoteService(adapter: TomTomAdapter, gateway: GatewayConfi
     return { id: query(p.id, gateway), name: query(p.name, gateway),
       address: p.address === '' ? '' : query(p.address, gateway), coordinate: coordinate(p.coordinate) };
   }
-  return { store, async quote(input: unknown, context: UpstreamContext): Promise<QuoteResponse> {
+  return { store, async quote(input: unknown, context: UpstreamContext, owner?: string): Promise<QuoteResponse> {
     const b = allowFields(input, ['operationId', 'origin', 'destination', 'stops']);
     if (typeof b.operationId !== 'string' || !/^[A-Za-z0-9._:-]{16,128}$/.test(b.operationId) ||
       !Array.isArray(b.stops) || b.stops.length > gateway.maxStops) throw new GeospatialError('invalid_result');
@@ -39,6 +39,6 @@ export function createQuoteService(adapter: TomTomAdapter, gateway: GatewayConfi
         return { status: 'priced', quote: { ...routePreview, ...priced, configVersion: pricing.config.version,
           profile: selection.profile, ...(selection.override ? { overrideId: selection.override.id } : {}), distanceMeters: route.distanceMeters } };
       } catch { return { status: 'unpriced', reason: 'pricing_unavailable', routePreview }; }
-    });
+    }, owner);
   } };
 }

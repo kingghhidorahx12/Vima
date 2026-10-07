@@ -214,3 +214,20 @@ La barra inferior reutiliza acciones existentes; no autoriza nuevos destinos fun
   izquierdo y derecho y el clearance lateral del pin. Los controles/menú de capas y demás
   overlays laterales no desplazan el centro de la ruta. Se preserva el encuadre vertical
   efectivo al trasladar mecánicamente la oclusión al nuevo origen del mapa.
+
+## Request/matching P0 y Driver técnico — aprobado 2026-10-07
+
+- Autoridad server: SEARCHING/ASSIGNED/CANCELLED/NO_DRIVER_FOUND. Passenger
+  cancela sólo antes de assignment. Driver cancel conserva request/deadline,
+  limpia assignment, reinicia searchStartedAt y excluye permanentemente a ese
+  Driver de esa request. First-commit-wins y revisions monótonas.
+- Quote owned, priced y vigente al crear; snapshot congelado después. RequestId
+  y acciones críticas idempotentes y persistidas. Un coordinador por proceso,
+  ETA real fuera del lock y revalidada al commit; sin DB ni multi-instance.
+- Grupos ≤2, una oferta ACTIVE global por Driver, una invitación por request,
+  TTL 20 s, deadline fijo 15 min, tres expiraciones pausan hasta resume explícito.
+  60/120 son proyecciones locales de Passenger, no estados/revisions server.
+- Auth externa server-only, Bearer en SecureStore y HTTPS obligatorio para
+  dispositivos. Long-poll sólo invalida; GET/reconcile conserva autoridad.
+- Driver DEV mínimo hasta assignment/cancel; sin tracking/lifecycle posterior,
+  pagos nuevos, chat, push ni rediseño Passenger. Operación y QA en MATCHING_P0.md.

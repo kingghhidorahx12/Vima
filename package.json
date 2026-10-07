@@ -20,7 +20,7 @@
     "check:fixture-isolation": "node scripts/check-fixture-isolation.cjs",
     "geo:gateway": "node --experimental-strip-types gateway/main.ts",
     "geo:smoke": "node --experimental-strip-types gateway/smoke.ts",
-    "test:gateway": "node --experimental-strip-types --test tests/gateway.test.ts tests/pricing.test.ts tests/pricing-integration.test.ts tests/place-media.test.ts",
+    "test:gateway": "node --experimental-strip-types --test tests/gateway.test.ts tests/pricing.test.ts tests/pricing-integration.test.ts tests/place-media.test.ts tests/matching*.test.ts",
     "check:splash": "node scripts/check-splash.cjs",
     "check:release-isolation": "node scripts/check-release-isolation.cjs"
   },

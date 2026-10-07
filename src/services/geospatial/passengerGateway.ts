@@ -4,18 +4,20 @@ import { createPlaceSearch } from './search.ts';
 import { geospatialClientConfig } from './config.ts';
 import type { PersonalPlacesRepository, SavedPlace } from './personalPlaces.ts';
 import { createPlaceMediaResolver } from './placeMedia.ts';
+import type { MatchingClient } from '../matching/client.ts';
 
 const toPlace = (place: SavedPlace) => ({ ...place, id: place.canonicalId });
 
-/** Live quote authority stays in Vima gateway. Cash is ready; ride requests remain unavailable. */
+/** Quotes and requests share Vima authority; capability is obtained from the authenticated backend. */
 export function createPassengerLiveGateway(client: GeospatialClient, locate: PassengerGateway['locate'],
-  personal?: PersonalPlacesRepository, installationId?: () => Promise<string>, mediaBaseUrl?: string): PassengerGateway {
+  personal?: PersonalPlacesRepository, installationId?: () => Promise<string>, mediaBaseUrl?: string,
+  live?: { matching: MatchingClient; accountId: string; available: boolean }): PassengerGateway {
   const search = createPlaceSearch(client, geospatialClientConfig.debounceMs);
   const unavailable = async (): Promise<never> => { throw new Error('Servicio no disponible'); };
   return {
-    scope: 'vima-geospatial-live', source: 'server', locate,
+    scope: `vima-geospatial-live${live ? `:${live.accountId}` : ''}`, source: 'server', locate,
     resolvePlaceMedia: mediaBaseUrl ? createPlaceMediaResolver(mediaBaseUrl) : undefined,
-    paymentReady: true, tripRequestAvailable: false,
+    paymentReady: true, tripRequestAvailable: live?.available === true,
     recentPlaces: async () => (await personal?.recents() ?? []).map(toPlace),
     favoritePlaces: async () => (await personal?.favorites() ?? []).map(toPlace),
     saveFavorite: personal ? place => personal.saveFavorite(place) : undefined,
@@ -52,7 +54,9 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
         durationMinutes: Math.ceil((route.trafficDurationSeconds ?? route.durationSeconds) / 60),
         distanceKm: Math.round(route.distanceMeters / 100) / 10 };
     },
-    request: unavailable, fetch: unavailable, execute: unavailable,
-    getConnection: () => 'online', subscribeConnection: () => () => {}, subscribeTrip: () => () => {},
+    request: live?.available ? (quote, id) => live.matching.request(quote.id, id) : unavailable,
+    fetch: live?.matching.fetch ?? unavailable, execute: live?.matching.execute ?? unavailable,
+    getConnection: live?.matching.getConnection ?? (() => 'online'),
+    subscribeConnection: live?.matching.subscribeConnection ?? (() => () => {}), subscribeTrip: live?.matching.subscribeTrip ?? (() => () => {}),
   };
 }

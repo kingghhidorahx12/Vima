@@ -14,6 +14,9 @@ import { createQuoteService } from './pricing/service.ts';
 import { PricingError } from './pricing/contracts.ts';
 import type { PricingConfiguration } from './pricing/config.ts';
 import { emptyPlaceMediaCatalog, type PlaceMediaCatalog } from './placeMedia.ts';
+import { MatchingCoordinator, type MatchingClock } from './matching/coordinator.ts';
+import { MatchingError, type AuthConfig } from './matching/auth.ts';
+import { matchingHttp } from './matching/http.ts';
 
 export interface GatewayLog { requestId: string; endpoint: string; durationMs: number; upstreamStatus?: number; count: number; error?: GeospatialErrorCode }
 async function readBody(request: IncomingMessage, maximum: number): Promise<unknown> {
@@ -29,13 +32,19 @@ async function readBody(request: IncomingMessage, maximum: number): Promise<unkn
 }
 export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, options: {
   now?: () => number; logger?: (entry: GatewayLog) => void; localPlaces?: readonly VimaLocalPlace[]; configured?: boolean;
-  pricing?: PricingConfiguration; media?: PlaceMediaCatalog;
+  pricing?: PricingConfiguration; media?: PlaceMediaCatalog; auth?: AuthConfig; matchingClock?: MatchingClock;
 } = {}) {
   const now = options.now ?? Date.now;
   const state = createGatewayState(config, now);
   const contributions = createContributionRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const popularity = createPopularityRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const quotes = createQuoteService(adapter, config, options.pricing ?? { status: 'pricing_not_configured' }, now);
+  const matching = options.auth && options.configured && options.pricing?.status === 'ready' ? new MatchingCoordinator({
+    auth: options.auth, directory: config.runtimeDir ?? '.runtime', clock: options.matchingClock,
+    quote: (id, owner) => { const value = quotes.store.lookupOwned(id, owner); return value?.status === 'priced' ? value.quote : undefined; },
+    eta: (origin, destination) => adapter.route({ origin, destination, stops: [] }, { signal: AbortSignal.timeout(config.upstreamTimeoutMs) }),
+  }) : undefined;
+  const matchingReady = matching?.start();
   const media = options.media ?? emptyPlaceMediaCatalog();
   const attachImage = <T extends { id: string; canonicalId?: string; provenance?: string }>(place: T): T => {
     const image = place.provenance === 'vima-local' ? media.imageFor(place.canonicalId ?? place.id) : undefined;
@@ -63,6 +72,10 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       if (request.method === 'GET' && path === '/health') {
         endpoint = 'health'; reply(200, { status: 'ok', configured: options.configured === true }); return;
       }
+      await matchingReady;
+      if (await matchingHttp(request, path, options.auth, matching, () => readBody(request, config.maxBodyBytes), controller.signal, reply)) {
+        endpoint = 'matching'; count = 1; return;
+      }
       if (request.method === 'GET' && path.startsWith('/v1/geospatial/discovery?')) {
         endpoint = 'discovery'; const url = new URL(path, 'http://localhost');
         if (url.pathname !== '/v1/geospatial/discovery' || [...url.searchParams.keys()].length !== 1 ||
@@ -87,7 +100,10 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       if (path.includes('?')) throw new GeospatialError('invalid_result');
       if (request.method === 'POST' && path === '/v1/passenger/quotes') {
         endpoint = 'passenger.quotes';
-        const result = await quotes.quote(await readBody(request, config.maxBodyBytes), context);
+        const principal = request.headers.authorization ? options.auth?.authenticate(request.headers.authorization) : undefined;
+        if (request.headers.authorization && !principal) throw new MatchingError(401, 'unauthorized');
+        if (principal && principal.role !== 'passenger') throw new MatchingError(403, 'forbidden');
+        const result = await quotes.quote(await readBody(request, config.maxBodyBytes), context, principal?.accountId);
         count = 1; reply(200, result); return;
       }
       if (request.method === 'POST' && path === '/v1/geospatial/place-signals') {
@@ -181,6 +197,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       }
       category = 'no_result'; reply(404, { error: { code: category } });
     } catch (error) {
+      if (error instanceof MatchingError) { reply(error.status, { error: { code: error.code } }); return; }
       if (error instanceof PricingError) {
         reply(error.code === 'idempotency_conflict' ? 409 : 503, { error: { code: error.code } }); return;
       }
@@ -192,6 +209,6 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       if (config.logging) options.logger?.({ requestId, endpoint, durationMs: now() - started, upstreamStatus: context.status, count, error: category });
     }
   });
-  server.on('close', () => clearInterval(cleanup));
+  server.on('close', () => { clearInterval(cleanup); matching?.close(); });
   return server;
 }

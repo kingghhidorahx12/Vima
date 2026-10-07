@@ -10,6 +10,8 @@ import { createSearchCoordinator } from '../../services/geospatial/searchCoordin
 import { geospatialClientConfig } from '../../services/geospatial/config';
 import { isGeographicQuery } from '../../services/geospatial/regionalRanking';
 import type { SavedSlot } from '../../services/geospatial/personalPlaces';
+import { useMatchingProjection } from './useMatchingProjection';
+import { ApiError } from '../../services/api/client';
 
 let operationSequence = 0;
 function operationId() { return `passenger-${Date.now()}-${++operationSequence}`; }
@@ -31,6 +33,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const quoteOperation = useRef<{ draft: string; id: string } | undefined>(undefined);
   const [quoteExpired, setQuoteExpired] = useState(false);
   const requestId = useRef<string | null>(null);
+  const cancelCommand = useRef<{ fingerprint: string; id: string } | undefined>(undefined);
   const contributionRequest = useRef<{ fingerprint: string; id: string } | undefined>(undefined);
   const locked = useRef(false);
   const selection = useRef<AbortController | undefined>(undefined);
@@ -96,14 +99,18 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     if (connection === 'online' && tripId) void refetchTrip();
   }, [connection, tripId, refetchTrip]);
 
-  const request = useMutation({ mutationFn: () => requestPassengerRide(client, gateway, quote.data!, requestId.current!), retry: false });
+  const request = useMutation({ mutationFn: (snapshot: RideQuote) => requestPassengerRide(client, gateway, snapshot, requestId.current!), retry: false });
+  // A lost create response must be reconciled with its original payload, even after quote refresh/expiry.
+  const ambiguousRequest = gateway.source === 'server' && request.isError &&
+    !(request.error instanceof ApiError && request.error.status >= 400 && request.error.status < 500);
   const command = useCriticalTripCommand(gateway);
   const pending = request.isPending || command.isPending || resolving;
-  const phase = passengerPhase(trip.data, editing, confirming, request.isPending);
-  const activeQuote = phase === 'home' || phase === 'confirm' || phase === 'requesting' ? quote.data : trip.data?.quote;
+  const phase = useMatchingProjection(trip.data, passengerPhase(trip.data, editing, confirming, request.isPending), gateway.source === 'server');
+  const activeQuote = ambiguousRequest || request.isPending ? request.variables :
+    phase === 'home' || phase === 'confirm' || phase === 'requesting' ? quote.data : trip.data?.quote;
 
   const applyPlace = (value: Place, target: 'origin' | 'destination') => {
-    if (pending || isMatching(phase) || phase === 'assigned') return;
+    if (pending || ambiguousRequest || isMatching(phase) || phase === 'assigned') return;
     requestId.current = null;
     if (target === 'origin') setOrigin({ place: value, kind: 'manual' }); else {
       setDestination(value);
@@ -202,14 +209,17 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
   };
   const submit = async () => {
-    if (locked.current || phase !== 'confirm' || !canRequest(quote.data, connection, pending, gateway)) return;
+    if (locked.current || phase !== 'confirm' || (ambiguousRequest ? connection !== 'online' || pending : !canRequest(quote.data, connection, pending, gateway))) return;
     locked.current = true;
     requestId.current ??= operationId(); // Keep on ambiguous failure/retry.
     try {
-      const confirmed = await request.mutateAsync();
+      const confirmed = await request.mutateAsync(ambiguousRequest ? request.variables! : quote.data!);
       setTripId(confirmed.id); setEditing(false); setConfirming(false);
       requestId.current = null;
-    } catch { /* Retain draft, quote and request ID. Error state remains recoverable. */ }
+    } catch (error) {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) requestId.current = null;
+      // Ambiguous failures retain the original quote and request ID for reconciliation.
+    }
     finally { locked.current = false; }
   };
   const preserveDraft = (previous: RideQuote | undefined) => {
@@ -218,10 +228,13 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     setDestination(previous.destination); setStops(previous.stops);
   };
   const act = async (name: 'cancel', reason: 'user' | 'edit' | 'schedule' = 'user') => {
-    if (!tripId || locked.current || pending || connection !== 'online') return;
+    if (!tripId || locked.current || pending || connection !== 'online' || (gateway.source === 'server' && phase === 'assigned')) return;
     locked.current = true;
     try {
-      await command.mutateAsync({ tripId, commandId: operationId(), name, payload: { reason } });
+      const fingerprint = `${tripId}:${reason}`;
+      if (cancelCommand.current?.fingerprint !== fingerprint) cancelCommand.current = { fingerprint, id: operationId() };
+      await command.mutateAsync({ tripId, commandId: cancelCommand.current.id, name, payload: { reason } });
+      cancelCommand.current = undefined;
       // A newer assignment may have arrived while cancellation was in flight.
       const confirmed = client.getQueryData<PassengerTrip>(tripKey(tripId));
       if (confirmed?.phase !== 'cancelled' && confirmed?.phase !== 'expired') return false;
@@ -232,7 +245,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     finally { locked.current = false; }
   };
   const edit = async () => {
-    if (locked.current || pending || phase === 'assigned') return false;
+    if (locked.current || pending || ambiguousRequest || phase === 'assigned') return false;
     if (isMatching(phase) && !await act('cancel', 'edit')) return false;
     const previous = trip.data?.quote ?? quote.data;
     preserveDraft(previous);
@@ -241,7 +254,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     return true;
   };
   const schedule = async () => {
-    if (locked.current || pending || phase === 'assigned') return;
+    if (locked.current || pending || ambiguousRequest || phase === 'assigned') return;
     const previous = trip.data?.quote ?? quote.data;
     if (isMatching(phase) && !await act('cancel', 'schedule')) return;
     preserveDraft(previous); setTripId(undefined); setEditing(true); setConfirming(false); setField(null); requestId.current = null;
@@ -289,30 +302,32 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     popular: discovery.data?.popular ?? [], featured: discovery.data?.featured ?? [],
     saveFavorite, removeFavorite, removeSavedSlot, confirmLocations,
     loadingPlaces: !!search.trim() && (places.isFetching || resolving), loadingQuote: quote.isFetching, error,
-    canSubmit: phase === 'confirm' && canRequest(quote.data, connection, pending, gateway), choosePlace, chooseMapCoordinate,
+    canSubmit: phase === 'confirm' && (ambiguousRequest ? connection === 'online' && !pending : canRequest(quote.data, connection, pending, gateway)), choosePlace, chooseMapCoordinate,
     contributePlace, submitSearch, submit, act, edit, schedule,
     returnHome: () => {
       // Back never cancels or abandons an in-flight/active ride.
-      if (locked.current || request.isPending || command.isPending || isMatching(phase) || phase === 'assigned') return;
+      if (locked.current || ambiguousRequest || request.isPending || command.isPending || isMatching(phase) || phase === 'assigned') return false;
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear();
       setField(null); setSearch(''); setFollowUpResults(undefined);
       setSavedPicker(null);
       setDestination(null); setStops([]); setConfirming(false); setEditing(false); setTripId(undefined);
       setQuoteExpired(false);
       requestId.current = null; request.reset();
+      return true;
     },
     openField: (target: 'origin' | 'destination') => {
-      if (pending || isMatching(phase) || phase === 'assigned') return;
+      if (pending || ambiguousRequest || isMatching(phase) || phase === 'assigned') return;
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined); setField(target); setSearch('');
       setSavedPicker(null);
     },
     openSavedPicker: (target: SavedSlot | 'favorite') => {
-      if (pending || isMatching(phase) || phase === 'assigned') return;
+      if (pending || ambiguousRequest || isMatching(phase) || phase === 'assigned') return;
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined);
       setSavedPicker(target); setField('destination'); setSearch('');
     },
     closeField: () => { cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setField(null); setSavedPicker(null); },
-    retry: () => { if (quote.data) quoteOperation.current = undefined; cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
+    retry: () => { if (ambiguousRequest) { void submit(); return; }
+      if (quote.data) quoteOperation.current = undefined; cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
       if (tripId) void trip.refetch(); },
   };
 }

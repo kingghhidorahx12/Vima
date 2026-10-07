@@ -8,17 +8,20 @@ const snapshot = (value: QuoteResponse) => value.status === 'priced' ? value.quo
 export function createQuoteStore(now = Date.now, maximum = 500) {
   const operations = new Map<string, { fingerprint: string; promise: Promise<QuoteResponse>; value?: QuoteResponse }>();
   const quotes = new Map<string, QuoteResponse>();
+  const owners = new Map<string, string>();
   const cleanup = () => {
     for (const [id, entry] of operations) if (entry.value && snapshot(entry.value).expiresAt <= now()) {
-      operations.delete(id); quotes.delete(snapshot(entry.value).id);
+      operations.delete(id); quotes.delete(snapshot(entry.value).id); owners.delete(snapshot(entry.value).id);
     }
   };
   return {
     cleanup,
     lookup(id: string) { cleanup(); return quotes.get(id); },
-    async getOrCreate(operationId: string, fingerprint: string, create: () => Promise<QuoteResponse>) {
+    lookupOwned(id: string, owner: string) { cleanup(); return owners.get(id) === owner ? quotes.get(id) : undefined; },
+    async getOrCreate(operationId: string, fingerprint: string, create: () => Promise<QuoteResponse>, owner?: string) {
       cleanup();
-      const existing = operations.get(operationId);
+      const key = JSON.stringify([owner ?? null, operationId]);
+      const existing = operations.get(key);
       if (existing) {
         if (existing.fingerprint !== fingerprint) throw new PricingError('idempotency_conflict');
         return existing.promise;
@@ -27,10 +30,10 @@ export function createQuoteStore(now = Date.now, maximum = 500) {
       const entry: { fingerprint: string; promise: Promise<QuoteResponse>; value?: QuoteResponse } = {
         fingerprint, promise: Promise.resolve().then(create).then(result => {
           const value = freezeSnapshot(structuredClone(result)); entry.value = value;
-          quotes.set(snapshot(value).id, value); return value;
-        }).catch(error => { operations.delete(operationId); throw error; }),
+          quotes.set(snapshot(value).id, value); if (owner) owners.set(snapshot(value).id, owner); return value;
+        }).catch(error => { operations.delete(key); throw error; }),
       };
-      operations.set(operationId, entry); return entry.promise;
+      operations.set(key, entry); return entry.promise;
     },
     get size() { cleanup(); return operations.size; },
   };

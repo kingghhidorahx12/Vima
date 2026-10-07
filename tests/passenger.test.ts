@@ -720,6 +720,37 @@ test('explicit location confirmation still emits a full route fit after its actu
 });
 
 // Quote fixtures stay inside tests and never enter the mobile production dependency graph.
+test('ambiguous live create retries the original quote/id after refresh and cannot abandon the unconfirmed request', async () => {
+  const fixture = createPassengerFixtureGateway(clock);
+  const { priceTrip } = await import('../gateway/pricing/engine.ts');
+  const { syntheticPricing, syntheticRoute } = await import('./support/pricing-fixture.ts');
+  let quotes = 0; const attempts: { quote: string; id: string }[] = [];
+  const gateway: PassengerGateway = { ...fixture.gateway, source: 'server', paymentReady: true, tripRequestAvailable: true,
+    quote: async draft => {
+      const now = Date.now(); const id = `server-${++quotes}`;
+      return { ...fixtureQuote(draft), id, pricing: { status: 'priced', quote: { ...draft, id, createdAt: now, expiresAt: now + 300000,
+        route: syntheticRoute, configVersion: 'SYNTHETIC_PRICING_TEST_ONLY', profile: 'URBANO', distanceMeters: syntheticRoute.distanceMeters,
+        ...priceTrip({ config: syntheticPricing(), profile: 'URBANO', routeMetrics: syntheticRoute }) } } };
+    }, request: async (snapshot, id) => {
+      attempts.push({ quote: snapshot.id, id });
+      const result = await fixture.gateway.request(snapshot, id);
+      if (attempts.length === 1) throw new Error('Lost create response');
+      return result;
+    } };
+  const h = createHarness(); const tree: ReactTestRenderer = await h.render(gateway);
+  try {
+    await reachMatching(h, tree);
+    assert.equal(attempts.length, 1); assert.ok(text(tree).includes('Lost create response'));
+    await h.act(async () => { h.back(); });
+    assert.ok(text(tree).includes('Solicitar viaje'));
+    await h.act(async () => { await h.client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'quote'] }); });
+    await settle(h); assert.equal(quotes, 2);
+    await h.act(async () => press(tree, 'Lost create response')); await settle(h);
+    assert.equal(attempts.length, 2); assert.deepEqual(attempts[0], attempts[1]);
+    assert.ok(text(tree).includes('Buscando un conductor'));
+  } finally { await h.act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+});
+
 test('live quote UI keeps valid snapshots across reconnect and requires a new review after expiry', async () => {
   const fixture = createPassengerFixtureGateway(clock);
   let calls = 0; const operations: string[] = [];

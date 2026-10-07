@@ -343,7 +343,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const goHome = () => {
     setRouteFitRequestId(undefined); dismissKeyboard(); setIncident(null); setLayersOpen(false);
     setSearchAction('results'); setSelectedCoordinate(null);
-    flow.returnHome(); setHomePanel('home'); setReviewedDraft(undefined);
+    if (!flow.returnHome()) return;
+    setHomePanel('home'); setReviewedDraft(undefined);
     setMapUserControlled(false); setHomePanNeedsRecenter(false);
   };
   const goBack = () => {
@@ -353,7 +354,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     if (layersOpen) { setLayersOpen(false); return; }
     if (flow.field) { setSearchAction('results'); setSelectedCoordinate(null); flow.closeField(); return; }
     if (homePanel !== 'home') { setHomePanel('home'); return; }
-    flow.returnHome(); setReviewedDraft(undefined); setMapUserControlled(false); setHomePanNeedsRecenter(false);
+    if (!flow.returnHome()) return;
+    setReviewedDraft(undefined); setMapUserControlled(false); setHomePanNeedsRecenter(false);
   };
   // Scope Android back to the focused shell; active rides keep explicit cancellation.
   const backAction = useRef(goBack);
@@ -544,7 +546,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         </View>
         <View style={styles.row}><VimaButton style={styles.fill} secondary communication icon="phone" label="Llamar" onPress={() => boundaries.call(assignment)} disabled={blocked} />
           <VimaButton style={styles.fill} secondary icon="shield" label="Seguridad" onPress={() => boundaries.safety(assignment)} /></View>
-        <TextAction danger label="Cancelar viaje" onPress={() => { void flow.act('cancel'); }} disabled={blocked} />
+        <TextAction danger label="Cancelar viaje" onPress={() => { void flow.act('cancel'); }} disabled={blocked || gateway.source === 'server'} />
       </> : matching ? <>
         <View onLayout={(event) => { pulseHeight.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height;
           setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
