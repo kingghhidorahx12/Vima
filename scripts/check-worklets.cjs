@@ -13,8 +13,13 @@ for (const filename of ['src/motion/ElementEntrance.tsx', 'src/motion/PassengerS
 // The full scene must use the transformed stable presence, without an exiting tree.
 const passenger = fs.readFileSync('src/features/passenger/PassengerScreen.tsx', 'utf8');
 assert.match(passenger, /<PassengerScenePresence scene=\{scene\} style=\{styles\.fill\}>/);
-assert.match(passenger, /<Animated\.View key=\{measureKey\} testID="passenger-sheet-viewport"/);
+assert.match(passenger, /<Animated\.View ref=\{viewportNode\} testID="passenger-sheet-viewport"/);
+assert.match(passenger, /<View ref=\{headerNode\} testID="passenger-sheet-header"/);
+assert.match(passenger, /<View ref=\{contentNode\} testID="passenger-sheet-content"/);
+assert.doesNotMatch(passenger, /(?:<Animated\.View|<View) key=\{[^}]*measureKey[^}]*\} testID="passenger-sheet-(?:viewport|header)"/);
 assert.doesNotMatch(passenger, /<ElementEntrance key=\{scene\}/);
+assert.match(passenger, /const measuredForCurrentGeneration = headerMeasure\?\.key === measureKey && contentMeasure\?\.key === measureKey &&/);
+assert.match(passenger, /if \(active && currentMeasureKey\.current === measureKey && Number\.isFinite\(measuredHeight\)/);
 const presence = fs.readFileSync('src/motion/PassengerScenePresence.tsx', 'utf8');
 assert.match(presence, /testID="passenger-phase-presence"/);
 assert.match(presence, /cancelAnimation\(progress\)/);

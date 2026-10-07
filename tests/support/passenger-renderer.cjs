@@ -46,6 +46,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     withRepeat: (value, count) => { repeats.push({ value, count }); return value; },
     withSequence: (...values) => values.at(-1), withDelay: (duration, value) => { delays.push(duration); return value; } };
   const kv = new Map();
+  const nativeHeights = new Map();
   const overrides = {
     'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => insets },
     'react-native-reanimated': { __esModule: true, ...animated },
@@ -98,7 +99,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
   const fakeMapConfig = {};
   const boundaries = { schedule() {}, call() {}, safety() {}, ...boundaryOverrides };
   const client = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
-  return { projection, animations, delays, repeats, cancellations, mounted, client, kv, load,
+  return { projection, animations, delays, repeats, cancellations, mounted, client, kv, nativeHeights, load,
     setAppState(state) { native.AppState.currentState = state; for (const listener of appStateListeners) listener(state); },
     back: () => back?.(), async render(gateway) {
     let tree;
@@ -108,6 +109,12 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
           blur() { mounted.blur++; mounted.inputFocused = false; }, focus() { mounted.inputFocused = true; },
         }; }
         if (element.type === 'ScrollView') return { scrollTo() {} };
+        if (['passenger-sheet-header', 'passenger-sheet-content', 'passenger-sheet-viewport'].includes(element.props.testID)) {
+          return { measure(callback) {
+            const height = nativeHeights.get(element.props.testID);
+            if (height !== undefined) callback(0, 0, 390, height, 0, 0);
+          } };
+        }
         return null;
       } }); });
     return tree;

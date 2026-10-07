@@ -10,6 +10,28 @@ sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
 
+### Mediciones Passenger sin remount visible — 2026-10-06
+
+- Tras eliminar el doble árbol con `PassengerScenePresence`, Android aún mostró
+  un parpadeo residual: `measureKey` seguía siendo la `key` React del header y
+  viewport. Ambos nodos visibles se desmontaban al cambiar fase, quote, lugares
+  o geometría de ruta.
+- Header, viewport y contenido ahora conservan identidad React. `measureKey`
+  sólo identifica la generación lógica de header/content/viewport y del alto
+  visible del sheet. Las últimas alturas físicas mantienen continuidad mientras
+  se reciben nuevas medidas; una lectura nativa tras layout revalida también
+  dimensiones idénticas que no vuelven a emitir `onLayout`. Callbacks anteriores
+  a la generación vigente se descartan. `settledSheetHeight` y route-fit sólo
+  aceptan las tres medidas validadas para la generación actual.
+- Permanecen intactos `PassengerScenePresence`, Motion 1.2 interno, geometría
+  final del sheet, Camera, route-fit, Search y mapa. **Android físico PENDIENTE**
+  de repetir Search → reviewing, confirm → Home y llegada/renovación de quote,
+  incluidos cambios rápidos. Sin dependencias, cambio nativo ni EAS Build.
+- Validación: TypeScript, lint, suite 171/171, gateway 29/29, worklets,
+  schema/style MapLibre, splash, Hermes Android/iOS y aislamiento de
+  fixtures/release/credenciales pasaron. Expo Doctor 20/21 conserva sólo los
+  cinco patches SDK 57 conocidos; no se actualizaron dependencias.
+
 ### Transición estable entre escenas Passenger — 2026-10-06
 
 - En Android físico se observó un flash blanco en Search → reviewing y un ghost
@@ -23,8 +45,9 @@ sustituyen los valores visuales descritos en las secciones anteriores.
   la animación anterior y continúa desde el progreso en curso. Reduced Motion
   mantiene sólo el fade, sin desplazamiento. Las entradas internas siguen
   usando `ElementEntrance`.
-- `measureKey` conserva el remount permitido del viewport; no se alteraron
-  mediciones, sheet, mapa, Camera, route-fit, lógica ni tokens Motion.
+- En esa ronda `measureKey` aún remontaba el viewport; la corrección de
+  mediciones anterior lo separó de la identidad React visible. No se alteraron
+  sheet, mapa, Camera, route-fit, lógica ni tokens Motion.
   **Android físico PENDIENTE** de repetir específicamente Search → reviewing y
   confirm → Home, también con cambios rápidos y Reduced Motion. Sin cambio
   nativo ni EAS Build.

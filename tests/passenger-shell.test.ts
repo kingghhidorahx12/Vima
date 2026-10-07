@@ -571,6 +571,124 @@ test('phase transition remains visible, interruptible, and spatially still under
     } finally { await act(async () => tree!.unmount()); }
   }
 });
+
+test('measurement generations revalidate stable native header/content/viewport without remount or stale route fit', async () => {
+  const previousFrame = globalThis.requestAnimationFrame;
+  const previousCancel = globalThis.cancelAnimationFrame;
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  globalThis.requestAnimationFrame = callback => { const handle = ++nextFrame; frames.set(handle, callback); return handle; };
+  globalThis.cancelAnimationFrame = handle => { if (typeof handle === 'number') frames.delete(handle); };
+  const flushFrame = async () => { const pending = [...frames.values()]; frames.clear();
+    await act(async () => { for (const callback of pending) callback(0); }); };
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  const fit = () => host(tree, 'PassengerMapContent').props.fitRoute;
+  const nodes = () => ['passenger-phase-presence', 'passenger-sheet-header', 'passenger-sheet-viewport',
+    'passenger-sheet-content'].map(testID => id(tree, testID));
+  const firstNodes = nodes();
+  const assertStable = () => { assert.deepEqual(nodes(), firstNodes);
+    for (const testID of ['passenger-phase-presence', 'passenger-sheet-header', 'passenger-sheet-viewport',
+      'passenger-sheet-content']) assert.equal(tree.root.findAll(n => n.props.testID === testID).length, 1); };
+  const nativeHeights = (header: number, content: number, viewport: number) => {
+    h.nativeHeights.set('passenger-sheet-header', header);
+    h.nativeHeights.set('passenger-sheet-content', content);
+    h.nativeHeights.set('passenger-sheet-viewport', viewport);
+  };
+  try {
+    await settle(); await mapLayout(tree);
+    const homeHeight = await measure(tree, 250, 96);
+    nativeHeights(96, 250, homeHeight - 96); await flushFrame();
+    await act(async () => host(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+    const oldVisible = host(tree, 'SheetBoundary').props.onVisibleHeightChange;
+    await press(tree, '¿A dónde vamos?'); assertStable();
+    const searchVisible = host(tree, 'SheetBoundary').props.onVisibleHeightChange;
+    assert.notEqual(searchVisible, oldVisible); // A new generation without a new React node.
+    const searchInput = host(tree, 'TextInput');
+    await act(async () => searchInput.props.onChangeText('Parque')); await settle();
+    assert.equal(host(tree, 'TextInput'), searchInput); assertStable();
+    nativeHeights(96, 250, homeHeight - 96); await flushFrame(); // Same physical heights, no onLayout.
+    const oldHeaderLayout = id(tree, 'passenger-sheet-header').props.onLayout;
+    const oldContentLayout = id(tree, 'passenger-sheet-content').props.onLayout;
+    const oldViewportLayout = id(tree, 'passenger-sheet-viewport').props.onLayout;
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`); assertStable();
+    assert.equal(fit(), undefined);
+    await mapLayout(tree);
+    await act(async () => {
+      oldHeaderLayout({ nativeEvent: { layout: { height: 999 } } });
+      oldContentLayout({ nativeEvent: { layout: { height: 999 } } });
+      oldViewportLayout({ nativeEvent: { layout: { height: 999 } } });
+      oldVisible(999);
+    });
+    assert.equal(fit(), undefined); // Previous generation cannot authorize reviewing.
+    nativeHeights(28, 250, 250); await flushFrame();
+    const reviewingFit = fit(); assert.ok(reviewingFit);
+    assert.equal(reviewingFit.sheetHeight, 278);
+    const reviewingVisible = host(tree, 'SheetBoundary').props.onVisibleHeightChange;
+    const oldReviewViewport = id(tree, 'passenger-sheet-viewport').props.onLayout;
+    await press(tree, 'Confirmar ubicaciones'); assertStable();
+    assert.equal(fit(), undefined);
+    assert.notEqual(host(tree, 'SheetBoundary').props.onVisibleHeightChange, reviewingVisible);
+    await act(async () => oldReviewViewport({ nativeEvent: { layout: { height: 999 } } }));
+    assert.equal(fit(), undefined);
+    nativeHeights(28, 250, 250); await flushFrame(); // No layout event: native measure revalidates this generation.
+    const confirmedFit = fit(); assert.ok(confirmedFit);
+    assert.equal(confirmedFit.sheetHeight, 278);
+    assert.equal(confirmedFit.confirmationBottomPadding, 28);
+    await act(async () => id(tree, 'passenger-sheet-content').props.onLayout({ nativeEvent: { layout: { height: 300 } } }));
+    assert.equal(host(tree, 'SheetBoundary').props.interaction.height -
+      host(tree, 'SheetBoundary').props.interaction.targetOffset, 328);
+    await press(tree, 'Volver'); assertStable();
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally {
+    await act(async () => tree.unmount()); fixture.controls.dispose();
+    globalThis.requestAnimationFrame = previousFrame;
+    globalThis.cancelAnimationFrame = previousCancel;
+  }
+});
+
+test('origin, destination, quote identity and route geometry updates never replace measured React nodes', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  let quoteVersion = 0;
+  const gateway = { ...fixture.gateway, quote: async (draft: Parameters<typeof fixture.gateway.quote>[0]) => {
+    const base = fixtureQuote(draft);
+    quoteVersion += 1;
+    return { ...base, id: `${base.id}-version-${quoteVersion}`, route: { type: 'Feature' as const,
+      properties: {}, geometry: { type: 'LineString' as const,
+        coordinates: [draft.origin.coordinate, [-99.88 + quoteVersion / 10000, 19.78], draft.destination.coordinate] } } };
+  } };
+  const tree: ReactTestRenderer = await h.render(gateway);
+  const stable = ['passenger-phase-presence', 'passenger-sheet-header', 'passenger-sheet-viewport',
+    'passenger-sheet-content'].map(testID => id(tree, testID));
+  const check = () => { for (let index = 0; index < stable.length; index += 1) {
+    const testID = stable[index]!.props.testID;
+    assert.equal(id(tree, testID), stable[index]);
+    assert.equal(tree.root.findAll(n => n.props.testID === testID).length, 1);
+  } };
+  try {
+    await settle(); await press(tree, '¿A dónde vamos?'); check();
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`); check();
+    assert.equal(quoteVersion, 1);
+    const firstQuote = host(tree, 'PassengerMapContent').props.quote;
+    assert.match(firstQuote.id, /version-1$/);
+    const firstGeneration = host(tree, 'SheetBoundary').props.onVisibleHeightChange;
+    await press(tree, 'Origen'); check();
+    await press(tree, `${fixturePlaces[2]!.name}, ${fixturePlaces[2]!.address}`); check();
+    assert.equal(quoteVersion, 2);
+    const secondQuote = host(tree, 'PassengerMapContent').props.quote;
+    assert.notEqual(secondQuote.origin.id, firstQuote.origin.id);
+    assert.notDeepEqual(secondQuote.route.geometry, firstQuote.route.geometry);
+    assert.notEqual(host(tree, 'SheetBoundary').props.onVisibleHeightChange, firstGeneration);
+    await press(tree, `Destino ${fixturePlaces[1]!.name}`); check();
+    await press(tree, `${fixturePlaces[0]!.name}, ${fixturePlaces[0]!.address}`); check();
+    assert.equal(quoteVersion, 3);
+    const thirdQuote = host(tree, 'PassengerMapContent').props.quote;
+    assert.notEqual(thirdQuote.destination.id, secondQuote.destination.id);
+    assert.notEqual(thirdQuote.id, secondQuote.id);
+    assert.notDeepEqual(thirdQuote.route.geometry, secondQuote.route.geometry);
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
 async function press(tree: ReactTestRenderer, label: string) {
   const node = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label && n.props.onPress);
   assert.ok(node, label); assert.ok(!node.props.disabled);

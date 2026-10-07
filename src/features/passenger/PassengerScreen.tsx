@@ -151,20 +151,44 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const homeRecentLimit = 3;
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
-  // Key only the measured content, never the persistent map/sheet. Search typing and late
-  // quotes do not replace the input; review and confirm get independent native layouts.
+  // A measurement generation is not React identity: the visible header and viewport stay mounted.
   const measureKey = JSON.stringify(flow.field ? ['search', flow.field, searchAction] :
     [flow.phase, homePanel, reviewing, flow.quote?.id, flow.origin?.id, flow.destination?.id, flow.quote?.route.geometry]);
   const viewportKey = `${measureKey}:${sheetFrameHeight}`;
-  const visibleSheetHeight = visibleSheetMeasure?.key === viewportKey ? visibleSheetMeasure.height : undefined;
+  // The last native footprint remains useful while the new generation is settling.
+  const visibleSheetHeight = visibleSheetMeasure?.height;
+  const currentViewportKey = useRef(viewportKey);
+  useLayoutEffect(() => { currentViewportKey.current = viewportKey; }, [viewportKey]);
   const reportVisibleSheetHeight = useCallback((value: number) => {
-    setVisibleSheetMeasure({ key: viewportKey, height: value });
+    if (currentViewportKey.current === viewportKey) setVisibleSheetMeasure({ key: viewportKey, height: value });
   }, [viewportKey]);
   const currentMeasureKey = useRef(measureKey);
   useLayoutEffect(() => { currentMeasureKey.current = measureKey; }, [measureKey]);
-  const headerHeight = headerMeasure?.key === measureKey ? headerMeasure.height : 0;
-  const naturalHeight = contentMeasure?.key === measureKey && headerMeasure?.key === measureKey
-    ? contentMeasure.height + headerHeight : 0;
+  const headerNode = useRef<View>(null);
+  const contentNode = useRef<View>(null);
+  const viewportNode = useRef<View>(null);
+  // Native onLayout need not fire when a new generation has exactly the same dimensions.
+  // Re-read the stable nodes after layout; late callbacks cannot validate an older generation.
+  useLayoutEffect(() => {
+    let active = true;
+    if (typeof requestAnimationFrame !== 'function') return () => { active = false; };
+    const frame = requestAnimationFrame(() => {
+      const read = (node: View | null, accept: (value: { key: string; height: number }) => void) => {
+        node?.measure((_x, _y, _width, measuredHeight) => {
+          if (active && currentMeasureKey.current === measureKey && Number.isFinite(measuredHeight) && measuredHeight > 0) {
+            accept({ key: measureKey, height: measuredHeight });
+          }
+        });
+      };
+      read(headerNode.current, setHeaderMeasure);
+      read(contentNode.current, setContentMeasure);
+      read(viewportNode.current, setViewportMeasure);
+    });
+    return () => { active = false; cancelAnimationFrame(frame); };
+  }, [measureKey]);
+  // Previous physical heights keep the sheet continuous while the new generation is measured.
+  const headerHeight = headerMeasure?.height ?? 0;
+  const naturalHeight = contentMeasure && headerMeasure ? contentMeasure.height + headerHeight : 0;
   const interaction = useMemo(() => {
     if (sheetFrameHeight <= 0) return undefined;
     if (homeFloatingSearch) {
@@ -180,9 +204,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const targetOffset = sheetFrameHeight - visibleHeight;
     return createRideSheetInteraction(sheetFrameHeight, targetOffset, [targetOffset]);
   }, [sheetFrameHeight, snap, flow.field, flow.phase, reviewing, naturalHeight, homeFloatingSearch]);
-  const actualSheetHeight = viewportMeasure?.key === measureKey && headerMeasure?.key === measureKey
-    ? viewportMeasure.height + headerHeight : undefined;
-  const settledSheetHeight = naturalHeight && interaction && actualSheetHeight !== undefined &&
+  const measuredForCurrentGeneration = headerMeasure?.key === measureKey && contentMeasure?.key === measureKey &&
+    viewportMeasure?.key === measureKey;
+  const actualSheetHeight = measuredForCurrentGeneration ? viewportMeasure.height + headerHeight : undefined;
+  const settledSheetHeight = measuredForCurrentGeneration && naturalHeight && interaction && actualSheetHeight !== undefined &&
     Math.abs(actualSheetHeight - (sheetFrameHeight - interaction.targetOffset)) < 1 ? actualSheetHeight : undefined;
   const routeFit = usePassengerRouteFit({ quote: flow.quote, origin: flow.origin, destination: flow.destination,
     reviewing, confirming: flow.phase === 'confirm' && !reviewing, searchActive: flow.field !== null,
@@ -251,7 +276,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       </View>
     </View>
   </View>;
-  const header = <View key={`header:${measureKey}`} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
+  const header = <View ref={headerNode} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
     <View testID="passenger-panel-header" style={[styles.sheetHeader, detachedPanel && styles.detachedPanelHeader]}>
       {detachedPanel ? <View testID="passenger-panel-background" pointerEvents="none"
@@ -347,7 +372,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     return { place, identity, entranceIndex };
   }) : [];
   const content = <PassengerScenePresence scene={scene} style={styles.fill}>
-    <Animated.View key={measureKey} testID="passenger-sheet-viewport"
+    <Animated.View ref={viewportNode} testID="passenger-sheet-viewport"
     style={[styles.fill, detachedPanel && styles.detachedPanelContent]}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setViewportMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
     {flow.connection !== 'online' ? <ElementEntrance timing={motionTimings.state}>
@@ -362,7 +387,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     <ScrollView ref={scroll} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets
       onTouchStart={() => { dismissKeyboard(); setIncident(null); }} onScrollBeginDrag={dismissKeyboard}
       onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
-      <View testID="passenger-sheet-content" style={[styles.content, homeFloatingSearch && styles.homeContent,
+      <View ref={contentNode} testID="passenger-sheet-content" style={[styles.content, homeFloatingSearch && styles.homeContent,
         !navVisible && { paddingBottom: base + bottomInset }]}
         onLayout={(event) => { if (currentMeasureKey.current === measureKey) setContentMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
       {flow.field && pickingMap ? <>
