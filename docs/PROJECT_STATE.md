@@ -1,12 +1,60 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-06 en `codex/passenger-motion-1-2-p0`, creada desde
-`codex/passenger-addresses-in-panel-final-p0` @ `8c07632`. Sin merge a main.
+Actualizado 2026-10-06 en `codex/passenger-pricing-commercial-p0`, creada desde
+`codex/passenger-motion-1-2-p0` @ `bccd7fe`. Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Pricing comercial Atlacomulco y efectivo live — 2026-10-06
+
+- El archivo operativo real `.runtime/pricing/atlacomulco-p0.json` queda
+  ignorado por Git y se carga sólo mediante `VIMA_PRICING_CONFIG_PATH` en el
+  gateway. Contiene la versión `atlacomulco-p0-20261006-v1`, perfiles URBANO y
+  REGIONAL, MXN, TTL 300 s y redondeo final half-up a $1. No se versionaron
+  tarifas comerciales, polígonos ni credenciales. La configuración inválida
+  sigue fallando cerrada.
+- La única región configurada proviene de [INEGI Marco Geoestadístico 2025,
+  `Municipios_2025/00mun`](https://lcidsig.inegi.org.mx/server/rest/services/Hosted/Municipios_2025/FeatureServer/0),
+  `cvegeo=15014`, `nomgeo=Atlacomulco`, con salida confirmada EPSG:4326. El servicio
+  devolvió un Polygon de un solo anillo cerrado y 1304 vértices, sin
+  simplificación; `validatePricingConfig` aceptó su geometría. Plaza Atlacomulco
+  y CU UAEM Atlacomulco quedan dentro; un destino fuera de esa única región
+  conserva `pricing_unavailable`. REGIONAL live espera polígonos municipales
+  vecinos aprobados, sin regiones ficticias.
+- El Passenger live gateway declara `paymentReady=true` y presenta `Efectivo`
+  en la quote. `tripRequestAvailable=false` mantiene `canRequest=false` aun
+  con una quote priced. El importe visible continúa derivándose del precio
+  autoritativo de `/v1/passenger/quotes`; no se añadió request/matching.
+  Startup sólo registra `pricingStatus` y, si está ready, `pricingVersion`, sin
+  exponer config, polígono ni credencial. Se observó startup `pricingStatus=ready`
+  con la versión aprobada.
+- **PRIMER QUOTE LIVE: PASS.** Con la clave de servidor suministrada fuera de
+  Git, se ejecutó el cliente Passenger contra el gateway local, TomTom Routing
+  real y PricingEngine para Plaza Atlacomulco → CU UAEM Atlacomulco. Resultado:
+  `status=priced`, `profile=URBANO`, versión aprobada, ruta real de 196 puntos,
+  8562 m, 989 s efectivos con tráfico, MXN, `totalMinor=11300`, extras vacíos y
+  sin override. La fórmula independiente sobre esas métricas dio 11322.1 minor
+  antes de redondear y 11300 minor después de half-up a 100. `paymentReady=true`,
+  `paymentMethod=Efectivo`, `tripRequestAvailable=false`, `canRequest=false`.
+  El script de comprobación en `.runtime/pricing/verify-live.mjs` y las claves
+  suministradas permanecen fuera del commit.
+- **ANDROID LIVE QUOTE: PENDIENTE.** No se recorrió el flujo en un dispositivo
+  físico. Para repetirlo: configurar `TOMTOM_API_KEY` sólo en el gateway y
+  `VIMA_PRICING_CONFIG_PATH=.runtime/pricing/atlacomulco-p0.json`, arrancar
+  `npm run geo:gateway` y apuntar `EXPO_PUBLIC_VIMA_API_BASE_URL` desde el
+  Development Build al gateway accesible en la red local. Verificar importe,
+  Efectivo, ruta/distancia/duración y CTA deshabilitado por request no disponible.
+- Comisión beta 10% y propina fuera de comisión están aprobadas como política,
+  pero settlement/payout y su interacción con futuras casetas/extras NO ESTÁN
+  IMPLEMENTADOS. No afectan el PricingEngine ni el precio Passenger actual.
+- TypeScript, lint, suite completa (168/168), gateway/pricing (29/29), worklets,
+  splash, schema MapLibre, export Hermes Android/iOS y checks de aislamiento de
+  fixtures/release/paths/credenciales pasaron. Expo Doctor quedó en 20/21 sólo
+  por los cinco patches SDK 57 conocidos; no se actualizaron dependencias ni
+  se hizo EAS Build.
 
 ### Motion 1.2 Passenger — 2026-10-06
 

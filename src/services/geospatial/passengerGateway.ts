@@ -7,7 +7,7 @@ import { createPlaceMediaResolver } from './placeMedia.ts';
 
 const toPlace = (place: SavedPlace) => ({ ...place, id: place.canonicalId });
 
-/** Live quote authority stays in Vima gateway. Payment and ride requests remain unavailable. */
+/** Live quote authority stays in Vima gateway. Cash is ready; ride requests remain unavailable. */
 export function createPassengerLiveGateway(client: GeospatialClient, locate: PassengerGateway['locate'],
   personal?: PersonalPlacesRepository, installationId?: () => Promise<string>, mediaBaseUrl?: string): PassengerGateway {
   const search = createPlaceSearch(client, geospatialClientConfig.debounceMs);
@@ -15,7 +15,7 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
   return {
     scope: 'vima-geospatial-live', source: 'server', locate,
     resolvePlaceMedia: mediaBaseUrl ? createPlaceMediaResolver(mediaBaseUrl) : undefined,
-    paymentReady: false, tripRequestAvailable: false,
+    paymentReady: true, tripRequestAvailable: false,
     recentPlaces: async () => (await personal?.recents() ?? []).map(toPlace),
     favoritePlaces: async () => (await personal?.favorites() ?? []).map(toPlace),
     saveFavorite: personal ? place => personal.saveFavorite(place) : undefined,
@@ -48,7 +48,7 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
       const pricing = await client.quote({ ...draft, operationId }, signal);
       const snapshot = pricing.status === 'priced' ? pricing.quote : pricing.routePreview;
       const route = snapshot.route;
-      return { ...draft, id: snapshot.id, pricing, route: route.geometry,
+      return { ...draft, id: snapshot.id, pricing, route: route.geometry, paymentMethod: 'Efectivo',
         durationMinutes: Math.ceil((route.trafficDurationSeconds ?? route.durationSeconds) / 60),
         distanceKm: Math.round(route.distanceMeters / 100) / 10 };
     },

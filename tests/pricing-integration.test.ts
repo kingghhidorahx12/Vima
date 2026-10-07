@@ -24,8 +24,8 @@ test('HTTP quotes compose stops/routing/pricing once, return 409 on conflict and
     const [a, b] = await Promise.all([gateway.quote(draft, undefined, 'integration-operation-1'), gateway.quote(draft, undefined, 'integration-operation-1')]);
     assert.equal(a.id, b.id); assert.equal(requests.length, 1);
     assert.deepEqual(requests[0], { origin: draft.origin.coordinate, destination: draft.destination.coordinate, stops: [[0.4, 0.4]] });
-    assert.equal(a.pricing?.status, 'priced'); assert.equal(a.price, undefined); assert.equal(a.paymentMethod, undefined);
-    assert.deepEqual(quoteGates(a, gateway), { pricingReady: true, paymentReady: false, tripRequestAvailable: false });
+    assert.equal(a.pricing?.status, 'priced'); assert.equal(a.price, undefined); assert.equal(a.paymentMethod, 'Efectivo');
+    assert.deepEqual(quoteGates(a, gateway), { pricingReady: true, paymentReady: true, tripRequestAvailable: false });
     assert.equal(canRequest(a, 'online', false, gateway), false); await assert.rejects(gateway.request(a, 'request-1'));
     const conflict = await fetch(url + '/v1/passenger/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...draft, operationId: 'integration-operation-1', stops: [] }) });

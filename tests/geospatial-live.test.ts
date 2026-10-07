@@ -161,7 +161,9 @@ test('live Passenger gateway uses normalized route, no price/matching fabricatio
   const destination = { ...origin, id: 'destination', coordinate: [-98, 20] as const };
   const quote = await gateway.quote({ origin, destination, stops: [] }, undefined, 'synthetic-operation-1');
   assert.deepEqual(paths, ['/v1/passenger/quotes']); assert.equal(quote.durationMinutes, 3);
-  assert.equal(quote.price, undefined); assert.equal(canRequest(quote, 'online', false), false);
+  assert.equal(quote.price, undefined); assert.equal(quote.paymentMethod, 'Efectivo');
+  assert.equal(gateway.paymentReady, true); assert.equal(gateway.tripRequestAvailable, false);
+  assert.equal(canRequest(quote, 'online', false, gateway), false);
   assert.deepEqual(await gateway.recentPlaces(), []);
   await assert.rejects(gateway.request(quote, 'request'));
   fail = true; await assert.rejects(gateway.quote({ origin, destination, stops: [] }, undefined, 'synthetic-operation-1'), /network_recoverable/);

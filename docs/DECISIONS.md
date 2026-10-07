@@ -97,6 +97,23 @@ Splash Android crece de160 a183dp por medición alpha y círculo seguro, sin edi
 | Renovación visible | Sin polling/refetch por reconexión mientras válida; expiración renueva y exige revisión nuevamente. |
 | Gates separados | Pricing no habilita pago ni request/matching live inexistente. |
 
+## Activación comercial inicial Atlacomulco — decisiones aprobadas 2026-10-06
+
+- La configuración comercial P0 es externa y sólo del gateway, cargada por
+  `VIMA_PRICING_CONFIG_PATH`; el archivo operativo y sus tarifas no se versionan.
+  Contiene perfiles URBANO y REGIONAL en MXN, sin surge, overrides ni additions
+  iniciales. El redondeo final es a $1 MXN, half-up. Las casetas futuras sólo
+  podrán entrar como additions explícitas.
+- La primera región es Atlacomulco, `cvegeo=15014`, tomada de [INEGI Marco
+  Geoestadístico 2025, `Municipios_2025/00mun`](https://lcidsig.inegi.org.mx/server/rest/services/Hosted/Municipios_2025/FeatureServer/0).
+  REGIONAL live requiere municipios vecinos aprobados; un punto fuera de la
+  única región configurada conserva `pricing_unavailable`.
+- Efectivo es el primer método live y habilita únicamente el gate de pago.
+  El gate de request/matching sigue deshabilitado. La comisión Vima beta es
+  10% y la propina queda fuera de comisión; settlement/payout todavía no están
+  implementados y no modifican el precio del pasajero. El tratamiento de
+  futuras casetas/extras en esa comisión queda pendiente, sin regla inventada.
+
 ## Fit confirmado y media opcional P0 — decisiones aprobadas 2026-10-02
 
 | Decisión | Aplicación |

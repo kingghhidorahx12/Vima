@@ -36,6 +36,18 @@ test('rational sub-cent components are accumulated exactly and rounded only once
   assert.equal(calculate(7500, 0).totalMinor, 10);
 });
 
+test('external rounding increment of one peso applies half-up only to the final synthetic fare', () => {
+  const config = syntheticPricing();
+  config.rounding.incrementMinor = 100;
+  config.profiles.URBANO = { baseMinor: 0, minimumMinor: 0, distanceMinorPerKm: 1, durationMinorPerMinute: 0 };
+  const total = (distanceMeters: number) => priceTrip({ config, profile: 'URBANO',
+    routeMetrics: { distanceMeters, durationSeconds: 0 } }).price.totalMinor;
+  assert.equal(total(49_999), 0);
+  assert.equal(total(50_000), 100);
+  assert.equal(total(149_999), 100);
+  assert.equal(total(150_000), 200);
+});
+
 test('overflow, negative metrics, unsafe integers and invalid configuration fail closed', async () => {
   const config = syntheticPricing();
   for (const distanceMeters of [-1, 1.1, Infinity, Number.MAX_SAFE_INTEGER + 1])
