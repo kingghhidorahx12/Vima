@@ -52,6 +52,7 @@ export type Connection = 'online' | 'offline' | 'reconnecting';
 
 /** Internal UI adapter, not a declaration of backend endpoints or cancellation rules. */
 export interface PassengerGateway extends TripGateway, RealtimeTransport {
+  activeRequest?(signal?: AbortSignal): Promise<PassengerTrip | null>;
   readonly scope: string;
   readonly source: 'server' | 'fixture';
   readonly paymentReady?: boolean;

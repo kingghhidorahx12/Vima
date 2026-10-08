@@ -10,6 +10,7 @@ import { priceTrip } from '../gateway/pricing/engine.ts';
 import type { AuthoritativeRideQuote } from '../src/services/pricing/contracts.ts';
 import type { RouteResult } from '../src/services/geospatial/contracts.ts';
 import { syntheticDraft, syntheticPricing, syntheticRoute } from './support/pricing-fixture.ts';
+import type { MatchingServerEvent } from '../gateway/matching/trace.ts';
 
 class Clock implements MatchingClock {
   time = 1000; jobs = new Map<symbol, { at: number; callback: () => void }>();
@@ -38,17 +39,126 @@ function setup(count = 4, customEta?: MatchingOptions['eta']) {
     geometry: { type: 'LineString', coordinates: [[...origin], [...pickup]] } },
     bounds: { southwest: [Math.min(origin[0], pickup[0]), Math.min(origin[1], pickup[1])], northeast: [Math.max(origin[0], pickup[0]), Math.max(origin[1], pickup[1])] },
     distanceMeters: 1000, durationSeconds: Math.abs(origin[0]) * 1000, trafficDurationSeconds: Math.abs(origin[0]) * 1000 }));
-  const options = { auth, directory, clock, eta, quote: (id: string, owner: string) => {
+  const traces: MatchingServerEvent[] = [];
+  const options = { auth, directory, clock, eta, trace: (event: MatchingServerEvent) => traces.push(event), quote: (id: string, owner: string) => {
     const entry = quotes.get(id); return entry?.owner === owner ? entry.quote : undefined;
   } };
   let coordinator = new MatchingCoordinator(options);
-  return { clock, auth, tokens, directory, quotes, addQuote, get c() { return coordinator; },
+  return { clock, auth, tokens, directory, quotes, addQuote, traces, get c() { return coordinator; },
     ready: () => coordinator.start(),
     async available(n: number) { await coordinator.availability(driver(n), 'AVAILABLE', `available-${n}`);
       await coordinator.location(driver(n), [-n / 10, 0.1], undefined, `location-${n}`); },
     async restart() { coordinator.close(); coordinator = new MatchingCoordinator(options); await coordinator.start(); },
-    close() { coordinator.close(); rmSync(directory, { recursive: true, force: true }); } };
+    close() { coordinator.close(); rmSync(directory, { recursive: true, force: true });
+      for (const event of traces) if (event.event === 'availability_transition' && event.to === 'OFFLINE') assert.equal(event.reason, 'explicit_offline'); } };
 }
+
+test('one active request per owner preserves idempotency, serializes cancel/create and releases on deadline', async () => {
+  const f = setup(0); try {
+    await f.ready(); assert.equal(await f.c.activeRequest(p), null);
+    const a = await f.c.create(p, 'quote', 'a'); f.addQuote('q2');
+    assert.equal((await f.c.create(p, 'quote', 'a')).id, a.id);
+    await assert.rejects(f.c.create(p, 'q2', 'a'), /idempotency_conflict/);
+    const bytes = readFileSync(join(f.directory, 'matching-v1.json'), 'utf8');
+    await assert.rejects(f.c.create(p, 'q2', 'b'), /active_request_exists/);
+    assert.equal(readFileSync(join(f.directory, 'matching-v1.json'), 'utf8'), bytes);
+    f.addQuote('other', other.accountId); const otherTrip = await f.c.create(other, 'other', 'other');
+    assert.equal((await f.c.activeRequest(other))?.id, otherTrip.id);
+    await f.restart(); assert.equal((await f.c.activeRequest(p))?.id, a.id);
+    const firstRace = await Promise.allSettled([f.c.create(p, 'q2', 'b'), f.c.cancel(p, a.id, 'cancel-a', 'user')]);
+    assert.equal(firstRace[0]!.status, 'rejected'); assert.equal(firstRace[1]!.status, 'fulfilled');
+    assert.equal(await f.c.activeRequest(p), null);
+    const b = await f.c.create(p, 'q2', 'b'); assert.notEqual(b.id, a.id);
+    f.addQuote('q3');
+    const secondRace = await Promise.all([f.c.cancel(p, b.id, 'cancel-b', 'user'), f.c.create(p, 'q3', 'c')]);
+    assert.equal((await f.c.activeRequest(p))?.id, secondRace[1].id);
+    f.clock.advance(900_000); await flush(); assert.equal(await f.c.activeRequest(p), null);
+    const snapshot = JSON.parse(readFileSync(join(f.directory, 'matching-v1.json'), 'utf8'));
+    assert.equal(snapshot.version, 3); assert.deepEqual(snapshot.activeRequestByOwner, {});
+    assert.equal(Object.keys(snapshot.requestIds).length, 4);
+  } finally { f.close(); }
+});
+
+test('ASSIGNED remains active, driver cancellation preserves identity, and offer/availability traces identify committed state', async () => {
+  const f = setup(1); try {
+    await f.ready(); await f.available(1);
+    const r = await f.c.create(p, 'quote', 'assigned-active'); await flush();
+    const d = await f.c.driver(driver(1)); const o = d.offer!;
+    const committed = f.traces.find(e => e.event === 'offer_commit');
+    assert.ok(committed && committed.event === 'offer_commit');
+    assert.equal(committed.offerId, o.id); assert.equal(committed.driverRevision, d.revision);
+    assert.equal(committed.requestRevision, (await f.c.fetch(p, r.id)).revision);
+    assert.ok(f.traces.some(e => e.event === 'driver_state_offer' && e.offerId === o.id));
+    await f.c.offerAction(driver(1), o.id, 'accept', 'accept'); f.addQuote('second');
+    await assert.rejects(f.c.create(p, 'second', 'second'), /active_request_exists/);
+    await f.restart(); assert.equal((await f.c.activeRequest(p))?.phase, 'assigned');
+    await f.c.cancelAssignment(driver(1), r.id, 'cancel-assignment');
+    assert.equal((await f.c.activeRequest(p))?.id, r.id);
+    f.clock.advance(60_000); await flush();
+    assert.ok(f.traces.some(e => e.event === 'availability_transition' && e.from === 'AVAILABLE' && e.to === 'LOCATING' && e.reason === 'location_ttl'));
+    await f.c.availability(driver(1), 'OFFLINE', 'availability_offline-test');
+    assert.ok(f.traces.some(e => e.event === 'availability_transition' && e.to === 'OFFLINE' && e.reason === 'explicit_offline'));
+    const reasons = f.traces.filter(e => e.event === 'availability_transition').map(e => e.reason);
+    for (const reason of ['explicit_available', 'location_fix', 'offer_accept', 'assignment_cancel', 'location_ttl', 'explicit_offline']) assert.ok(reasons.includes(reason as typeof reasons[number]));
+    assert.doesNotMatch(JSON.stringify(f.traces), /coordinate|heading|token|Authorization|Synthetic|plate|pickup|route/i);
+  } finally { f.close(); }
+});
+
+test('v2 migration indexes a single active request without discarding historical records', async () => {
+  const f = setup(0); try {
+    await f.ready(); const r = await f.c.create(p, 'quote', 'single'); f.c.close();
+    const path = join(f.directory, 'matching-v1.json'); const legacy = JSON.parse(readFileSync(path, 'utf8'));
+    legacy.version = 2; delete legacy.activeRequestByOwner; writeFileSync(path, JSON.stringify(legacy));
+    await f.restart(); const next = JSON.parse(readFileSync(path, 'utf8'));
+    assert.deepEqual(next.activeRequestByOwner, { p: r.id }); assert.equal(next.version, 3);
+    for (const key of ['requests', 'offers', 'drivers', 'actions', 'requestIds']) assert.deepEqual(next[key], legacy[key]);
+  } finally { f.close(); }
+});
+
+for (const mode of ['oldest', 'tie', 'assigned', 'two-assigned'] as const) test(`v2 duplicate migration: ${mode}`, async () => {
+  const f = setup(2); try {
+    await f.ready(); await f.available(1); const a = await f.c.create(p, 'quote', 'legacy-a'); await flush();
+    if (mode === 'assigned' || mode === 'two-assigned') {
+      const offer = (await f.c.driver(driver(1))).offer!; await f.c.offerAction(driver(1), offer.id, 'accept', 'accept-a');
+    }
+    f.clock.advance(1); await f.available(2); f.addQuote('q-other', other.accountId);
+    const b = await f.c.create(other, 'q-other', 'legacy-b'); await flush();
+    if (mode === 'two-assigned') {
+      const offer = (await f.c.driver(driver(2))).offer!; await f.c.offerAction(driver(2), offer.id, 'accept', 'accept-b');
+    }
+    f.c.close(); const path = join(f.directory, 'matching-v1.json'); const legacy = JSON.parse(readFileSync(path, 'utf8'));
+    legacy.version = 2; delete legacy.activeRequestByOwner;
+    legacy.requests[b.id].owner = p.accountId; delete legacy.requestIds['other:legacy-b']; legacy.requestIds['p:legacy-b'] = b.id;
+    if (mode === 'tie') {
+      legacy.requests[b.id].createdAt = legacy.requests[a.id].createdAt;
+      legacy.requests[b.id].deadline = legacy.requests[a.id].deadline;
+    }
+    writeFileSync(path, JSON.stringify(legacy));
+    if (mode === 'two-assigned') { await assert.rejects(f.restart(), /invalid_matching_snapshot/); return; }
+    await f.restart(); const next = JSON.parse(readFileSync(path, 'utf8'));
+    const keep = mode === 'tie' ? [a.id, b.id].sort()[0]! : a.id;
+    const discarded = keep === a.id ? b.id : a.id;
+    assert.equal(next.activeRequestByOwner.p, keep); assert.equal(next.requests[discarded].state, 'CANCELLED');
+    assert.equal(next.requests[discarded].revision, legacy.requests[discarded].revision + 1);
+    assert.equal(Object.values(next.offers).some(o => (o as { requestId: string; state: string }).requestId === discarded && (o as { state: string }).state === 'ACTIVE'), false);
+    assert.deepEqual(next.requestIds, legacy.requestIds); assert.deepEqual(next.actions, legacy.actions);
+    assert.deepEqual(next.requests[keep].assignment, legacy.requests[keep].assignment);
+  } finally { f.close(); }
+});
+
+test('v3 active index rejects missing, foreign, terminal and unindexed active identities', async () => {
+  for (const mode of ['missing', 'foreign', 'terminal', 'unindexed']) {
+    const f = setup(0); try {
+      await f.ready(); const r = await f.c.create(p, 'quote', 'active'); f.c.close();
+      const path = join(f.directory, 'matching-v1.json'); const snapshot = JSON.parse(readFileSync(path, 'utf8'));
+      if (mode === 'missing') snapshot.activeRequestByOwner.p = 'missing';
+      if (mode === 'foreign') snapshot.activeRequestByOwner.other = r.id;
+      if (mode === 'terminal') snapshot.requests[r.id].state = 'CANCELLED';
+      if (mode === 'unindexed') delete snapshot.activeRequestByOwner.p;
+      writeFileSync(path, JSON.stringify(snapshot)); await assert.rejects(f.restart(), /invalid_matching_snapshot/);
+    } finally { f.close(); }
+  }
+});
 
 test('request idempotency, ownership, frozen quote and corruption fail closed across restart', async () => {
   const f = setup(); try {
@@ -56,9 +166,9 @@ test('request idempotency, ownership, frozen quote and corruption fail closed ac
     assert.equal((await f.c.create(p, 'quote', 'create-1')).id, a.id);
     f.addQuote('different'); await assert.rejects(f.c.create(p, 'different', 'create-1'), /idempotency_conflict/);
     await assert.rejects(f.c.create(other, 'quote', 'foreign'), /quote_unavailable/);
-    await assert.rejects(f.c.create(p, 'missing', 'missing'), /quote_unavailable/);
+    await assert.rejects(f.c.create(p, 'missing', 'missing'), /active_request_exists/);
     const expired = f.addQuote('expired'); expired.expiresAt = f.clock.now();
-    await assert.rejects(f.c.create(p, 'expired', 'expired'), /quote_unavailable/);
+    await assert.rejects(f.c.create(p, 'expired', 'expired'), /active_request_exists/);
     f.clock.advance(300_001); await flush();
     assert.equal((await f.c.fetch(p, a.id)).quote.pricing?.status, 'priced');
     const revision = (await f.c.fetch(p, a.id)).revision;
@@ -128,12 +238,14 @@ test('availability and persisted fresh location wake waiting requests; stale loc
     assert.equal((await f.c.driver(driver(1))).offer?.requestId, r.id);
     await f.restart(); const offer = (await f.c.driver(driver(1))).offer!;
     assert.ok(offer); f.clock.advance(20_000); await flush();
-    f.addQuote('next'); await f.c.create(p, 'next', 'next'); await flush();
+    await f.c.cancel(p, r.id, 'cancel-before-next', 'user');
+    f.addQuote('next'); const next = await f.c.create(p, 'next', 'next'); await flush();
     assert.ok((await f.c.driver(driver(1))).offer);
     f.clock.advance(40_000); await flush();
     assert.equal((await f.c.driver(driver(1))).availability, 'LOCATING');
     assert.equal((await f.c.driver(driver(1))).offer, undefined);
     await f.c.location(driver(1), [-0.1, 0.1], undefined, 'loc-new'); await flush();
+    await f.c.cancel(p, next.id, 'cancel-before-refresh', 'user');
     f.addQuote('after-refresh'); await f.c.create(p, 'after-refresh', 'after-refresh'); await flush();
     assert.ok((await f.c.driver(driver(1))).offer);
   } finally { f.close(); }
@@ -178,7 +290,7 @@ test('restart preserves fresh location, expires stale AVAILABLE, and assignment 
     await fresh.ready(); await fresh.available(1); const stored = await fresh.c.driver(driver(1)); await fresh.restart();
     const recovered = await fresh.c.driver(driver(1)); assert.equal(recovered.availability, 'AVAILABLE'); assert.deepEqual(recovered.location, stored.location);
     const persisted = JSON.parse(readFileSync(join(fresh.directory, 'matching-v1.json'), 'utf8'));
-    assert.equal(persisted.version, 2); assert.deepEqual(persisted.drivers.d1.location.coordinate, stored.location?.coordinate);
+    assert.equal(persisted.version, 3); assert.deepEqual(persisted.drivers.d1.location.coordinate, stored.location?.coordinate);
     fresh.clock.advance(60_000); await fresh.restart(); assert.equal((await fresh.c.driver(driver(1))).availability, 'LOCATING');
   } finally { fresh.close(); }
   const assigned = setup(1); try {
@@ -194,17 +306,18 @@ test('snapshot v1 migrates AVAILABLE without location to LOCATING and preserves 
     await f.ready(); const request = await f.c.create(p, 'quote', 'migrate-request');
     await f.c.availability(driver(1), 'AVAILABLE', 'legacy-available'); f.c.close();
     const path = join(f.directory, 'matching-v1.json'); const legacy = JSON.parse(readFileSync(path, 'utf8'));
-    legacy.version = 1; legacy.drivers.d1.availability = 'AVAILABLE';
+    legacy.version = 1; delete legacy.activeRequestByOwner; legacy.drivers.d1.availability = 'AVAILABLE';
     for (const action of Object.values(legacy.actions) as { result: { kind: string; driver?: { availability: string }; location?: unknown } }[]) {
       if (action.result.kind === 'driver' && action.result.driver) action.result.driver.availability = 'AVAILABLE';
     }
     writeFileSync(path, JSON.stringify(legacy)); await f.restart();
     assert.equal((await f.c.driver(driver(1))).availability, 'LOCATING');
     assert.equal((await f.c.create(p, 'quote', 'migrate-request')).id, request.id);
+    assert.ok(f.traces.some(e => e.event === 'availability_transition' && e.from === 'AVAILABLE' && e.to === 'LOCATING' && e.reason === 'snapshot_migration'));
   } finally { f.close(); }
   const corrupt = setup(1); try {
     await corrupt.ready(); corrupt.c.close(); const path = join(corrupt.directory, 'matching-v1.json');
-    const legacy = JSON.parse(readFileSync(path, 'utf8')); legacy.version = 1;
+    const legacy = JSON.parse(readFileSync(path, 'utf8')); legacy.version = 1; delete legacy.activeRequestByOwner;
     legacy.drivers.d1.availability = 'AVAILABLE'; legacy.drivers.d1.expiryCount = 3;
     writeFileSync(path, JSON.stringify(legacy)); await assert.rejects(corrupt.restart(), /invalid_matching_snapshot/);
   } finally { corrupt.close(); }
@@ -226,13 +339,16 @@ test('logical 20 second expiry, third expiry pauses durably, explicit resume alo
   const f = setup(1); try {
     await f.ready(); await f.available(1);
     for (let i = 0; i < 3; i++) {
-      f.addQuote(`q${i}`); await f.c.create(p, `q${i}`, `r${i}`); await flush();
+      f.addQuote(`q${i}`); const request = await f.c.create(p, `q${i}`, `r${i}`); await flush();
       const offer = (await f.c.driver(driver(1))).offer!; assert.ok(offer);
       assert.equal(offer.expiresAt - f.clock.now(), 20_000);
       f.clock.advance(19_999); assert.ok((await f.c.driver(driver(1))).offer);
       f.clock.advance(1); await flush(); assert.equal((await f.c.driver(driver(1))).offer, undefined);
+      await f.c.cancel(p, request.id, `cancel-${i}`, 'user');
     }
-    assert.equal((await f.c.driver(driver(1))).availability, 'PAUSED'); await f.restart();
+    assert.equal((await f.c.driver(driver(1))).availability, 'PAUSED');
+    assert.ok(f.traces.some(e => e.event === 'availability_transition' && e.to === 'PAUSED' && e.reason === 'offer_expiry_pause'));
+    await f.restart();
     f.clock.advance(60_000); assert.equal((await f.c.driver(driver(1))).expiryCount, 3);
     assert.equal((await f.c.driver(driver(1))).availability, 'PAUSED');
     const resumed = await f.c.availability(driver(1), 'AVAILABLE', 'resume'); assert.equal(resumed.expiryCount, 0);
@@ -295,7 +411,7 @@ test('slow ETA never holds commit lock; changed location invalidates stale resul
     await f.ready(); await f.available(1); const r = await f.c.create(p, 'quote', 'slow'); await flush();
     const changed = await f.c.location(driver(1), [-0.2, 0.1], 90, 'changed-location'); assert.ok(changed.revision > 0);
     // An unrelated commit and a request cancellation complete while ETA is unresolved.
-    f.addQuote('other'); const second = await f.c.create(p, 'other', 'other');
+    f.addQuote('other', other.accountId); const second = await f.c.create(other, 'other', 'other');
     assert.equal((await f.c.cancel(p, r.id, 'cancel-slow', 'user')).phase, 'cancelled');
     release(syntheticRoute); await flush();
     const offer = (await f.c.driver(driver(1))).offer;
@@ -309,8 +425,8 @@ test('another request can match while a first ETA is pending; stale location ETA
   const f = setup(1, async (_origin, pickup) => pickup[0] === 0.2 ? gate : syntheticRoute);
   try {
     await f.ready(); await f.available(1); const first = await f.c.create(p, 'quote', 'slow-first'); await flush();
-    const q = f.addQuote('fast-quote'); q.origin = { ...q.origin, coordinate: [0.3, 0.3] };
-    const second = await f.c.create(p, 'fast-quote', 'fast-second'); await flush();
+    const q = f.addQuote('fast-quote', other.accountId); q.origin = { ...q.origin, coordinate: [0.3, 0.3] };
+    const second = await f.c.create(other, 'fast-quote', 'fast-second'); await flush();
     assert.equal((await f.c.driver(driver(1))).offer?.requestId, second.id);
     release(syntheticRoute); await flush();
     assert.equal((await f.c.driver(driver(1))).offer?.requestId, second.id);
@@ -329,7 +445,7 @@ test('location change during ETA re-plans from new sample; cancellation excludes
     const accepted = await f.c.offerAction(driver(1), offer.id, 'accept', 'accept');
     assert.deepEqual(accepted.assignment?.value.sample.coordinate, [-0.4, 0.1]);
     await f.c.cancelAssignment(driver(1), first.id, 'cancel-driver');
-    f.addQuote('another'); const second = await f.c.create(p, 'another', 'another'); await flush();
+    f.addQuote('another', other.accountId); const second = await f.c.create(other, 'another', 'another'); await flush();
     assert.equal((await f.c.driver(driver(1))).offer?.requestId, second.id);
     assert.equal((await f.c.fetch(p, first.id)).phase, 'reassigning');
   } finally { f.close(); }
@@ -337,8 +453,8 @@ test('location change during ETA re-plans from new sample; cancellation excludes
 
 test('concurrent requests share no ACTIVE Driver and restart processes expired offers before serving', async () => {
   const f = setup(2); try {
-    await f.ready(); await f.available(1); await f.available(2); f.addQuote('q2');
-    await Promise.all([f.c.create(p, 'quote', 'r1'), f.c.create(p, 'q2', 'r2')]); await flush();
+    await f.ready(); await f.available(1); await f.available(2); f.addQuote('q2', other.accountId);
+    await Promise.all([f.c.create(p, 'quote', 'r1'), f.c.create(other, 'q2', 'r2')]); await flush();
     const offers = [(await f.c.driver(driver(1))).offer, (await f.c.driver(driver(2))).offer].filter(Boolean);
     assert.equal(offers.length, 2); assert.equal(new Set(offers.map(o => o!.id)).size, 2);
     f.c.close(); f.clock.time += 20_000; await f.restart();

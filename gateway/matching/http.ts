@@ -19,6 +19,10 @@ export async function matchingHttp(request: IncomingMessage, path: string, auth:
     if ([...url.searchParams.keys()].length !== 1 || !/^\d{1,16}$/.test(url.searchParams.get('afterRevision') ?? '')) throw new MatchingError(400, 'invalid_matching_input');
     return Number(url.searchParams.get('afterRevision'));
   };
+  if (method === 'GET' && url.pathname === '/v1/passenger/requests/active') {
+    if (url.search) throw new MatchingError(400, 'invalid_matching_input');
+    reply(200, await matching.activeRequest(principal)); return true;
+  }
   const trip = /^\/v1\/passenger\/requests\/([A-Za-z0-9-]+)(?:\/(commands|changes))?$/.exec(url.pathname);
   if (method === 'GET' && trip?.[2] === 'changes') { reply(200, await matching.wait(principal, trip[1]!, poll(), signal)); return true; }
   if (method === 'GET' && url.pathname === '/v1/driver/changes') { reply(200, await matching.wait(principal, undefined, poll(), signal)); return true; }

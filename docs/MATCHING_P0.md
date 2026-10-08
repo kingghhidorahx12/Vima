@@ -17,6 +17,7 @@ assignment. El gate técnico está exclusivamente en rutas DEV.
 | GET `/v1/matching/session` | — | accountId, role, matchingAvailable |
 | POST `/v1/passenger/quotes` | Contrato de quote vigente | Mismo pricing público; owner interno si autenticado |
 | POST `/v1/passenger/requests` | quoteId, requestId | PassengerTrip + requestState |
+| GET `/v1/passenger/requests/active` | Sin owner/accountId: principal autenticado | HTTP 200, PassengerTrip activo completo o null |
 | GET `/v1/passenger/requests/:id` | — | PassengerTrip autoritativo |
 | POST `/v1/passenger/requests/:id/commands` | TripCommand: tripId, commandId, name=`cancel`, payload.reason=`user/edit/schedule` | PassengerTrip confirmado |
 | GET `/v1/passenger/requests/:id/changes?afterRevision=N` | Revision conocida | Sólo revision, no snapshot |
@@ -42,6 +43,11 @@ owned y vigente; congela su snapshot y no vuelve a cotizar durante matching.
 ## Estado y concurrencia
 
 - Request: `SEARCHING → ASSIGNED | CANCELLED | NO_DRIVER_FOUND`.
+- Como máximo una SEARCHING o ASSIGNED por owner, mediante índice persistido
+  `activeRequestByOwner`. Create resuelve primero idempotencia; una intención
+  nueva con activa recibe 409 `active_request_exists` antes de consultar quote.
+  Request, requestIds e índice se escriben en el mismo commit. Cancel y deadline
+  liberan autoridad antes de otra creación; ASSIGNED/reasignación la conservan.
 - Passenger cancela sólo SEARCHING. Driver cancela su assignment y devuelve
   la misma request a SEARCHING (o NO_DRIVER_FOUND si ya venció el deadline),
   elimina assignment y queda excluido para siempre de esa request.
@@ -87,18 +93,27 @@ entre procesos, máquinas ni workers.
 
 Persiste requests/revisions/requestId index, quote congelada, timestamps,
 offered/excluded, ofertas, assignment, recibos idempotentes y disponibilidad/
-contador/revisions de Driver. Snapshot schema v2 guarda únicamente la última
+contador/revisions de Driver. Snapshot schema v3 guarda únicamente la última
 location dentro de `DriverRecord` (coordinate, heading opcional, receivedAt y
 revision); no hay Map paralelo ni historial de ubicación. `DriverState.location`
 se deriva de ese registro. Los perfiles se reconstruyen desde auth config; los
 bearer tokens nunca entran al snapshot.
 
 El archivo conserva el nombre compatible `matching-v1.json`, pero su campo
-`version` es 2. La migración v1 es determinista: un AVAILABLE legado sin location
+`version` es 3. La migración v1→v2 es determinista: un AVAILABLE legado sin location
 persistida pasa a LOCATING y sus ofertas ACTIVE se revocan sin borrar requests,
 assignments ni recibos idempotentes. Corrupción real continúa fallando cerrada.
 Una location v2 fresca sobrevive restart; startup/sweep convierte una vencida a
 LOCATING antes de ofertar.
+
+La migración v2→v3 construye `activeRequestByOwner` determinísticamente:
+una sola ASSIGNED tiene prioridad; sin ASSIGNED se conserva SEARCHING más
+antigua por createdAt/id. Las otras SEARCHING pasan a CANCELLED con revision
+nueva y sus ofertas ACTIVE se revocan, incrementando Driver revision. Se
+preservan todos los records, quotes, assignments, actions/recibos, requestIds,
+offered/excluded y Driver records. Dos ASSIGNED por owner fallan cerrados.
+El validador v3 exige correspondencia completa y única entre índice, owner y
+requests activas existentes. No repara silenciosamente un índice v3 inválido.
 
 El startup valida versión/schema/invariantes y procesa expiraciones con el
 reloj actual antes de servir matching. Archivo corrupto/ilegible falla cerrado.
@@ -116,6 +131,45 @@ renueva la cotización: Reintentar reconcilia ese intento antes de permitir
 abandonar/editar el draft. Un rechazo HTTP definitivo libera el intento. Driver
 también conserva actionId sólo mientras la respuesta sea ambigua, evitando
 quedar bloqueado al recibir un rechazo definitivo de una oferta ya vencida.
+
+Passenger server bloquea creación hasta resolver bootstrap `/active` online.
+El snapshot recuperado se siembra sólo en `tripKey(active.id)`, comparando
+revisions de ese mismo ID; tripId cambia explícitamente. Una activa distinta
+de la local no terminal produce violación de identidad. Null no borra una
+request local: su GET/realtime resuelve el estado. Reconnect sin tripId repite
+bootstrap; con request conocida sigue realtime. `active_request_exists` durante
+create consulta `/active` y adopta por la misma regla, sin nuevo ID ni éxito
+optimista; otros 4xx conservan su semántica. `reconcileTrip` sigue estricto.
+
+## Provenance y oferta visible
+
+`matchingTrace` del servidor permite capturar eventos estructurados; el default
+es JSON en consola. Los eventos se emiten después de persistir, antes de
+notificar invalidaciones. Un fallo del logger no modifica la autoridad.
+`request_active`/`request_terminal` identifican request, owner, state y revision;
+`offer_commit` añade offerId, driverId, requestRevision, driverRevision y expiresAt;
+`driver_state_offer` registra el GET con offerId, requestId, driverId, revision y
+expiresAt. Sin quote, coordenadas, ruta, bearer, perfiles ni placa.
+
+Todos los `poll_*` llevan pollId, stream (`driver`/`passenger_request`) y entity
+(`driver`/tripId), sin cambiar backoff ni coalescing. El render DEV de oferta
+emite `offer_render` con offerId/requestId/revision/expiresAt al cambiar esos
+campos, no con ticks. La cadena correlacionable es offer_commit → poll_invalidation
+→ driver_state_offer → offer_render. Countdown, pickup, ETA y ambos botones son
+una región prioritaria fuera de ScrollView; expiración deshabilita acciones.
+
+OperationIds Driver incluyen availability_available/availability_offline,
+location, offer_accept/offer_reject o assignment_cancel; pending conserva el ID
+en retry ambiguo. Cada transición real de disponibilidad registra driverId,
+from/to/reason/revision. Razones: explicit_available, explicit_offline,
+location_fix, location_ttl, offer_accept, offer_expiry_pause, assignment_cancel
+y snapshot_migration. El helper prohíbe OFFLINE sin explicit_offline y commit
+rechaza cambios sin provenance. No se persiste una segunda autoridad para logs.
+Background/unmount sólo controla transporte/location local: nunca OFFLINE.
+
+Implementación y pruebas automatizadas completadas; **Android físico pendiente**
+para identidad activa/cancel→crear, oferta ~20 s sin scroll/cadena de trazas y
+Driver estacionario AVAILABLE >60 s/OFFLINE exclusivamente explícito.
 
 ## Invalidaciones y reconexión
 

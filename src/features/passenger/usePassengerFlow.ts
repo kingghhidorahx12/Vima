@@ -4,6 +4,7 @@ import { connectTripRealtime } from '../../services/realtime';
 import { useCriticalTripCommand, tripKey, tripQueryOptions } from '../trip/queries';
 import { canRequest, isMatching, passengerPhase, passengerTrip, validDraft, validPlace, type OriginStatus, type PassengerGateway, type PassengerTrip, type Place, type RideQuote } from './model';
 import { requestPassengerRide } from './requests';
+import { seedActiveRequest } from './activeRequest';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 import { approvedLocalPlaces } from '../../services/geospatial/localPlaces';
 import { createSearchCoordinator } from '../../services/geospatial/searchCoordinator';
@@ -24,7 +25,27 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const [stops, setStops] = useState<readonly Place[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [tripId, setTripId] = useState<string>();
+  const [tripId, updateTripId] = useState<string>();
+  const currentTripId = useRef<string | undefined>(undefined);
+  const setTripId = (id: string | undefined) => { currentTripId.current = id; updateTripId(id); };
+  const needsBootstrap = gateway.source === 'server' && !!gateway.activeRequest;
+  const [activeReady, setActiveReady] = useState(!needsBootstrap);
+  const [activeError, setActiveError] = useState<Error>();
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const bootstrapComplete = useRef(false);
+  useEffect(() => {
+    if (!needsBootstrap || connection !== 'online' || bootstrapComplete.current && currentTripId.current) return;
+    const controller = new AbortController();
+    void gateway.activeRequest!(controller.signal).then(incoming => {
+      if (controller.signal.aborted) return;
+      const active = seedActiveRequest(client, currentTripId.current, incoming);
+      if (active) { currentTripId.current = active.id; updateTripId(active.id); setEditing(false); setConfirming(false); }
+      bootstrapComplete.current = true; setActiveReady(true); setActiveError(undefined);
+    }).catch(error => {
+      if (!controller.signal.aborted) { setActiveReady(false); setActiveError(error instanceof Error ? error : new Error('active_request_unavailable')); }
+    });
+    return () => controller.abort();
+  }, [client, gateway, needsBootstrap, connection, bootstrapAttempt]);
   const [field, setField] = useState<'origin' | 'destination' | null>(null);
   const [savedPicker, setSavedPicker] = useState<SavedSlot | 'favorite' | null>(null);
   const [search, setSearch] = useState('');
@@ -99,7 +120,15 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     if (connection === 'online' && tripId) void refetchTrip();
   }, [connection, tripId, refetchTrip]);
 
-  const request = useMutation({ mutationFn: (snapshot: RideQuote) => requestPassengerRide(client, gateway, snapshot, requestId.current!), retry: false });
+  const request = useMutation({ mutationFn: async (snapshot: RideQuote) => {
+    try { return await requestPassengerRide(client, gateway, snapshot, requestId.current!); }
+    catch (error) {
+      if (!(error instanceof ApiError) || error.code !== 'active_request_exists' || !gateway.activeRequest) throw error;
+      const active = seedActiveRequest(client, currentTripId.current, await gateway.activeRequest());
+      if (!active) throw error;
+      return active;
+    }
+  }, retry: false });
   // A lost create response must be reconciled with its original payload, even after quote refresh/expiry.
   const ambiguousRequest = gateway.source === 'server' && request.isError &&
     !(request.error instanceof ApiError && request.error.status >= 400 && request.error.status < 500);
@@ -209,7 +238,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
   };
   const submit = async () => {
-    if (locked.current || phase !== 'confirm' || (ambiguousRequest ? connection !== 'online' || pending : !canRequest(quote.data, connection, pending, gateway))) return;
+    if (!activeReady || locked.current || phase !== 'confirm' || (ambiguousRequest ? connection !== 'online' || pending : !canRequest(quote.data, connection, pending, gateway))) return;
     locked.current = true;
     requestId.current ??= operationId(); // Keep on ambiguous failure/retry.
     try {
@@ -217,7 +246,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       setTripId(confirmed.id); setEditing(false); setConfirming(false);
       requestId.current = null;
     } catch (error) {
-      if (error instanceof ApiError && error.status >= 400 && error.status < 500) requestId.current = null;
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.code !== 'active_request_exists') requestId.current = null;
       // Ambiguous failures retain the original quote and request ID for reconciliation.
     }
     finally { locked.current = false; }
@@ -284,7 +313,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'saved-slots'] });
     } catch { setSelectionError(new Error('No se pudo eliminar el lugar')); }
   };
-  const error = selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? favorites.error ?? savedSlots.error ?? places.error;
+  const error = activeError ?? selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? favorites.error ?? savedSlots.error ?? places.error;
   const visiblePlaces = search.trim() ? searchCoordinator.visible(search, favorites.data ?? [],
     [...(geography.data ?? []), ...(recents.data ?? [])],
     followUpResults?.query === search ? followUpResults.results : places.data,
@@ -302,7 +331,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     popular: discovery.data?.popular ?? [], featured: discovery.data?.featured ?? [],
     saveFavorite, removeFavorite, removeSavedSlot, confirmLocations,
     loadingPlaces: !!search.trim() && (places.isFetching || resolving), loadingQuote: quote.isFetching, error,
-    canSubmit: phase === 'confirm' && (ambiguousRequest ? connection === 'online' && !pending : canRequest(quote.data, connection, pending, gateway)), choosePlace, chooseMapCoordinate,
+    canSubmit: activeReady && phase === 'confirm' && (ambiguousRequest ? connection === 'online' && !pending : canRequest(quote.data, connection, pending, gateway)), choosePlace, chooseMapCoordinate,
     contributePlace, submitSearch, submit, act, edit, schedule,
     returnHome: () => {
       // Back never cancels or abandons an in-flight/active ride.
@@ -326,7 +355,8 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       setSavedPicker(target); setField('destination'); setSearch('');
     },
     closeField: () => { cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setField(null); setSavedPicker(null); },
-    retry: () => { if (ambiguousRequest) { void submit(); return; }
+    retry: () => { if (activeError) { setBootstrapAttempt(value => value + 1); return; }
+      if (ambiguousRequest) { void submit(); return; }
       if (quote.data) quoteOperation.current = undefined; cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
       if (tripId) void trip.refetch(); },
   };

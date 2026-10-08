@@ -17,6 +17,7 @@ import { emptyPlaceMediaCatalog, type PlaceMediaCatalog } from './placeMedia.ts'
 import { MatchingCoordinator, type MatchingClock } from './matching/coordinator.ts';
 import { MatchingError, type AuthConfig } from './matching/auth.ts';
 import { matchingHttp } from './matching/http.ts';
+import type { MatchingServerTrace } from './matching/trace.ts';
 
 export interface GatewayLog { requestId: string; endpoint: string; durationMs: number; upstreamStatus?: number; count: number; error?: GeospatialErrorCode }
 async function readBody(request: IncomingMessage, maximum: number): Promise<unknown> {
@@ -32,7 +33,7 @@ async function readBody(request: IncomingMessage, maximum: number): Promise<unkn
 }
 export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, options: {
   now?: () => number; logger?: (entry: GatewayLog) => void; localPlaces?: readonly VimaLocalPlace[]; configured?: boolean;
-  pricing?: PricingConfiguration; media?: PlaceMediaCatalog; auth?: AuthConfig; matchingClock?: MatchingClock;
+  pricing?: PricingConfiguration; media?: PlaceMediaCatalog; auth?: AuthConfig; matchingClock?: MatchingClock; matchingTrace?: MatchingServerTrace;
 } = {}) {
   const now = options.now ?? Date.now;
   const state = createGatewayState(config, now);
@@ -40,7 +41,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
   const popularity = createPopularityRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const quotes = createQuoteService(adapter, config, options.pricing ?? { status: 'pricing_not_configured' }, now);
   const matching = options.auth && options.configured && options.pricing?.status === 'ready' ? new MatchingCoordinator({
-    auth: options.auth, directory: config.runtimeDir ?? '.runtime', clock: options.matchingClock,
+    auth: options.auth, directory: config.runtimeDir ?? '.runtime', clock: options.matchingClock, trace: options.matchingTrace,
     quote: (id, owner) => { const value = quotes.store.lookupOwned(id, owner); return value?.status === 'priced' ? value.quote : undefined; },
     eta: (origin, destination) => adapter.route({ origin, destination, stops: [] }, { signal: AbortSignal.timeout(config.upstreamTimeoutMs) }),
   }) : undefined;

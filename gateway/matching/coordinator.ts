@@ -12,6 +12,7 @@ import type { Assignment } from '../../src/features/passenger/model.ts';
 import { matchingPolicy } from '../../src/features/passenger/matchingPolicy.ts';
 import type { DriverAvailability, DriverState, MatchingPassengerSnapshot, RequestState } from '../../src/services/matching/contracts.ts';
 import { isMatchingLocationFresh, matchingLocationPolicy } from '../../src/services/matching/policy.ts';
+import { matchingServerTrace, type MatchingServerTrace, type MatchingServerEvent, type AvailabilityReason } from './trace.ts';
 
 export interface MatchingClock { now(): number; schedule(delay: number, callback: () => void): () => void }
 export const systemMatchingClock: MatchingClock = { now: Date.now, schedule(delay, callback) {
@@ -35,13 +36,15 @@ interface OfferRecord {
 type Receipt = { kind: 'request'; request: RequestRecord } |
   { kind: 'driver'; driver: DriverRecord; offer?: OfferRecord; request?: RequestRecord };
 interface Snapshot {
-  version: 2; requests: Record<string, RequestRecord>; drivers: Record<string, DriverRecord>; offers: Record<string, OfferRecord>;
+  version: 3; requests: Record<string, RequestRecord>; drivers: Record<string, DriverRecord>; offers: Record<string, OfferRecord>;
+  activeRequestByOwner: Record<string, string>;
   requestIds: Record<string, string>; actions: Record<string, { fingerprint: string; result: Receipt }>;
 }
 export interface MatchingOptions {
   auth: AuthConfig; directory: string; clock?: MatchingClock;
   quote: (id: string, owner: string) => AuthoritativeRideQuote | undefined;
   eta: (origin: Coordinate, pickup: Coordinate) => Promise<RouteResult>;
+  trace?: MatchingServerTrace;
 }
 const invalid = () => { throw new MatchingError(400, 'invalid_matching_input'); };
 const identifier = (value: unknown): string => {
@@ -105,8 +108,9 @@ function validateSnapshot(raw: unknown, auth: AuthConfig): Snapshot {
   const integer = (n: number) => Number.isSafeInteger(n) && n >= 0;
   const object = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v);
   const fields = (v: object, allowed: string[]) => { if (Object.keys(v).some(key => !allowed.includes(key))) throw new Error(); };
-  if (!object(value) || value.version !== 2 || !['requests', 'drivers', 'offers', 'requestIds', 'actions'].every(k => object(value[k as keyof Snapshot]))) throw new Error();
-  fields(value, ['version', 'requests', 'drivers', 'offers', 'requestIds', 'actions']);
+  const legacy = (value as { version: number })?.version === 2;
+  if (!object(value) || (!legacy && value.version !== 3) || !['requests', 'drivers', 'offers', 'requestIds', 'actions'].every(k => object(value[k as keyof Snapshot]))) throw new Error();
+  fields(value, ['version', 'requests', 'drivers', 'offers', 'requestIds', 'actions', ...(!legacy ? ['activeRequestByOwner'] : [])]);
   const request = (r: RequestRecord) => {
     if (!object(r) || !identifier(r.id) || !identifier(r.requestId) || auth.principal(r.owner)?.role !== 'passenger' || !integer(r.revision) ||
       !['SEARCHING', 'ASSIGNED', 'CANCELLED', 'NO_DRIVER_FOUND'].includes(r.state) || !integer(r.createdAt) ||
@@ -174,6 +178,33 @@ function validateSnapshot(raw: unknown, auth: AuthConfig): Snapshot {
       driver(action.result.driver); if (action.result.offer) offer(action.result.offer); if (action.result.request) request(action.result.request);
     } else throw new Error();
   }
+  if (legacy) {
+    value.activeRequestByOwner = {};
+    const owners = new Set(Object.values(value.requests).map(r => r.owner));
+    for (const owner of owners) {
+      const active = Object.values(value.requests).filter(r => r.owner === owner && ['SEARCHING', 'ASSIGNED'].includes(r.state));
+      const assigned = active.filter(r => r.state === 'ASSIGNED');
+      if (assigned.length > 1) throw new Error();
+      const keep = assigned[0] ?? active.sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+      if (!keep) continue;
+      value.activeRequestByOwner[owner] = keep.id;
+      for (const r of active) if (r !== keep) {
+        r.state = 'CANCELLED'; r.revision++;
+        for (const o of Object.values(value.offers)) if (o.requestId === r.id && o.state === 'ACTIVE') {
+          o.state = 'REVOKED'; value.drivers[o.driverId]!.revision++;
+        }
+      }
+    }
+    value.version = 3;
+    return validateSnapshot(value, auth);
+  }
+  if (!object(value.activeRequestByOwner)) throw new Error();
+  for (const [owner, id] of Object.entries(value.activeRequestByOwner)) {
+    if (typeof id !== 'string') throw new Error();
+    const r = value.requests[id];
+    if (!r || r.owner !== owner || !['SEARCHING', 'ASSIGNED'].includes(r.state)) throw new Error();
+  }
+  for (const r of Object.values(value.requests)) if (['SEARCHING', 'ASSIGNED'].includes(r.state) && value.activeRequestByOwner[r.owner] !== r.id) throw new Error();
   return value;
 }
 
@@ -190,17 +221,37 @@ export class MatchingCoordinator {
   private closed = false;
   private failed = false;
   private options: MatchingOptions;
+  private transitions = new WeakMap<Snapshot, MatchingServerEvent[]>();
+  private trace(event: MatchingServerEvent) { try { (this.options.trace ?? matchingServerTrace)(event); } catch { /* Logging cannot change commit authority. */ } }
+  private availabilityTransition(s: Snapshot, d: DriverRecord, to: DriverAvailability, reason: AvailabilityReason) {
+    if (to === 'OFFLINE' && reason !== 'explicit_offline') throw new Error('invalid_offline_transition');
+    if (d.availability === to) return;
+    const events = this.transitions.get(s) ?? [];
+    events.push({ event: 'availability_transition', driverId: d.id, from: d.availability, to, reason, revision: d.revision });
+    this.transitions.set(s, events); d.availability = to;
+  }
   constructor(options: MatchingOptions) {
     this.options = options;
     this.clock = options.clock ?? systemMatchingClock;
     mkdirSync(options.directory, { recursive: true }); this.file = join(options.directory, 'matching-v1.json');
-    try { this.state = validateSnapshot(JSON.parse(readFileSync(this.file, 'utf8')), options.auth); }
+    let previous: Snapshot | undefined;
+    try { previous = JSON.parse(readFileSync(this.file, 'utf8')) as Snapshot; this.state = validateSnapshot(structuredClone(previous), options.auth); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('invalid_matching_snapshot');
-      this.state = { version: 2, requests: {}, drivers: {}, offers: {}, requestIds: {}, actions: {} };
+      this.state = { version: 3, requests: {}, drivers: {}, offers: {}, requestIds: {}, actions: {}, activeRequestByOwner: {} };
     }
     for (const id of options.auth.drivers) this.state.drivers[id] ??= { id, availability: 'OFFLINE', revision: 0, expiryCount: 0, locationRevision: 0 };
     this.persist(this.state);
+    if (previous) {
+      for (const d of Object.values(this.state.drivers)) {
+        const before = previous.drivers[d.id];
+        if (before && before.availability !== d.availability) this.trace({ event: 'availability_transition',
+          driverId: d.id, from: before.availability, to: d.availability, reason: 'snapshot_migration', revision: d.revision });
+      }
+      for (const r of Object.values(this.state.requests)) if (previous.requests[r.id]?.state !== r.state) {
+        this.trace({ event: 'request_terminal', requestId: r.id, owner: r.owner, state: r.state, revision: r.revision });
+      }
+    }
   }
   async start() { await this.lock(() => { this.sweep(); }); this.kick(); }
   close() { this.closed = true; this.cancelTimer?.(); for (const listener of [...this.listeners]) listener(); }
@@ -218,7 +269,22 @@ export class MatchingCoordinator {
   }
   private commit(next: Snapshot) {
     if (JSON.stringify(next) === JSON.stringify(this.state)) return;
+    for (const d of Object.values(next.drivers)) if (this.state.drivers[d.id]?.availability !== d.availability &&
+      !(this.transitions.get(next) ?? []).some(event => event.event === 'availability_transition' && event.driverId === d.id && event.to === d.availability)) {
+      throw new Error('missing_availability_provenance');
+    }
+    const previous = this.state;
     this.persist(next); this.state = next;
+    for (const event of this.transitions.get(next) ?? []) this.trace(event);
+    for (const r of Object.values(next.requests)) if (previous.requests[r.id]?.state !== r.state) {
+      this.trace({ event: ['SEARCHING', 'ASSIGNED'].includes(r.state) ? 'request_active' : 'request_terminal',
+        requestId: r.id, owner: r.owner, state: r.state, revision: r.revision });
+    }
+    for (const o of Object.values(next.offers)) if (o.state === 'ACTIVE' && !previous.offers[o.id]) {
+      const r = next.requests[o.requestId]!;
+      this.trace({ event: 'offer_commit', offerId: o.id, requestId: r.id, owner: r.owner, driverId: o.driverId,
+        requestRevision: r.revision, driverRevision: next.drivers[o.driverId]!.revision, expiresAt: o.expiresAt });
+    }
     for (const listener of [...this.listeners]) listener();
   }
   private requireRole(p: Principal, role: Principal['role']) { if (p.role !== role || this.options.auth.principal(p.accountId)?.role !== role) throw new MatchingError(403, 'forbidden'); }
@@ -237,15 +303,15 @@ export class MatchingCoordinator {
   private sweep() {
     const next = structuredClone(this.state); const now = this.clock.now();
     for (const r of Object.values(next.requests)) if (r.state === 'SEARCHING' && now >= r.deadline) {
-      r.state = 'NO_DRIVER_FOUND'; r.revision++; this.revoke(next, r);
+      r.state = 'NO_DRIVER_FOUND'; r.revision++; delete next.activeRequestByOwner[r.owner]; this.revoke(next, r);
     }
     for (const o of Object.values(next.offers)) if (o.state === 'ACTIVE' && now >= o.expiresAt) {
       o.state = 'EXPIRED'; const d = next.drivers[o.driverId]!; d.expiryCount++; d.revision++;
-      if (d.expiryCount >= 3) d.availability = 'PAUSED';
+      if (d.expiryCount >= 3) this.availabilityTransition(next, d, 'PAUSED', 'offer_expiry_pause');
       next.requests[o.requestId]!.revision++;
     }
     for (const d of Object.values(next.drivers)) if (d.availability === 'AVAILABLE' && !this.fresh(d.location, now)) {
-      d.availability = 'LOCATING'; d.revision++;
+      d.revision++; this.availabilityTransition(next, d, 'LOCATING', 'location_ttl');
       const offer = this.active(next, d.id);
       if (offer) { offer.state = 'REVOKED'; next.requests[offer.requestId]!.revision++; }
     }
@@ -307,17 +373,27 @@ export class MatchingCoordinator {
         if (r.quote.id !== quoteId) throw new MatchingError(409, 'idempotency_conflict');
         return this.passenger(r);
       }
+      if (this.state.activeRequestByOwner[p.accountId]) throw new MatchingError(409, 'active_request_exists');
       const quote = this.options.quote(quoteId, p.accountId); const now = this.clock.now();
       if (!quote || quote.expiresAt <= now) throw new MatchingError(409, 'quote_unavailable');
       decodeQuoteResponse({ status: 'priced', quote });
       const r: RequestRecord = { id: randomUUID(), requestId, owner: p.accountId, revision: 1, state: 'SEARCHING',
         quote: structuredClone(quote), createdAt: now, deadline: now + matchingPolicy.limitMs, searchStartedAt: now, round: 0, offered: [], excluded: [] };
-      const next = structuredClone(this.state); next.requests[r.id] = r; next.requestIds[key] = r.id; this.commit(next); this.arm();
+      const next = structuredClone(this.state); next.requests[r.id] = r; next.requestIds[key] = r.id;
+      next.activeRequestByOwner[p.accountId] = r.id; this.commit(next); this.arm();
       return this.passenger(r);
     }).finally(() => this.kick()); return structuredClone(result);
   }
   async fetch(p: Principal, id: string) {
     const value = await this.lock(() => { this.sweep(); return structuredClone(this.passenger(this.owned(this.state, p, id))); });
+    this.kick(); return value;
+  }
+  async activeRequest(p: Principal): Promise<MatchingPassengerSnapshot | null> {
+    this.requireRole(p, 'passenger');
+    const value = await this.lock(() => {
+      this.sweep(); const id = this.state.activeRequestByOwner[p.accountId];
+      return id ? structuredClone(this.passenger(this.owned(this.state, p, id))) : null;
+    });
     this.kick(); return value;
   }
   async cancel(p: Principal, tripId: string, commandId: string, reason: string) {
@@ -326,11 +402,13 @@ export class MatchingCoordinator {
     return this.mutation(p, commandId, ['cancel', tripId, reason], s => {
       const r = this.owned(s, p, tripId);
       if (r.state !== 'SEARCHING') throw new MatchingError(409, 'request_not_searching');
-      r.state = 'CANCELLED'; r.revision++; this.revoke(s, r); return { kind: 'request', request: r };
+      r.state = 'CANCELLED'; r.revision++; delete s.activeRequestByOwner[r.owner]; this.revoke(s, r); return { kind: 'request', request: r };
     }) as Promise<MatchingPassengerSnapshot>;
   }
   async driver(p: Principal): Promise<DriverState> {
     this.requireRole(p, 'driver'); const value = await this.lock(() => { this.sweep(); return this.view(this.driverReceipt(this.state, p.accountId)) as DriverState; });
+    if (value.offer) this.trace({ event: 'driver_state_offer', offerId: value.offer.id, requestId: value.offer.requestId,
+      driverId: p.accountId, revision: value.revision, expiresAt: value.offer.expiresAt });
     this.kick(); return value;
   }
   async availability(p: Principal, value: 'AVAILABLE' | 'OFFLINE', operationId: string) {
@@ -338,8 +416,9 @@ export class MatchingCoordinator {
     return this.mutation(p, operationId, ['availability', value], s => {
       const d = s.drivers[p.accountId]!; if (d.availability === 'ASSIGNED') throw new MatchingError(409, 'driver_assigned');
       if (value === 'OFFLINE') { const offer = this.active(s, d.id); if (offer) { offer.state = 'REVOKED'; s.requests[offer.requestId]!.revision++; } }
-      d.availability = value === 'OFFLINE' ? 'OFFLINE' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING';
       if (value === 'AVAILABLE') d.expiryCount = 0; d.revision++;
+      this.availabilityTransition(s, d, value === 'OFFLINE' ? 'OFFLINE' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING',
+        value === 'OFFLINE' ? 'explicit_offline' : 'explicit_available');
       return this.driverReceipt(s, d.id);
     }) as Promise<DriverState>;
   }
@@ -352,7 +431,7 @@ export class MatchingCoordinator {
       if (!['LOCATING', 'AVAILABLE'].includes(d.availability)) throw new MatchingError(409, 'driver_unavailable');
       d.locationRevision++; d.revision++; d.location = { coordinate, ...(bearing !== undefined ? { heading: bearing } : {}),
         receivedAt: this.clock.now(), revision: d.locationRevision };
-      d.availability = 'AVAILABLE'; return this.driverReceipt(s, d.id);
+      this.availabilityTransition(s, d, 'AVAILABLE', 'location_fix'); return this.driverReceipt(s, d.id);
     }) as Promise<DriverState>;
   }
   async offerAction(p: Principal, offerId: string, action: 'accept' | 'reject', actionId: string) {
@@ -364,7 +443,7 @@ export class MatchingCoordinator {
       if (o.state !== 'ACTIVE' || r.state !== 'SEARCHING' || d.availability !== 'AVAILABLE') throw new MatchingError(409, 'offer_inactive');
       o.state = action === 'accept' ? 'ACCEPTED' : 'REJECTED'; d.revision++; r.revision++;
       if (action === 'accept') {
-        r.state = 'ASSIGNED'; d.availability = 'ASSIGNED';
+        r.state = 'ASSIGNED'; this.availabilityTransition(s, d, 'ASSIGNED', 'offer_accept');
         r.assignment = { id: randomUUID(), driverId: d.id, etaMinutes: Math.ceil((o.route.trafficDurationSeconds ?? o.route.durationSeconds) / 60),
           pin: String(randomInt(1000, 10000)), sample: o.sample, routeToOrigin: o.route.geometry };
         this.revoke(s, r);
@@ -380,7 +459,8 @@ export class MatchingCoordinator {
       const d = s.drivers[p.accountId]!;
       delete r.assignment; r.excluded.push(d.id); r.round++; r.searchStartedAt = Math.min(this.clock.now(), r.deadline);
       r.state = this.clock.now() >= r.deadline ? 'NO_DRIVER_FOUND' : 'SEARCHING'; r.revision++;
-      d.availability = d.expiryCount >= 3 ? 'PAUSED' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING'; d.revision++;
+      if (r.state === 'NO_DRIVER_FOUND') delete s.activeRequestByOwner[r.owner];
+      d.revision++; this.availabilityTransition(s, d, d.expiryCount >= 3 ? 'PAUSED' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING', 'assignment_cancel');
       return this.driverReceipt(s, d.id);
     }) as Promise<DriverState>;
   }

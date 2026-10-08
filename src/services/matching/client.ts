@@ -40,6 +40,8 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
     finally { clearTimeout(timer); input.signal?.removeEventListener('abort', abort); }
   }
   function subscribe(key: string, path: string, invalidate: () => void, reconnect: () => void) {
+    const pollTrace: MatchingTrace = (event, fields) => trace(event, { ...fields,
+      stream: key === 'driver' ? 'driver' : 'passenger_request', entity: key });
     const controller = new AbortController(); let attempts = 0; let cancelDelay: (() => void) | undefined;
     let stopReason = 'abort';
     void (async () => {
@@ -48,30 +50,30 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
         try {
           if (attempts) status('reconnecting');
           const after = revisions.get(key) ?? 0;
-          trace('poll_start', { pollId, attempt: attempts + 1 });
+          pollTrace('poll_start', { pollId, attempt: attempts + 1 });
           const result = await request({ path: `${path}?afterRevision=${after}`, method: 'GET', decode: decodeRevision, signal: controller.signal }, 30_000);
           if (controller.signal.aborted) {
-            trace('poll_stop', { pollId, aborted: true, reason: stopReason, durationMs: Math.max(0, now() - startedAt) }); break;
+            pollTrace('poll_stop', { pollId, aborted: true, reason: stopReason, durationMs: Math.max(0, now() - startedAt) }); break;
           }
           const advanced = result.revision > after; const reconnected = attempts > 0;
-          trace('poll_result', { pollId, revision: result.revision, advanced, durationMs: Math.max(0, now() - startedAt) });
+          pollTrace('poll_result', { pollId, revision: result.revision, advanced, durationMs: Math.max(0, now() - startedAt) });
           attempts = 0;
           if (advanced) {
-            revisions.set(key, result.revision); trace('poll_invalidation', { pollId, revision: result.revision }); invalidate();
-          } else if (reconnected) { trace('poll_reconnected', { pollId, revision: result.revision }); reconnect(); }
+            revisions.set(key, result.revision); pollTrace('poll_invalidation', { pollId, revision: result.revision }); invalidate();
+          } else if (reconnected) { pollTrace('poll_reconnected', { pollId, revision: result.revision }); reconnect(); }
         } catch (error) {
-          trace('poll_error', { pollId, durationMs: Math.max(0, now() - startedAt), ...matchingTraceError(error) });
+          pollTrace('poll_error', { pollId, durationMs: Math.max(0, now() - startedAt), ...matchingTraceError(error) });
           if (controller.signal.aborted) {
-            trace('poll_stop', { pollId, aborted: true, reason: stopReason, durationMs: Math.max(0, now() - startedAt) }); break;
+            pollTrace('poll_stop', { pollId, aborted: true, reason: stopReason, durationMs: Math.max(0, now() - startedAt) }); break;
           }
           attempts++; const retryMs = Math.min(15_000, 500 * 2 ** Math.min(attempts - 1, 5));
-          trace('poll_retry', { pollId, attempt: attempts, retryMs });
+          pollTrace('poll_retry', { pollId, attempt: attempts, retryMs });
           await new Promise<void>(resolve => {
             const timer = setTimeout(resolve, retryMs);
             cancelDelay = () => { clearTimeout(timer); resolve(); };
           });
         }
-        trace('poll_stop', { pollId, aborted: controller.signal.aborted,
+        pollTrace('poll_stop', { pollId, aborted: controller.signal.aborted,
           reason: controller.signal.aborted ? stopReason : 'cycle_complete', durationMs: Math.max(0, now() - startedAt) });
       }
     })();
@@ -82,6 +84,16 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
   };
   return {
     identity: (signal?: AbortSignal) => request({ path: '/v1/matching/session', method: 'GET', decode: decodeIdentity, signal }),
+    activeRequest: async (signal?: AbortSignal) => {
+      const value = await request({ path: '/v1/passenger/requests/active', method: 'GET', signal,
+        decode: raw => {
+          if (raw === null) return null;
+          const trip = decodeMatchingTrip(raw);
+          if (!['searching', 'reassigning', 'assigned'].includes(trip.phase)) throw new Error('invalid_active_request');
+          return trip;
+        } });
+      return value ? rememberTrip(value) : null;
+    },
     request: async (quoteId: string, requestId: string) => rememberTrip(await request({ path: '/v1/passenger/requests', method: 'POST',
       body: { quoteId, requestId }, decode: decodeMatchingTrip })),
     fetch: async (id: string, signal?: AbortSignal) => rememberTrip(await request({ path: `/v1/passenger/requests/${encodeURIComponent(id)}`,

@@ -15,9 +15,9 @@ import { visualTokens as t } from '../../design/tokens';
 import { Camera } from '../../map/Camera';
 import { PassengerUserLocation } from '../../features/passenger/PassengerMapPin';
 import { createDriverLocationSession, type DriverLocationStopReason } from './locationSession';
+import { driverOperationId, type DriverOperationKind } from '../../services/matching/operationId';
+import { DriverOffer } from './DriverOffer';
 
-let sequence = 0;
-const operationId = () => `driver-${Date.now()}-${++sequence}`;
 export default function DriverLiveScreen() {
   return <LiveAccountGate role="driver">{session => <DriverSurface key={session.identity.accountId} client={session.matching}
     accountId={session.identity.accountId} available={session.identity.matchingAvailable} />}</LiveAccountGate>;
@@ -70,7 +70,7 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
         requestForegroundPermissionsAsync: Location.requestForegroundPermissionsAsync,
         getProviderStatusAsync: Location.getProviderStatusAsync, getLastKnownPositionAsync: () => Location.getLastKnownPositionAsync(),
         watchPositionAsync: Location.watchPositionAsync,
-        balancedAccuracy: Location.Accuracy.Balanced }, operationId,
+        balancedAccuracy: Location.Accuracy.Balanced }, operationId: () => driverOperationId('location'),
       send: async (coordinate, heading, id, signal) => {
         const snapshot = await client.location(coordinate, heading, id, signal);
         if (!signal.aborted) { setError(''); queryClient.setQueryData<DriverState>(['driver', accountId], old => old && old.revision >= snapshot.revision ? old : snapshot); }
@@ -93,9 +93,9 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => { clearTimeout(initial); clearInterval(timer); };
   }, [expiresAt]);
-  const act = async (run?: (id: string) => Promise<DriverState>) => {
+  const act = async (kind?: DriverOperationKind, run?: (id: string) => Promise<DriverState>) => {
     if (busy) return;
-    if (!pending.current && run) pending.current = { id: operationId(), run };
+    if (!pending.current && kind && run) pending.current = { id: driverOperationId(kind), run };
     if (!pending.current) return;
     setBusy(true); setError('');
     try {
@@ -114,25 +114,26 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
   return <SafeAreaView style={styles.fill}><DriverRideShell mapContent={location ? <>
     <Camera target={{ center: location.coordinate, zoom: 14 }} />
     <PassengerUserLocation active={foreground && focused} place={{ id: 'driver-current', name: '', address: '', coordinate: location.coordinate }} />
-  </> : undefined} renderPhase={() => <ScrollView style={styles.panel} contentContainerStyle={styles.content}>
+  </> : undefined} renderPhase={() => offer ? <View>
+    <DriverOffer offer={offer} revision={data!.revision} now={now} disabled={busy || !!pending.current}
+      onAccept={() => { void act('offer_accept', id => client.offerAction(offer.id, 'accept', id)); }}
+      onReject={() => { void act('offer_reject', id => client.offerAction(offer.id, 'reject', id)); }} />
+    {error ? <VimaText variant="bodyRegular" accessibilityRole="alert">{error}</VimaText> : null}
+    {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void act(); }} /> : null}
+  </View> : <ScrollView style={styles.panel} contentContainerStyle={styles.content}>
     <VimaText variant="h2">Driver P0 · {data?.profile.driver.name ?? accountId}</VimaText>
     <VimaText variant="bodyRegular">{accountId} · {connection === 'online' ? 'Conectado' : connection === 'reconnecting' ? 'Reconectando' : 'Sin conexión'}</VimaText>
     <VimaText variant="bodyRegular">{data ? labels[data.availability] : available ? 'Cargando estado…' : 'Matching no configurado'}</VimaText>
     {data && !assigned ? <View style={styles.actions}>
       <VimaButton label={availability === 'PAUSED' ? 'Reanudar disponibilidad' : 'Disponible'} disabled={busy || !!pending.current || ['LOCATING', 'AVAILABLE'].includes(availability ?? '')}
-        onPress={() => { void act(id => client.availability('AVAILABLE', id)); }} />
+        onPress={() => { void act('availability_available', id => client.availability('AVAILABLE', id)); }} />
       <VimaButton secondary label="Desconectarme" disabled={busy || !!pending.current || availability === 'OFFLINE'}
-        onPress={() => { void act(id => client.availability('OFFLINE', id)); }} />
-    </View> : null}
-    {offer ? <View style={styles.content}><VimaText variant="h3">Oferta · {Math.max(0, Math.ceil((offer.expiresAt - now) / 1000))} s</VimaText>
-      <VimaText variant="bodyRegular">{offer.pickup.name} · {offer.pickup.address}</VimaText><VimaText variant="bodyRegular">Recogida a {offer.etaMinutes} min</VimaText>
-      <VimaButton label="Aceptar" disabled={busy || !!pending.current || now >= offer.expiresAt} onPress={() => { void act(id => client.offerAction(offer.id, 'accept', id)); }} />
-      <VimaButton secondary label="Rechazar" disabled={busy || !!pending.current} onPress={() => { void act(id => client.offerAction(offer.id, 'reject', id)); }} />
+        onPress={() => { void act('availability_offline', id => client.availability('OFFLINE', id)); }} />
     </View> : null}
     {assigned ? <View style={styles.content}><VimaText variant="h3">Asignación confirmada</VimaText>
       <VimaText variant="bodyRegular">{assigned.value.id}</VimaText><VimaText variant="bodyRegular">{assigned.pickup.name} · {assigned.pickup.address}</VimaText>
       <VimaButton secondary danger label="Cancelar asignación" disabled={busy || !!pending.current}
-        onPress={() => { void act(id => client.cancelAssignment(assigned.requestId, id)); }} />
+        onPress={() => { void act('assignment_cancel', id => client.cancelAssignment(assigned.requestId, id)); }} />
     </View> : null}
     {error || state.error ? <VimaText variant="bodyRegular" accessibilityRole="alert">{error || 'No se pudo leer el estado.'}</VimaText> : null}
     {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void act(); }} /> : null}

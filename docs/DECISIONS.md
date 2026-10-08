@@ -14,6 +14,7 @@ Este documento registra las decisiones proporcionadas en la solicitud y reflejad
 | Gesture Handler ~2.32 | Root view y base gestual propia del sheet. |
 | TanStack Query remoto / Zustand sólo UI | QueryClient, trip queries/comandos/reconciliación; store de interacción efímera. |
 | Servidor autoritativo | Sin éxitos optimistas de comandos críticos; reconciliación monótona e invalidación realtime. |
+| Máximo una request SEARCHING o ASSIGNED por Passenger | Índice `activeRequestByOwner` persistido en snapshot v3 y mutado bajo el commit serializado. Crear otra intención devuelve `active_request_exists`; cancelar/expirar libera, asignar/reasignar conserva. Bootstrap `/active` cambia identidad explícitamente sin relajar `reconcileTrip`. |
 | SecureStore para credenciales | `services/storage/credentials.ts`. |
 | SQLite/KV para preferencias y recuperación no sensible | Formatos versionados y allowlist en `services/storage`. |
 | Haptics semánticos centralizados | Catálogo exacto del JSON en `motion/haptics.ts`; lint impide imports directos dispersos. Los éxitos de negocio requieren confirmación del servidor. |

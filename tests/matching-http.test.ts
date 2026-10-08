@@ -25,7 +25,8 @@ test('authenticated HTTP pricing → request → offer → assignment uses owner
   const logs: unknown[] = [];
   const adapter = { route: async () => syntheticRoute } as unknown as TomTomAdapter;
   const config = { ...gatewayConfig({}), runtimeDir: directory, rateLimit: 1000 };
-  const options = { auth, configured: true, pricing: { status: 'ready' as const, config: syntheticPricing() }, logger: (entry: unknown) => logs.push(entry) };
+  const options = { auth, configured: true, pricing: { status: 'ready' as const, config: syntheticPricing() }, logger: (entry: unknown) => logs.push(entry),
+    matchingTrace: (entry: unknown) => logs.push(entry) };
   let server = createGateway(config, adapter, options);
   const listen = async () => { server.listen(0, '127.0.0.1'); await once(server, 'listening'); return `http://127.0.0.1:${(server.address() as AddressInfo).port}`; };
   let base = await listen();
@@ -40,6 +41,10 @@ test('authenticated HTTP pricing → request → offer → assignment uses owner
     assert.equal((await call('/v1/driver/state', undefined)).status, 401);
     assert.equal((await call('/v1/driver/state', 0)).status, 403);
     assert.equal((await call('/v1/matching/session', 0)).body.matchingAvailable, true);
+    assert.deepEqual(await call('/v1/passenger/requests/active', 0), { status: 200, body: null });
+    assert.equal((await call('/v1/passenger/requests/active', undefined)).status, 401);
+    assert.equal((await call('/v1/passenger/requests/active', 2)).status, 403);
+    assert.equal((await call('/v1/passenger/requests/active?owner=other', 0)).status, 400);
     const quote = (await call('/v1/passenger/quotes', 0, { ...syntheticDraft, operationId: 'http-quote-operation' })).body;
     assert.equal(quote.status, 'priced');
     assert.equal((await call('/v1/passenger/requests', 1, { quoteId: quote.quote.id, requestId: 'foreign' })).status, 409);
@@ -51,6 +56,10 @@ test('authenticated HTTP pricing → request → offer → assignment uses owner
     assert.equal((await call('/v1/driver/location', 2, { coordinate: [500, 500], operationId: 'bad-location' })).status, 400);
     const created = await call('/v1/passenger/requests', 0, { quoteId: quote.quote.id, requestId: 'create' });
     const trip = decodeMatchingTrip(created.body); assert.equal(trip.phase, 'searching');
+    assert.equal((await call('/v1/passenger/requests/active', 0)).body.id, trip.id);
+    assert.deepEqual(await call('/v1/passenger/requests/active', 1), { status: 200, body: null });
+    const duplicate = await call('/v1/passenger/requests', 0, { quoteId: quote.quote.id, requestId: 'second-id' });
+    assert.equal(duplicate.status, 409); assert.match(JSON.stringify(duplicate.body), /active_request_exists/);
     assert.equal((await call(`/v1/passenger/requests/${trip.id}`, 1)).status, 403);
     assert.equal((await call(`/v1/passenger/requests/${trip.id}/changes?afterRevision=0`, 1)).status, 403);
     assert.equal((await call('/v1/driver/availability', 2, { availability: 'AVAILABLE', operationId: 'bad', accountId: 'forged' })).status, 400);
@@ -67,6 +76,11 @@ test('authenticated HTTP pricing → request → offer → assignment uses owner
     server = createGateway(config, adapter, options); base = await listen();
     assert.equal(decodeMatchingTrip((await call(`/v1/passenger/requests/${trip.id}`, 0)).body).assignment?.id, passenger.assignment?.id);
     assert.equal(decodeMatchingTrip((await call('/v1/passenger/requests', 0, { quoteId: quote.quote.id, requestId: 'create' })).body).id, trip.id);
+    await call(`/v1/driver/assignments/${trip.id}/cancel`, 2, { actionId: 'cancel-driver' });
+    await call(`/v1/passenger/requests/${trip.id}/commands`, 0, { tripId: trip.id, commandId: 'cancel-new', name: 'cancel', payload: { reason: 'user' } });
+    assert.deepEqual(await call('/v1/passenger/requests/active', 0), { status: 200, body: null });
+    assert.ok(logs.some(e => (e as { event?: string }).event === 'offer_commit'));
+    assert.ok(logs.some(e => (e as { event?: string }).event === 'driver_state_offer'));
     for (const token of tokens) assert.equal(JSON.stringify(logs).includes(token!), false);
     const insecure = createApiClient(base, async () => tokens[0]!, { development: true });
     await assert.rejects(insecure.request({ path: '/v1/matching/session', method: 'GET', decode: v => v }), /Credentials require HTTPS/);

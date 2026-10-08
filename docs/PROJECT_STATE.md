@@ -1,13 +1,54 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-08 en `codex/driver-watchdog-first-fix-p0`,
-desde `codex/driver-lifecycle-map-hit-test-p0` @ `d9c11fa2`.
+Actualizado 2026-10-08 en `codex/passenger-active-offer-provenance-p0`,
+desde `codex/driver-watchdog-first-fix-p0` @ `2467553b`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Identidad Passenger activa y trazabilidad de oferta/availability — 2026-10-08
+
+- Snapshot v3 incorpora `activeRequestByOwner` en el mismo commit que request
+  e índice idempotente. Una nueva intención recibe `409 active_request_exists`
+  antes de consultar otra quote si el owner ya tiene SEARCHING o ASSIGNED.
+  Cancelación/NO_DRIVER_FOUND liberan el índice; asignación y reasignación de
+  la misma request lo conservan. El retry original mantiene su precedencia.
+- Migración v1→v2→v3 sin borrar historial: una ASSIGNED prevalece; en otro caso
+  se conserva SEARCHING más antigua (`createdAt`, desempate `id`). Duplicadas
+  SEARCHING pasan a CANCELLED, revocando ofertas e incrementando revisions.
+  Dos ASSIGNED del mismo owner o un índice inconsistente fallan cerrados.
+- GET autenticado `/v1/passenger/requests/active` devuelve snapshot o null.
+  Bootstrap Passenger online bloquea crear hasta resolver; recupera identidad
+  en su propio `tripKey`. Reconnect sin ID vuelve a consultar; con ID conserva
+  realtime. Un 409 recupera active sin otro POST ni éxito optimista. Una
+  identidad distinta de una local no terminal se rechaza; null no la borra.
+  `reconcileTrip` conserva estrictamente su rechazo entre IDs diferentes.
+- Trazas sanitizadas inyectables server: `request_active`, `request_terminal`,
+  `offer_commit`, `driver_state_offer`, `availability_transition`. Poll añade
+  stream/entity conservando pollId y coalescing. DEV `offer_render` se emite
+  al cambiar identidad/revision/expiración, nunca por cada tick del countdown.
+- Driver usa operationIds tipados y conserva el mismo ID ante retry ambiguo.
+  Las transiciones de disponibilidad pasan por provenance tipada: únicamente
+  `explicit_offline` puede llevar a OFFLINE. TTL conserva LOCATING; expiración
+  conserva PAUSED; background/unmount no escribe disponibilidad.
+- La región crítica de oferta muestra countdown, pickup, ETA y Aceptar/Rechazar
+  fuera de ScrollView, antes de cualquier contenido técnico. No añade datos ni
+  UI Driver A/B. Oferta vencida deja ambos botones no accionables.
+- **Automatizado:** cobertura de índice/migración/restart/carreras, bootstrap,
+  409, cancel→nuevo ID, ownership, trazas/provenance y render sin scroll.
+  TypeScript, lint, suite completa **238/238**, gateway/matching/pricing
+  **67/67**, worklets,
+  MapLibre/schema, splash, Hermes DEV/release Android/iOS y aislamiento.
+  Expo Doctor **20/21** únicamente por cinco patches SDK57 conocidos, sin
+  actualizar dependencias. Sin cambios nativos ni EAS Build.
+- **PENDIENTE físico Android:** recuperar Passenger tras reinicio, impedir
+  segunda activa y cancelar→crear limpia; oferta visible durante ~20 s y cadena
+  offer_commit→poll_invalidation→driver_state_offer→offer_render; Driver quieto
+  AVAILABLE >60 s, y OFFLINE sólo al pulsar Desconectarme con provenance.
+  Watchdog/location, TTLs, ranking ETA, pricing y visual Passenger intactos.
 
 ### Watchdog Driver limitado al primer fix nativo — 2026-10-08
 

@@ -7,6 +7,7 @@ import type { PassengerTrip } from '../src/features/passenger/model.ts';
 import { reconcileTrip } from '../src/features/trip/contracts.ts';
 import { readFileSync } from 'node:fs';
 import { decodeDriver } from '../src/services/matching/decode.ts';
+import { driverOperationId, type DriverOperationKind } from '../src/services/matching/operationId.ts';
 
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
 test('reconnect plus advanced revision emits one invalidation, keeps one poll, and aborts on unmount', async t => {
@@ -32,6 +33,10 @@ test('reconnect plus advanced revision emits one invalidation, keeps one poll, a
   assert.equal(events.filter(value => value.event === 'poll_invalidation').length, 1); assert.equal(events.filter(value => value.event === 'poll_reconnected').length, 0);
   assert.equal(polls, 3); stop(); await flush(); assert.equal(signal?.aborted, true);
   assert.equal(events.findLast(value => value.event === 'poll_stop')?.fields?.reason, 'abort');
+  for (const event of events) {
+    assert.equal(event.fields?.stream, 'passenger_request'); assert.equal(event.fields?.entity, 'request');
+    assert.equal(typeof event.fields?.pollId, 'string');
+  }
   t.mock.timers.tick(60_000); await flush(); assert.equal(polls, 3);
 });
 
@@ -65,7 +70,10 @@ test('Driver poll cleanup records its explicit lifecycle reason', async () => {
   let signal: AbortSignal | undefined; const events: { event: string; reason?: unknown }[] = [];
   const client = createMatchingClient({ async request(input) {
     signal = input.signal; return await new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
-  } }, { trace: (event, fields) => events.push({ event, reason: fields?.reason }) });
+  } }, { trace: (event, fields) => {
+    assert.equal(fields?.stream, 'driver'); assert.equal(fields?.entity, 'driver'); assert.equal(typeof fields?.pollId, 'string');
+    events.push({ event, reason: fields?.reason });
+  } });
   const stop = client.subscribeDriver(() => {}); await flush(); stop('unsubscribe_background'); await flush();
   assert.equal(signal?.aborted, true);
   assert.equal(events.findLast(value => value.event === 'poll_stop')?.reason, 'unsubscribe_background');
@@ -93,6 +101,28 @@ test('60/120 UI projections never manufacture backend expiry/revisions, reassign
   assert.equal(projectMatchingPhase(reassigned, 'reassigning', 300_000), 'reassigning');
   assert.equal(projectMatchingPhase(reassigned, 'reassigning', 360_000), 'expanding');
   assert.equal(reconcileTrip(reassigned, trip), reassigned);
+  assert.throws(() => reconcileTrip(trip, { ...trip, id: 'other' }), /different trips/);
+});
+
+test('typed Driver operation IDs are unique, backend-safe and carry the intent', () => {
+  const kinds: DriverOperationKind[] = ['availability_available', 'availability_offline', 'location', 'offer_accept', 'offer_reject', 'assignment_cancel'];
+  const ids = kinds.flatMap(kind => Array.from({ length: 100 }, () => {
+    const id = driverOperationId(kind); assert.match(id, /^[A-Za-z0-9._:-]{16,128}$/); assert.ok(id.startsWith(`driver:${kind}:`)); return id;
+  }));
+  assert.equal(new Set(ids).size, ids.length);
+  const screen = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
+  assert.match(screen, /if \(!pending.current && kind && run\) pending.current = \{ id: driverOperationId\(kind\), run \}/);
+  assert.match(screen, /pending.current.run\(pending.current.id\)/);
+  assert.match(screen, /act\('availability_offline', id => client.availability\('OFFLINE', id\)\)/);
+  assert.equal((screen.match(/client.availability\('OFFLINE'/g) ?? []).length, 1);
+});
+
+test('activeRequest reads the authenticated endpoint, accepts null and rejects malformed/terminal payloads', async () => {
+  let value: unknown = null; const paths: string[] = [];
+  const client = createMatchingClient({ async request(input) { paths.push(input.path); return input.decode(value); } });
+  assert.equal(await client.activeRequest(), null);
+  value = {}; await assert.rejects(client.activeRequest());
+  assert.deepEqual(paths, ['/v1/passenger/requests/active', '/v1/passenger/requests/active']);
 });
 
 test('DEV identity gate uses SecureStore and the mobile HTTPS bearer guard is preserved', () => {
