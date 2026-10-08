@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,15 +10,13 @@ import type { DriverState } from '../../services/matching/contracts';
 import { createDriverActions } from '../../services/matching/driverActions';
 import { DriverRideShell } from '../../features/driver/DriverRideShell';
 import { DriverStatePanel } from '../../features/driver/DriverStatePanel';
+import { DriverOffer } from '../../features/driver/DriverOffer';
 import { driverMapFallback, type DriverConnection } from '../../features/driver/driverPresentation';
-import { VimaText } from '../../design/primitives';
-import { VimaButton } from '../../design/components/VimaButton';
 import { useVimaTheme } from '../../design/themes';
 import { Camera } from '../../map/Camera';
 import { PassengerUserLocation } from '../../features/passenger/PassengerMapPin';
 import { createDriverLocationSession, type DriverLocationStopReason } from './locationSession';
 import { driverOperationId } from '../../services/matching/operationId';
-import { DriverOffer } from './DriverOffer';
 
 export default function DriverLiveScreen() {
   return <LiveAccountGate role="driver">{session => <DriverSurface key={session.identity.accountId}
@@ -113,13 +111,13 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     <PassengerUserLocation active={availability === 'LOCATING' && foreground && focused}
       place={{ id: 'driver-current', name: '', address: '', coordinate: location.coordinate }} />
       : null}
-  </>} renderPhase={() => offer ? <View>
+  </>} renderPhase={() => offer ?
     <DriverOffer offer={offer} revision={data!.revision} now={now} disabled={busy || !!pending.current}
+      error={error} retryAvailable={!!pending.current} retryDisabled={busy}
       onAccept={() => { void actions.startDriverAction({ kind: 'offer_accept', offerId: offer.id, requestId: offer.requestId }); }}
-      onReject={() => { void actions.startDriverAction({ kind: 'offer_reject', offerId: offer.id, requestId: offer.requestId }); }} />
-    {error ? <VimaText variant="bodyRegular" accessibilityRole="alert">{error}</VimaText> : null}
-    {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void actions.retryPendingDriverAction(); }} /> : null}
-  </View> : <DriverStatePanel state={data} connection={connection as DriverConnection} configured={available}
+      onReject={() => { void actions.startDriverAction({ kind: 'offer_reject', offerId: offer.id, requestId: offer.requestId }); }}
+      onRetry={() => { void actions.retryPendingDriverAction(); }} />
+    : <DriverStatePanel state={data} connection={connection as DriverConnection} configured={available}
     busy={busy} error={error || (state.error ? 'No se pudo leer el estado.' : '')} retryAvailable={!!pending.current}
     onAvailable={() => { void actions.startDriverAction({ kind: 'availability_available' }); }}
     onOffline={() => { void actions.startDriverAction({ kind: 'availability_offline' }); }}

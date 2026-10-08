@@ -1,13 +1,41 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-08 en `codex/global-light-dark-theme-p0`,
-desde `codex/driver-ui-v1-light-dark-p0` @ `4dd50e4c`.
+Actualizado 2026-10-08 en `codex/driver-ui-critical-offer-polish-p0`,
+desde `codex/global-light-dark-theme-p0` @ `0d3600f2`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Driver UI final y critical viewport de Offer — 2026-10-08
+
+- `DriverLiveScreen` sigue siendo controller. `DriverOffer` pasó a
+  `src/features/driver/` junto con la presentación productiva; location,
+  queries, realtime, intents, operationIds, retry y trazas permanecen en sus
+  límites existentes.
+- OFFLINE, LOCATING, AVAILABLE y PAUSED conservan composición `compact`;
+  ASSIGNED conserva `operational`. Cada superficie separa contexto, detalle
+  secundario y una action/error zone no desplazable con `flexShrink: 0`.
+  `Disponible`, `Desconectarme`, retry y `Cancelar asignación` quedan fuera de
+  cualquier ScrollView; sólo el detalle de vehículo de ASSIGNED puede desplazarse.
+- Offer es una superficie sin scroll con `Nueva solicitud`, countdown,
+  recogida, ETA, `Aceptar` y `Rechazar`. Nombre y dirección limitan líneas
+  visuales y conservan el contenido completo en accesibilidad. Error/retry vive
+  en la misma zona crítica sin alterar las fences de accept/reject.
+- El contrato real de Offer continúa limitado a `id`, `requestId`, `expiresAt`,
+  `etaMinutes` y `pickup`. No se muestran destino, distancia, tarifa ni ganancia
+  porque no existen de forma autoritativa en `DriverState`.
+- La safe area se aplica una sola vez en la raíz Driver; light/dark comparten
+  árbol y medidas. Mapa, Camera, fallback Atlacomulco, Passenger, backend,
+  matching, lifecycle y Motion permanecen sin cambios funcionales.
+- **VERIFICADO automatizado:** TypeScript, lint, focales Driver, suite completa
+  **260/260**, gateway **68/68**, worklets (19 archivos), MapLibre/schema,
+  splash, aislamiento fixture/release y export Hermes Android/iOS. Expo Doctor
+  conserva **20/21** sólo por los cinco patches SDK 57 conocidos; no se
+  actualizaron dependencias en esta rama de presentación.
+- QA físico Android compacto en light/dark sigue **PENDIENTE**.
 
 ### Theme global único light/dark — 2026-10-08
 

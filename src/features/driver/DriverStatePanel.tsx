@@ -29,7 +29,7 @@ export function DriverStatePanel({ state, connection, configured, busy, error, r
   };
   return <ElementEntrance key={presentation.availability} timing={motionTimings.state}
     testID={`driver-surface-${presentation.variant}`} style={[styles.surface, { backgroundColor: theme.roles.surface }]}>
-    <View testID="driver-critical-region" style={styles.critical}>
+    <View testID="driver-state-context" style={styles.context}>
       <View style={styles.headingRow}>
         <View style={[styles.stateMark, { backgroundColor: presentation.tone === 'neutral' ? theme.roles.control
           : presentation.tone === 'positive' ? theme.roles.positive : presentation.tone === 'warning'
@@ -43,7 +43,8 @@ export function DriverStatePanel({ state, connection, configured, busy, error, r
         <DriverStatus icon="recenter" label={gps.label} tone={gps.tone} />
         <DriverStatus icon={network.tone === 'critical' ? 'warning' : 'check'} label={network.label} tone={network.tone} />
       </View>
-      {assignment ? <View style={[styles.pickup, { backgroundColor: theme.roles.elevatedSurface }]}>
+      {assignment ? <View style={[styles.pickup, { backgroundColor: theme.roles.elevatedSurface,
+        ...elevationStyle('level1', theme.roles.shadow) }]}>
         <VimaGlyph name="route" color={theme.roles.positive} />
         <View style={styles.pickupCopy}>
           <VimaText variant="bodyMedium">Recogida</VimaText>
@@ -53,6 +54,13 @@ export function DriverStatePanel({ state, connection, configured, busy, error, r
           <VimaText variant="caption" style={{ color: theme.roles.textSecondary }}>Llegada estimada: {assignment.value.etaMinutes} min</VimaText>
         </View>
       </View> : null}
+    </View>
+    {presentation.variant === 'operational' && assignment ? <ScrollView testID="driver-secondary-content"
+      style={styles.secondary} contentContainerStyle={styles.secondaryContent}>
+      <VimaText variant="caption" style={{ color: theme.roles.textSecondary }}>Vehículo asignado</VimaText>
+      <VimaText variant="bodySmall">{assignment.value.vehicle.name} · {assignment.value.vehicle.color}</VimaText>
+    </ScrollView> : null}
+    <View testID="driver-critical-region" style={[styles.actionZone, { borderTopColor: theme.roles.border }]}>
       {error ? <View accessibilityRole="alert" style={[styles.error, { backgroundColor: theme.roles.dangerWash }]}>
         <VimaGlyph name="warning" color={theme.roles.danger} />
         <VimaText variant="bodySmall" numberOfLines={2} style={styles.errorCopy}>{error}</VimaText>
@@ -61,11 +69,6 @@ export function DriverStatePanel({ state, connection, configured, busy, error, r
         danger={presentation.action === 'assignment_cancel'} loading={busy} disabled={disabled} onPress={action} /> : null}
       {retryAvailable ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={onRetry} /> : null}
     </View>
-    {presentation.variant === 'operational' && assignment ? <ScrollView testID="driver-secondary-content"
-      style={styles.secondary} contentContainerStyle={styles.secondaryContent}>
-      <VimaText variant="caption" style={{ color: theme.roles.textSecondary }}>Vehículo asignado</VimaText>
-      <VimaText variant="bodySmall">{assignment.value.vehicle.name} · {assignment.value.vehicle.color}</VimaText>
-    </ScrollView> : null}
   </ElementEntrance>;
 }
 
@@ -83,18 +86,20 @@ function DriverStatus({ icon, label, tone }: { icon: VimaGlyphName; label: strin
 const styles = StyleSheet.create({
   surface: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingTop: t.spacing.scalePx[3],
     paddingBottom: t.spacing.scalePx[3], gap: t.spacing.scalePx[2] },
-  critical: { gap: t.spacing.scalePx[2] },
+  context: { gap: t.spacing.scalePx[2], flexShrink: 1 },
+  actionZone: { gap: t.spacing.scalePx[1], paddingTop: t.spacing.scalePx[2], borderTopWidth: t.borders.standardWidthPx,
+    flexShrink: 0 },
   headingRow: { flexDirection: 'row', gap: t.spacing.scalePx[2], alignItems: 'flex-start' },
   headingCopy: { flex: 1, gap: t.spacing.scalePx[1] },
   stateMark: { width: 6, minHeight: 52, borderRadius: t.radii.pillPx },
   statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.scalePx[1] },
   status: { minHeight: 36, maxWidth: '100%', flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[1],
     paddingHorizontal: t.spacing.scalePx[2], borderRadius: t.radii.pillPx },
-  pickup: { flexDirection: 'row', gap: t.spacing.scalePx[2], padding: t.spacing.scalePx[2], borderRadius: t.radii.cardPx,
-    ...elevationStyle('level1', t.colors.carbon) },
+  pickup: { flexDirection: 'row', gap: t.spacing.scalePx[2], padding: t.spacing.scalePx[2], borderRadius: t.radii.cardPx },
   pickupCopy: { flex: 1, gap: t.spacing.scalePx[0] },
   error: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[1], padding: t.spacing.scalePx[2],
     borderRadius: t.radii.fieldPx },
   errorCopy: { flex: 1 },
-  secondary: { maxHeight: 72 }, secondaryContent: { paddingTop: t.spacing.scalePx[1], gap: t.spacing.scalePx[0] },
+  secondary: { maxHeight: 64, flexShrink: 1 },
+  secondaryContent: { paddingVertical: t.spacing.scalePx[1], gap: t.spacing.scalePx[0] },
 });

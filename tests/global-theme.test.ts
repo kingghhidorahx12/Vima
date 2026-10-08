@@ -110,7 +110,7 @@ test('Driver OFFLINE, LOCATING, AVAILABLE, ASSIGNED and Offer render with identi
   for (const themeName of ['light', 'dark'] as const) {
     const h = createHarness({}, { themeName });
     const { DriverStatePanel } = h.load('src/features/driver/DriverStatePanel.tsx');
-    const { DriverOffer } = h.load('src/dev/driver/DriverOffer.tsx');
+    const { DriverOffer } = h.load('src/features/driver/DriverOffer.tsx');
     for (const driverState of [state('OFFLINE'), state('LOCATING'), state('AVAILABLE'), assigned]) {
       let tree!: ReactTestRenderer;
       await act(async () => { tree = create(React.createElement(DriverStatePanel, { state: driverState, connection: 'online', configured: true,

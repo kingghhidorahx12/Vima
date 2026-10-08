@@ -21,11 +21,11 @@ export function driverPresentation(state?: DriverState): DriverPresentation {
   const availability = state?.availability ?? 'OFFLINE';
   switch (availability) {
     case 'LOCATING': return { availability, variant: 'compact', title: 'Obteniendo tu ubicación',
-      copy: 'Mantén el GPS activo para mostrarte viajes cercanos.', tone: 'neutral',
+      copy: 'Mantén el GPS activo para empezar a recibir viajes.', tone: 'neutral',
       action: 'availability_offline', actionLabel: 'Desconectarme' };
     case 'AVAILABLE': return { availability, variant: 'compact', title: 'Disponible para viajes',
       copy: 'Te mostraremos solicitudes cercanas a tu ubicación.', tone: 'positive',
-      action: 'availability_offline', actionLabel: 'Dejar de estar disponible' };
+      action: 'availability_offline', actionLabel: 'Desconectarme' };
     case 'PAUSED': return { availability, variant: 'compact', title: 'Disponibilidad en pausa',
       copy: 'Vuelve a conectarte cuando estés listo para recibir viajes.', tone: 'warning',
       action: 'availability_available', actionLabel: 'Volver a estar disponible' };
@@ -34,8 +34,8 @@ export function driverPresentation(state?: DriverState): DriverPresentation {
       action: 'assignment_cancel', actionLabel: 'Cancelar asignación' };
     case 'OFFLINE':
     default: return { availability: 'OFFLINE', variant: 'compact', title: 'No estás disponible',
-      copy: 'Activa tu disponibilidad para recibir viajes.', tone: 'neutral',
-      action: 'availability_available', actionLabel: 'Conectarme' };
+      copy: 'Conéctate para empezar a recibir solicitudes.', tone: 'neutral',
+      action: 'availability_available', actionLabel: 'Disponible' };
   }
 }
 

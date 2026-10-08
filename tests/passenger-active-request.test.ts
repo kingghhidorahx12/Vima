@@ -124,7 +124,7 @@ test('active client decodes snapshots with frozen pricing and rejects terminal r
 });
 
 test('visible Driver offer keeps all critical content outside scrolling and does not trace countdown ticks', async () => {
-  const h = createHarness(); const Offer = h.load('src/dev/driver/DriverOffer.tsx').DriverOffer;
+  const h = createHarness(); const Offer = h.load('src/features/driver/DriverOffer.tsx').DriverOffer;
   const events: unknown[] = []; let accepted = 0; let rejected = 0;
   const props = { offer: { id: 'o', requestId: 'r', expiresAt: 20000, pickup: draft.origin, etaMinutes: 3 }, revision: 4, now: 1000,
     disabled: false, trace: (event: string, fields: unknown) => events.push({ event, fields }), onAccept: () => accepted++, onReject: () => rejected++ };
@@ -139,7 +139,7 @@ test('visible Driver offer keeps all critical content outside scrolling and does
     await h.act(async () => tree.update(React.createElement(Offer, { ...props, revision: 5, now: 20000 })));
     assert.equal(events.length, 2); assert.ok(tree.root.findAll(node => String(node.type) === 'Pressable').every(button => button.props.disabled));
     const screen = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
-    assert.match(screen, /renderPhase=\{\(\) => offer \? <View>\s*<DriverOffer/);
-    assert.match(screen, /<\/View> : <DriverStatePanel/);
+    assert.match(screen, /renderPhase=\{\(\) => offer \?\s*<DriverOffer/);
+    assert.match(screen, /\/>\s*: <DriverStatePanel/);
   } finally { await h.act(async () => tree.unmount()); h.client.clear(); }
 });
