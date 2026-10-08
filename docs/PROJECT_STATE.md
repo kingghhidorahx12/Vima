@@ -1,13 +1,45 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-07 en `codex/vimatext-body-crash-fix-p0`,
-desde `codex/request-matching-driver-p0` @ `0f7055bf`.
+Actualizado 2026-10-07 en `codex/driver-location-bootstrap-p0`,
+desde `codex/vimatext-body-crash-fix-p0` @ `498d3b9f`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Bootstrap Driver location → availability → matching — 2026-10-07
+
+- Driver añade el estado autoritativo `LOCATING`. La intención AVAILABLE queda
+  LOCATING sin muestra fresca y cambia a AVAILABLE en el mismo commit que
+  persiste una ubicación real válida. Sólo AVAILABLE con location de menos de
+  60 s entra al ranking; no existen coordenadas por defecto ni éxito optimista.
+- La última muestra vive únicamente en `DriverRecord`. Snapshot schema v2
+  conserva coordinate, heading opcional, receivedAt y locationRevision; una
+  migración v1 determinista convierte AVAILABLE sin location a LOCATING,
+  revoca ofertas incompatibles y preserva requests, assignments e idempotencia.
+  Estados v1 realmente inválidos siguen fallando cerrados.
+- El scheduler agenda exactamente `receivedAt + 60 s`. Al vencer cambia
+  AVAILABLE→LOCATING, aumenta revision, revoca oferta ACTIVE y despierta la
+  búsqueda sin volver a ofrecer ese Driver a la misma request. OFFLINE, PAUSED
+  y ASSIGNED permanecen intactos; cancel assignment decide AVAILABLE/LOCATING
+  con la frescura actual y conserva la regla de tres expiraciones→PAUSED.
+- Driver DEV sustituyó el polling `getCurrentPositionAsync` por una sesión
+  foreground `watchPositionAsync`, activa sólo en LOCATING/AVAILABLE con foco y
+  app activa. Last-known se envía únicamente si es válida y <60 s; watchdog de
+  10 s limpia y recrea tras 3 s. Blur/background/cambio de estado/unmount
+  cancelan subscription, timers y requests. La UI muestra «Localizando…».
+- **VERIFICADO automatizado:** TypeScript y lint; suite **204/204**; gateway/
+  matching/pricing **54/54**; regresión focal **28/28**; worklets, MapLibre/schema
+  (suite), splash, Hermes Android/iOS DEV y release, aislamiento de fixtures,
+  servidor, credenciales y paths. Expo Doctor queda en **20/21** exclusivamente
+  por los mismos cinco patches SDK 57; no se actualizaron dependencias.
+  Cambio sólo JS/TS y documentos: no requiere nuevo Development Build.
+- **PENDIENTE físico:** en Driver pulsar Disponible y comprobar LOCATING→
+  AVAILABLE con coordinate/receivedAt reales, mapa centrado y oferta al crear
+  una request Passenger SEARCHING. También validar permiso lento/denegado,
+  watchdog, background/foreground, TTL y restart en dos dispositivos.
 
 ### Crash Android `Missing approved text: body` — 2026-10-07
 
@@ -1228,6 +1260,12 @@ El style productivo final sigue pendiente de aprobación; se conserva la configu
   disponible. Los tests de gateway usan respuestas controladas, no verifican cobertura live.
 
 ## PENDIENTE ANDROID FÍSICO
+
+- Driver location bootstrap: comprobar `Disponible → Localizando… → AVAILABLE`,
+  que `/v1/driver/state` expone coordinate/receivedAt reales, el mapa centra la
+  última muestra y un Passenger SEARCHING genera oferta. Verificar además permiso
+  lento/denegado, watchdog sin señal, background/foreground, TTL 60 s → LOCATING
+  y recovery tras restart. Automatizado; aún no probado en dos teléfonos.
 
 - Revisar pulse con núcleo siempre opaco; ruta repetida suave sin parpadeos; controles, launch
   con mapa rápido/lento, Reduced Motion y pausa al pasar a background. Comprobar precio

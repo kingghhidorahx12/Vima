@@ -34,8 +34,10 @@ export function decodeMatchingTrip(raw: unknown): MatchingPassengerSnapshot {
 export function decodeDriver(raw: unknown): DriverState {
   const d = raw as DriverState;
   if (!d || !text(d.accountId) || !revision(d.revision) || !revision(d.expiryCount) ||
-    !['OFFLINE', 'AVAILABLE', 'PAUSED', 'ASSIGNED'].includes(d.availability) || !text(d.profile?.driver?.name)) return fail();
-  if (d.location) { normalizeCoordinate(d.location.coordinate); if (!revision(d.location.receivedAt)) return fail(); }
+    !['OFFLINE', 'LOCATING', 'AVAILABLE', 'PAUSED', 'ASSIGNED'].includes(d.availability) || !text(d.profile?.driver?.name)) return fail();
+  if (d.location) { normalizeCoordinate(d.location.coordinate); if (!revision(d.location.receivedAt) ||
+    d.location.heading !== undefined && (!Number.isFinite(d.location.heading) || d.location.heading < 0 || d.location.heading >= 360)) return fail(); }
+  if (d.availability === 'AVAILABLE' && !d.location) return fail();
   if (d.offer && (!text(d.offer.id) || !text(d.offer.requestId) || !revision(d.offer.expiresAt) ||
     !Number.isFinite(d.offer.etaMinutes) || d.offer.etaMinutes < 0 || !validPlace(d.offer.pickup))) return fail();
   if (d.assignment) { if (!text(d.assignment.requestId) || !validPlace(d.assignment.pickup)) return fail(); assignment(d.assignment.value); }

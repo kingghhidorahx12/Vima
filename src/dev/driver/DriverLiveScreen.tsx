@@ -14,6 +14,7 @@ import { VimaButton } from '../../design/components/VimaButton';
 import { visualTokens as t } from '../../design/tokens';
 import { Camera } from '../../map/Camera';
 import { PassengerUserLocation } from '../../features/passenger/PassengerMapPin';
+import { createDriverLocationSession } from './locationSession';
 
 let sequence = 0;
 const operationId = () => `driver-${Date.now()}-${++sequence}`;
@@ -37,23 +38,20 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     return client.subscribeDriver(() => { void queryClient.invalidateQueries({ queryKey: ['driver', accountId] }); });
   }, [client, accountId, queryClient, available, focused, foreground]);
   const availability = state.data?.availability;
+  const tracksLocation = availability === 'LOCATING' || availability === 'AVAILABLE';
   useEffect(() => {
-    if (availability !== 'AVAILABLE' || !focused || !foreground) return;
-    const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
-    const update = async () => {
-      try {
-        const permission = await Location.requestForegroundPermissionsAsync();
-        if (!permission.granted) { setError('Se necesita ubicación para recibir ofertas.'); return; }
-        const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        if (controller.signal.aborted) return;
-        const heading = coords.heading !== null && Number.isFinite(coords.heading) && coords.heading >= 0 && coords.heading < 360 ? coords.heading : undefined;
-        const snapshot = await client.location([coords.longitude, coords.latitude], heading, operationId(), controller.signal);
-        if (!controller.signal.aborted) queryClient.setQueryData<DriverState>(['driver', accountId], old => old && old.revision >= snapshot.revision ? old : snapshot);
-      } catch { if (!controller.signal.aborted) setError('No se pudo actualizar la ubicación.'); }
-      finally { if (!controller.signal.aborted) timer = setTimeout(() => { void update(); }, 15_000); }
-    };
-    void update(); return () => { controller.abort(); if (timer) clearTimeout(timer); };
-  }, [client, accountId, queryClient, availability, focused, foreground]);
+    if (!tracksLocation || !focused || !foreground) return;
+    const session = createDriverLocationSession({
+      location: { requestForegroundPermissionsAsync: Location.requestForegroundPermissionsAsync,
+        getLastKnownPositionAsync: () => Location.getLastKnownPositionAsync(), watchPositionAsync: Location.watchPositionAsync,
+        balancedAccuracy: Location.Accuracy.Balanced }, operationId,
+      send: async (coordinate, heading, id, signal) => {
+        const snapshot = await client.location(coordinate, heading, id, signal);
+        if (!signal.aborted) { setError(''); queryClient.setQueryData<DriverState>(['driver', accountId], old => old && old.revision >= snapshot.revision ? old : snapshot); }
+      }, onError: setError,
+    });
+    return () => session.stop();
+  }, [client, accountId, queryClient, tracksLocation, focused, foreground]);
   const expiresAt = state.data?.offer?.expiresAt;
   useEffect(() => {
     if (!expiresAt) return;
@@ -78,7 +76,7 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
   };
   const data = state.data; const offer = data?.offer; const assigned = data?.assignment;
   const location = data?.location;
-  const labels = { OFFLINE: 'Desconectado', AVAILABLE: 'Disponible', PAUSED: 'En pausa', ASSIGNED: 'Asignado' };
+  const labels = { OFFLINE: 'Desconectado', LOCATING: 'Localizando…', AVAILABLE: 'Disponible', PAUSED: 'En pausa', ASSIGNED: 'Asignado' };
   return <SafeAreaView style={styles.fill}><DriverRideShell mapContent={location ? <>
     <Camera target={{ center: location.coordinate, zoom: 14 }} />
     <PassengerUserLocation active={foreground && focused} place={{ id: 'driver-current', name: '', address: '', coordinate: location.coordinate }} />
@@ -87,7 +85,7 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     <VimaText variant="bodyRegular">{accountId} · {connection === 'online' ? 'Conectado' : connection === 'reconnecting' ? 'Reconectando' : 'Sin conexión'}</VimaText>
     <VimaText variant="bodyRegular">{data ? labels[data.availability] : available ? 'Cargando estado…' : 'Matching no configurado'}</VimaText>
     {data && !assigned ? <View style={styles.actions}>
-      <VimaButton label={availability === 'PAUSED' ? 'Reanudar disponibilidad' : 'Disponible'} disabled={busy || !!pending.current || availability === 'AVAILABLE'}
+      <VimaButton label={availability === 'PAUSED' ? 'Reanudar disponibilidad' : 'Disponible'} disabled={busy || !!pending.current || ['LOCATING', 'AVAILABLE'].includes(availability ?? '')}
         onPress={() => { void act(id => client.availability('AVAILABLE', id)); }} />
       <VimaButton secondary label="Desconectarme" disabled={busy || !!pending.current || availability === 'OFFLINE'}
         onPress={() => { void act(id => client.availability('OFFLINE', id)); }} />

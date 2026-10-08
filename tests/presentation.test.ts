@@ -24,9 +24,9 @@ test('approved VimaText variants render and the Passenger DEV account gate mount
     variants.forEach((variant, index) => assert.deepEqual(texts[index]!.props.style[1], lightTheme.text[variant]));
   } finally { await h.act(async () => tree.unmount()); }
 
-  // A render prop is the component's declared children contract.
-  // eslint-disable-next-line react/no-children-prop
   await h.act(async () => { tree = renderer.create(React.createElement(h.QueryClientProvider, { client: h.client },
+    // A render prop is the component's declared children contract.
+    // eslint-disable-next-line react/no-children-prop
     React.createElement(LiveAccountGate, { role: 'passenger', children: () => null }))); });
   try {
     const copy = tree.root.findAllByType('Text' as never).map(node => node.props.children).flat(Infinity).join(' ');

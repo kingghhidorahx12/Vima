@@ -231,3 +231,10 @@ La barra inferior reutiliza acciones existentes; no autoriza nuevos destinos fun
   dispositivos. Long-poll sólo invalida; GET/reconcile conserva autoridad.
 - Driver DEV mínimo hasta assignment/cancel; sin tracking/lifecycle posterior,
   pagos nuevos, chat, push ni rediseño Passenger. Operación y QA en MATCHING_P0.md.
+- La intención AVAILABLE se resuelve autoritativamente a LOCATING hasta tener
+  ubicación real de menos de 60 s. Sólo AVAILABLE con muestra fresca entra a
+  matching. El TTL se agenda; al vencer revoca oferta ACTIVE y vuelve a LOCATING.
+- La última ubicación es parte de `DriverRecord` persistido y la única autoridad.
+  Snapshot v2 migra v1 sin location a LOCATING, preservando requests, assignments
+  e idempotencia. El cliente Driver usa watcher foreground con last-known fresca
+  opcional y watchdog, nunca coordenadas por defecto ni polling bloqueante.

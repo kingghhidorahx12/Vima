@@ -64,10 +64,18 @@ owned y vigente; congela su snapshot y no vuelve a cotizar durante matching.
 - Sin candidatos, espera hasta disponibilidad/location nueva o deadline.
   Si falla el proveedor para todos los candidatos, reintento técnico a 5 s.
   Scheduler programa la próxima expiración/deadline; no usa el cleanup geo.
-- Liveness de ubicación: muestras recibidas hace menos de 60 s. El Driver DEV
-  consulta Expo Location cada 15 s mientras está AVAILABLE, enfocado y en
-  foreground. Se detiene en background/unmount/otra disponibilidad. Heading
-  inválido se omite; el servidor deriva el inicial de la ruta real si falta.
+- Driver: `OFFLINE | LOCATING | AVAILABLE | PAUSED | ASSIGNED`. La intención
+  AVAILABLE sólo produce AVAILABLE si ya existe una muestra fresca; en otro
+  caso produce LOCATING. Una ubicación real válida confirma LOCATING→AVAILABLE
+  en el mismo commit. Matching exige AVAILABLE y una muestra de menos de 60 s.
+- El scheduler incluye exactamente `receivedAt + 60 s`. Al vencer, AVAILABLE
+  pasa a LOCATING y una oferta ACTIVE se revoca; la request aumenta revision y
+  conserva al Driver en `offered`. OFFLINE/PAUSED/ASSIGNED no cambian por TTL.
+- Driver DEV usa una única sesión `watchPositionAsync` mientras está LOCATING o
+  AVAILABLE, enfocada y en foreground. Puede bootstrappear con last-known sólo
+  si es válida y tiene menos de 60 s. Un watchdog de 10 s limpia el watcher
+  silencioso y reintenta a los 3 s. Blur/background/unmount u otro estado lo
+  detienen. Cada muestra lleva operationId nuevo; heading inválido se omite.
 
 ## Persistencia y recuperación
 
@@ -79,9 +87,18 @@ entre procesos, máquinas ni workers.
 
 Persiste requests/revisions/requestId index, quote congelada, timestamps,
 offered/excluded, ofertas, assignment, recibos idempotentes y disponibilidad/
-contador/revisions de Driver. Los perfiles se reconstruyen desde auth config;
-los bearer tokens nunca entran al snapshot. Recibos históricos pueden conservar
-la muestra de ubicación confirmada; no se usan como liveness al recuperar.
+contador/revisions de Driver. Snapshot schema v2 guarda únicamente la última
+location dentro de `DriverRecord` (coordinate, heading opcional, receivedAt y
+revision); no hay Map paralelo ni historial de ubicación. `DriverState.location`
+se deriva de ese registro. Los perfiles se reconstruyen desde auth config; los
+bearer tokens nunca entran al snapshot.
+
+El archivo conserva el nombre compatible `matching-v1.json`, pero su campo
+`version` es 2. La migración v1 es determinista: un AVAILABLE legado sin location
+persistida pasa a LOCATING y sus ofertas ACTIVE se revocan sin borrar requests,
+assignments ni recibos idempotentes. Corrupción real continúa fallando cerrada.
+Una location v2 fresca sobrevive restart; startup/sweep convierte una vencida a
+LOCATING antes de ofertar.
 
 El startup valida versión/schema/invariantes y procesa expiraciones con el
 reloj actual antes de servir matching. Archivo corrupto/ilegible falla cerrado.
@@ -178,7 +195,9 @@ un probe de sesión a 5 s sólo mientras hay suscriptores y está desconectado.
    Se guarda sólo en SecureStore. El menú Expo Development Client → **Cuenta de
    prueba Vima** permite cambiar/limpiar cuenta; los controles no ocupan el
    viewport Passenger. El gate verifica role y capability contra el backend.
-7. B pulsa Disponible y concede ubicación. Mantener esa superficie en foreground.
+7. B pulsa Disponible y concede ubicación. Puede mostrar **Localizando…** hasta
+   confirmar una muestra real; después `/v1/driver/state` debe mostrar AVAILABLE,
+   `location.coordinate` y `location.receivedAt`. Mantener esa superficie en foreground.
    A elige un viaje dentro de la cobertura comercial, confirma ubicaciones,
    obtiene quote priced vigente y solicita. B debe recibir una oferta con
    countdown/ETA/pickup; aceptar antes del TTL. Comparar assignment (nombre,
@@ -196,7 +215,7 @@ pendiente de esa configuración; no se inventaron cuentas/perfiles comerciales.
 
 | Escenario físico | Estado |
 |---|---|
-| Driver AVAILABLE + ubicación válida | PENDIENTE |
+| Driver LOCATING → AVAILABLE + ubicación válida | PENDIENTE |
 | Passenger quote live/priced → request | PENDIENTE |
 | Oferta → accept → ambos con el mismo assignment | PENDIENTE |
 | Oferta sin respuesta expira a los 20 s | PENDIENTE |

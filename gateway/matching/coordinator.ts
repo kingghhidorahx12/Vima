@@ -11,31 +11,33 @@ import { normalizeCoordinate, type Coordinate } from '../../src/map/models.ts';
 import type { Assignment } from '../../src/features/passenger/model.ts';
 import { matchingPolicy } from '../../src/features/passenger/matchingPolicy.ts';
 import type { DriverAvailability, DriverState, MatchingPassengerSnapshot, RequestState } from '../../src/services/matching/contracts.ts';
+import { isMatchingLocationFresh, matchingLocationPolicy } from '../../src/services/matching/policy.ts';
 
 export interface MatchingClock { now(): number; schedule(delay: number, callback: () => void): () => void }
 export const systemMatchingClock: MatchingClock = { now: Date.now, schedule(delay, callback) {
   const timer = setTimeout(callback, delay); timer.unref(); return () => clearTimeout(timer);
 } };
 const offerTtl = 20_000;
-const locationTtl = 60_000;
 type StoredAssignment = Omit<Assignment, 'driver' | 'vehicle'> & { driverId: string };
 interface RequestRecord {
   id: string; requestId: string; owner: string; revision: number; state: RequestState;
   quote: AuthoritativeRideQuote; createdAt: number; deadline: number; searchStartedAt: number; round: number;
   offered: string[]; excluded: string[]; assignment?: StoredAssignment;
 }
-interface DriverRecord { id: string; availability: DriverAvailability; revision: number; expiryCount: number; locationRevision: number }
+type Location = { coordinate: Coordinate; heading?: number; receivedAt: number; revision: number };
+interface DriverRecord {
+  id: string; availability: DriverAvailability; revision: number; expiryCount: number; locationRevision: number; location?: Location;
+}
 interface OfferRecord {
   id: string; requestId: string; driverId: string; state: 'ACTIVE' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'REVOKED';
   expiresAt: number; route: RouteResult; sample: Assignment['sample'];
 }
 type Receipt = { kind: 'request'; request: RequestRecord } |
-  { kind: 'driver'; driver: DriverRecord; offer?: OfferRecord; request?: RequestRecord; location?: Location };
+  { kind: 'driver'; driver: DriverRecord; offer?: OfferRecord; request?: RequestRecord };
 interface Snapshot {
-  version: 1; requests: Record<string, RequestRecord>; drivers: Record<string, DriverRecord>; offers: Record<string, OfferRecord>;
+  version: 2; requests: Record<string, RequestRecord>; drivers: Record<string, DriverRecord>; offers: Record<string, OfferRecord>;
   requestIds: Record<string, string>; actions: Record<string, { fingerprint: string; result: Receipt }>;
 }
-type Location = { coordinate: Coordinate; heading?: number; receivedAt: number; revision: number };
 export interface MatchingOptions {
   auth: AuthConfig; directory: string; clock?: MatchingClock;
   quote: (id: string, owner: string) => AuthoritativeRideQuote | undefined;
@@ -57,11 +59,53 @@ function heading(route: RouteResult): number {
   }
   throw new MatchingError(503, 'pickup_route_unavailable');
 }
-function validateSnapshot(value: Snapshot, auth: AuthConfig): Snapshot {
+function migrateSnapshot(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || (raw as { version?: unknown }).version !== 1) return raw;
+  const value = structuredClone(raw) as Record<string, unknown>;
+  const drivers = value.drivers as Record<string, DriverRecord> | undefined;
+  const requests = value.requests as Record<string, RequestRecord> | undefined;
+  const offers = value.offers as Record<string, OfferRecord> | undefined;
+  const oldDriver = (driver: DriverRecord) => {
+    if (!driver || typeof driver !== 'object' || Object.keys(driver).some(key => !['id', 'availability', 'revision', 'expiryCount', 'locationRevision'].includes(key)) ||
+      !['OFFLINE', 'AVAILABLE', 'PAUSED', 'ASSIGNED'].includes(driver.availability) || driver.expiryCount >= 3 && driver.availability === 'AVAILABLE') throw new Error();
+  };
+  if (drivers && typeof drivers === 'object') for (const driver of Object.values(drivers)) oldDriver(driver);
+  const actions = value.actions as Record<string, { result?: Record<string, unknown> }> | undefined;
+  if (actions && typeof actions === 'object') for (const action of Object.values(actions)) {
+    const result = action?.result;
+    if (result?.kind === 'driver') {
+      if (Object.keys(result).some(key => !['kind', 'driver', 'offer', 'request', 'location'].includes(key))) throw new Error();
+      oldDriver(result.driver as DriverRecord);
+    }
+  }
+  if (drivers && typeof drivers === 'object') for (const driver of Object.values(drivers)) {
+    if (driver && typeof driver === 'object' && driver.availability === 'AVAILABLE') {
+      driver.availability = 'LOCATING'; driver.revision = Number.isSafeInteger(driver.revision) ? driver.revision + 1 : driver.revision;
+    }
+  }
+  if (offers && requests && typeof offers === 'object' && typeof requests === 'object') for (const offer of Object.values(offers)) {
+    if (offer?.state === 'ACTIVE' && drivers?.[offer.driverId]?.availability === 'LOCATING') {
+      offer.state = 'REVOKED'; const request = requests[offer.requestId];
+      if (request && Number.isSafeInteger(request.revision)) request.revision++;
+    }
+  }
+  if (actions && typeof actions === 'object') for (const action of Object.values(actions)) {
+    const result = action?.result; const driver = result?.driver as DriverRecord | undefined;
+    if (!driver || typeof driver !== 'object') continue;
+    const oldLocation = result!.location as Location | undefined;
+    if (oldLocation && typeof oldLocation === 'object') driver.location = oldLocation;
+    delete result!.location;
+    if (driver.availability === 'AVAILABLE' && !driver.location) driver.availability = 'LOCATING';
+  }
+  value.version = 2; return value;
+}
+
+function validateSnapshot(raw: unknown, auth: AuthConfig): Snapshot {
+  const value = migrateSnapshot(raw) as Snapshot;
   const integer = (n: number) => Number.isSafeInteger(n) && n >= 0;
   const object = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v);
   const fields = (v: object, allowed: string[]) => { if (Object.keys(v).some(key => !allowed.includes(key))) throw new Error(); };
-  if (!object(value) || value.version !== 1 || !['requests', 'drivers', 'offers', 'requestIds', 'actions'].every(k => object(value[k as keyof Snapshot]))) throw new Error();
+  if (!object(value) || value.version !== 2 || !['requests', 'drivers', 'offers', 'requestIds', 'actions'].every(k => object(value[k as keyof Snapshot]))) throw new Error();
   fields(value, ['version', 'requests', 'drivers', 'offers', 'requestIds', 'actions']);
   const request = (r: RequestRecord) => {
     if (!object(r) || !identifier(r.id) || !identifier(r.requestId) || auth.principal(r.owner)?.role !== 'passenger' || !integer(r.revision) ||
@@ -85,10 +129,17 @@ function validateSnapshot(value: Snapshot, auth: AuthConfig): Snapshot {
       for (const line of lines) { if (line.length < 2) throw new Error(); line.forEach(normalizeCoordinate); }
     }
   };
+  const location = (sample: Location) => {
+    if (!object(sample) || !integer(sample.receivedAt) || !integer(sample.revision) ||
+      sample.heading !== undefined && (!Number.isFinite(sample.heading) || sample.heading < 0 || sample.heading >= 360)) throw new Error();
+    fields(sample, ['coordinate', 'heading', 'receivedAt', 'revision']); normalizeCoordinate(sample.coordinate);
+  };
   const driver = (d: DriverRecord) => {
     if (!object(d) || auth.principal(d.id)?.role !== 'driver' || !integer(d.revision) || !integer(d.locationRevision) || !integer(d.expiryCount) ||
-      !['OFFLINE', 'AVAILABLE', 'PAUSED', 'ASSIGNED'].includes(d.availability) || (d.expiryCount >= 3 && d.availability === 'AVAILABLE')) throw new Error();
-    fields(d, ['id', 'availability', 'revision', 'expiryCount', 'locationRevision']);
+      !['OFFLINE', 'LOCATING', 'AVAILABLE', 'PAUSED', 'ASSIGNED'].includes(d.availability) || (d.expiryCount >= 3 && d.availability === 'AVAILABLE') ||
+      (d.availability === 'AVAILABLE' && !d.location)) throw new Error();
+    fields(d, ['id', 'availability', 'revision', 'expiryCount', 'locationRevision', 'location']);
+    if (d.location) { location(d.location); if (d.location.revision !== d.locationRevision) throw new Error(); }
   };
   const offer = (o: OfferRecord) => {
     if (!object(o) || !identifier(o.id) || !identifier(o.requestId) || auth.principal(o.driverId)?.role !== 'driver' || !integer(o.expiresAt) ||
@@ -117,11 +168,10 @@ function validateSnapshot(value: Snapshot, auth: AuthConfig): Snapshot {
   for (const d of Object.values(value.drivers)) if (d.availability === 'ASSIGNED' && !Object.values(value.requests).some(r => r.assignment?.driverId === d.id)) throw new Error();
   for (const action of Object.values(value.actions)) {
     if (!object(action) || typeof action.fingerprint !== 'string' || !object(action.result)) throw new Error();
-    if (action.result.kind === 'request') request(action.result.request);
+    if (action.result.kind === 'request') { fields(action.result, ['kind', 'request']); request(action.result.request); }
     else if (action.result.kind === 'driver') {
+      fields(action.result, ['kind', 'driver', 'offer', 'request']);
       driver(action.result.driver); if (action.result.offer) offer(action.result.offer); if (action.result.request) request(action.result.request);
-      if (action.result.location) { normalizeCoordinate(action.result.location.coordinate);
-        if (!integer(action.result.location.receivedAt) || !integer(action.result.location.revision)) throw new Error(); }
     } else throw new Error();
   }
   return value;
@@ -133,7 +183,6 @@ export class MatchingCoordinator {
   private tail: Promise<unknown> = Promise.resolve();
   private clock: MatchingClock;
   private file: string;
-  private locations = new Map<string, Location>();
   private passes = new Map<string, symbol>();
   private retryAt = new Map<string, number>();
   private listeners = new Set<() => void>();
@@ -148,7 +197,7 @@ export class MatchingCoordinator {
     try { this.state = validateSnapshot(JSON.parse(readFileSync(this.file, 'utf8')), options.auth); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('invalid_matching_snapshot');
-      this.state = { version: 1, requests: {}, drivers: {}, offers: {}, requestIds: {}, actions: {} };
+      this.state = { version: 2, requests: {}, drivers: {}, offers: {}, requestIds: {}, actions: {} };
     }
     for (const id of options.auth.drivers) this.state.drivers[id] ??= { id, availability: 'OFFLINE', revision: 0, expiryCount: 0, locationRevision: 0 };
     this.persist(this.state);
@@ -179,6 +228,7 @@ export class MatchingCoordinator {
     if (r.owner !== p.accountId) throw new MatchingError(403, 'forbidden'); return r;
   }
   private active(s: Snapshot, driverId: string) { return Object.values(s.offers).find(o => o.driverId === driverId && o.state === 'ACTIVE'); }
+  private fresh(location: Location | undefined, now = this.clock.now()) { return !!location && isMatchingLocationFresh(location.receivedAt, now); }
   private revoke(s: Snapshot, r: RequestRecord) {
     for (const o of Object.values(s.offers)) if (o.requestId === r.id && o.state === 'ACTIVE') {
       o.state = 'REVOKED'; s.drivers[o.driverId]!.revision++;
@@ -194,12 +244,19 @@ export class MatchingCoordinator {
       if (d.expiryCount >= 3) d.availability = 'PAUSED';
       next.requests[o.requestId]!.revision++;
     }
+    for (const d of Object.values(next.drivers)) if (d.availability === 'AVAILABLE' && !this.fresh(d.location, now)) {
+      d.availability = 'LOCATING'; d.revision++;
+      const offer = this.active(next, d.id);
+      if (offer) { offer.state = 'REVOKED'; next.requests[offer.requestId]!.revision++; }
+    }
     this.commit(next); this.arm();
   }
   private arm() {
     this.cancelTimer?.(); if (this.closed || this.failed) return;
     const times = [...Object.values(this.state.requests).filter(r => r.state === 'SEARCHING').map(r => r.deadline),
-      ...Object.values(this.state.offers).filter(o => o.state === 'ACTIVE').map(o => o.expiresAt), ...this.retryAt.values()];
+      ...Object.values(this.state.offers).filter(o => o.state === 'ACTIVE').map(o => o.expiresAt),
+      ...Object.values(this.state.drivers).filter(d => d.availability === 'AVAILABLE' && d.location)
+        .map(d => d.location!.receivedAt + matchingLocationPolicy.ttlMs), ...this.retryAt.values()];
     if (times.length) this.cancelTimer = this.clock.schedule(Math.max(0, Math.min(...times) - this.clock.now()), () => {
       for (const [id, time] of this.retryAt) if (time <= this.clock.now()) this.retryAt.delete(id);
       void this.lock(() => this.sweep()).then(() => this.kick()).catch(() => {});
@@ -220,14 +277,14 @@ export class MatchingCoordinator {
   }
   private driverReceipt(s: Snapshot, id: string): Receipt {
     const offer = this.active(s, id); const request = Object.values(s.requests).find(r => r.assignment?.driverId === id) ?? (offer ? s.requests[offer.requestId] : undefined);
-    const location = this.locations.get(id);
-    return { kind: 'driver', driver: s.drivers[id]!, ...(offer ? { offer } : {}), ...(request ? { request } : {}), ...(location ? { location } : {}) };
+    return { kind: 'driver', driver: s.drivers[id]!, ...(offer ? { offer } : {}), ...(request ? { request } : {}) };
   }
   private view(receipt: Receipt): MatchingPassengerSnapshot | DriverState {
     if (receipt.kind === 'request') return structuredClone(this.passenger(receipt.request));
-    const { driver: d, offer: o, request: r, location } = receipt;
+    const { driver: d, offer: o, request: r } = receipt;
     return { accountId: d.id, revision: d.revision, availability: d.availability, expiryCount: d.expiryCount,
-      profile: this.options.auth.profile(d.id), ...(location ? { location } : {}),
+      profile: this.options.auth.profile(d.id), ...(d.location ? { location: { coordinate: d.location.coordinate,
+        ...(d.location.heading !== undefined ? { heading: d.location.heading } : {}), receivedAt: d.location.receivedAt } } : {}),
       ...(o && r ? { offer: { id: o.id, requestId: r.id, expiresAt: o.expiresAt,
         etaMinutes: Math.ceil((o.route.trafficDurationSeconds ?? o.route.durationSeconds) / 60), pickup: r.quote.origin } } : {}),
       ...(r?.assignment ? { assignment: { requestId: r.id, pickup: r.quote.origin, value: this.assignment(r.assignment) } } : {}) };
@@ -281,7 +338,8 @@ export class MatchingCoordinator {
     return this.mutation(p, operationId, ['availability', value], s => {
       const d = s.drivers[p.accountId]!; if (d.availability === 'ASSIGNED') throw new MatchingError(409, 'driver_assigned');
       if (value === 'OFFLINE') { const offer = this.active(s, d.id); if (offer) { offer.state = 'REVOKED'; s.requests[offer.requestId]!.revision++; } }
-      d.availability = value; if (value === 'AVAILABLE') d.expiryCount = 0; d.revision++;
+      d.availability = value === 'OFFLINE' ? 'OFFLINE' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING';
+      if (value === 'AVAILABLE') d.expiryCount = 0; d.revision++;
       return this.driverReceipt(s, d.id);
     }) as Promise<DriverState>;
   }
@@ -290,12 +348,11 @@ export class MatchingCoordinator {
     try { coordinate = normalizeCoordinate(point); } catch { return invalid(); }
     if (bearing !== undefined && (!Number.isFinite(bearing) || bearing < 0 || bearing >= 360)) return invalid();
     return this.mutation(p, operationId, ['location', coordinate, bearing ?? null], s => {
-      const d = s.drivers[p.accountId]!; if (d.availability !== 'AVAILABLE') throw new MatchingError(409, 'driver_unavailable');
-      d.locationRevision++; d.revision++;
-      return { ...this.driverReceipt(s, d.id), location: { coordinate, ...(bearing !== undefined ? { heading: bearing } : {}),
-        receivedAt: this.clock.now(), revision: d.locationRevision } };
-    }, receipt => {
-      if (receipt.kind === 'driver' && receipt.location) this.locations.set(p.accountId, receipt.location);
+      const d = s.drivers[p.accountId]!;
+      if (!['LOCATING', 'AVAILABLE'].includes(d.availability)) throw new MatchingError(409, 'driver_unavailable');
+      d.locationRevision++; d.revision++; d.location = { coordinate, ...(bearing !== undefined ? { heading: bearing } : {}),
+        receivedAt: this.clock.now(), revision: d.locationRevision };
+      d.availability = 'AVAILABLE'; return this.driverReceipt(s, d.id);
     }) as Promise<DriverState>;
   }
   async offerAction(p: Principal, offerId: string, action: 'accept' | 'reject', actionId: string) {
@@ -323,7 +380,7 @@ export class MatchingCoordinator {
       const d = s.drivers[p.accountId]!;
       delete r.assignment; r.excluded.push(d.id); r.round++; r.searchStartedAt = Math.min(this.clock.now(), r.deadline);
       r.state = this.clock.now() >= r.deadline ? 'NO_DRIVER_FOUND' : 'SEARCHING'; r.revision++;
-      d.availability = d.expiryCount >= 3 ? 'PAUSED' : 'AVAILABLE'; d.revision++;
+      d.availability = d.expiryCount >= 3 ? 'PAUSED' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING'; d.revision++;
       return this.driverReceipt(s, d.id);
     }) as Promise<DriverState>;
   }
@@ -355,10 +412,10 @@ export class MatchingCoordinator {
       for (const r of Object.values(this.state.requests)) {
         if (r.state !== 'SEARCHING' || this.passes.has(r.id) || this.retryAt.has(r.id) || Object.values(this.state.offers).some(o => o.requestId === r.id && o.state === 'ACTIVE')) continue;
         const candidates = Object.values(this.state.drivers).filter(d => {
-          const location = this.locations.get(d.id);
-          return d.availability === 'AVAILABLE' && location && this.clock.now() - location.receivedAt < locationTtl &&
+          const location = d.location;
+          return d.availability === 'AVAILABLE' && this.fresh(location) &&
             !this.active(this.state, d.id) && !r.offered.includes(d.id) && !r.excluded.includes(d.id);
-        }).map(d => ({ driver: structuredClone(d), location: structuredClone(this.locations.get(d.id)!) }));
+        }).map(d => ({ driver: structuredClone(d), location: structuredClone(d.location!) }));
         if (!candidates.length) continue;
         const generation = Symbol(); this.passes.set(r.id, generation);
         void this.plan(structuredClone(r), candidates, generation);
@@ -385,9 +442,9 @@ export class MatchingCoordinator {
         const next = structuredClone(this.state); const target = next.requests[r.id]!;
         const eligible = results.filter(result => {
           if (!result) return false;
-          const current = next.drivers[result.driver.id]!; const location = this.locations.get(current.id);
+          const current = next.drivers[result.driver.id]!; const location = current.location;
           return current.revision === result.driver.revision && current.locationRevision === result.location.revision &&
-            current.availability === 'AVAILABLE' && location && this.clock.now() - location.receivedAt < locationTtl &&
+            current.availability === 'AVAILABLE' && this.fresh(location) &&
             !this.active(next, current.id) && !target.offered.includes(current.id) && !target.excluded.includes(current.id);
         }).filter(result => result !== undefined).sort((a, b) =>
           (a.route.trafficDurationSeconds ?? a.route.durationSeconds) - (b.route.trafficDurationSeconds ?? b.route.durationSeconds) || a.driver.id.localeCompare(b.driver.id)).slice(0, 2);

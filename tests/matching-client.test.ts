@@ -6,6 +6,7 @@ import { projectMatchingPhase } from '../src/features/passenger/useMatchingProje
 import type { PassengerTrip } from '../src/features/passenger/model.ts';
 import { reconcileTrip } from '../src/features/trip/contracts.ts';
 import { readFileSync } from 'node:fs';
+import { decodeDriver } from '../src/services/matching/decode.ts';
 
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
 test('live poll sends only invalidations, retries with backoff, reconnects and aborts on unmount', async t => {
@@ -58,4 +59,12 @@ test('DEV identity gate uses SecureStore and the mobile HTTPS bearer guard is pr
   assert.match(gate, /credentials\.read/); assert.match(gate, /secureTextEntry/);
   assert.doesNotMatch(readFileSync('src/dev/passenger/PassengerLiveScreen.tsx', 'utf8'), /async \(\) => null/);
   assert.match(readFileSync('src/services/api/client.ts', 'utf8'), /localHttp && credential/);
+});
+
+test('Driver decoder accepts LOCATING with last-known location and rejects AVAILABLE without location', () => {
+  const profile = { driver: { name: 'Driver', rating: 4.8 }, vehicle: { name: 'Auto', plate: 'TEST', color: 'Blanco' } };
+  const locating = decodeDriver({ accountId: 'd1', revision: 1, availability: 'LOCATING', expiryCount: 0, profile,
+    location: { coordinate: [-99.8, 19.8], receivedAt: 1, heading: 90 } });
+  assert.equal(locating.availability, 'LOCATING');
+  assert.throws(() => decodeDriver({ accountId: 'd1', revision: 1, availability: 'AVAILABLE', expiryCount: 0, profile }), /Invalid matching response/);
 });

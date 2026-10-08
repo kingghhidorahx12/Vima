@@ -2,7 +2,7 @@ import type { Assignment, PassengerTrip, Place } from '../../features/passenger/
 import type { Coordinate } from '../../map/models.ts';
 
 export type RequestState = 'SEARCHING' | 'ASSIGNED' | 'CANCELLED' | 'NO_DRIVER_FOUND';
-export type DriverAvailability = 'OFFLINE' | 'AVAILABLE' | 'PAUSED' | 'ASSIGNED';
+export type DriverAvailability = 'OFFLINE' | 'LOCATING' | 'AVAILABLE' | 'PAUSED' | 'ASSIGNED';
 export interface DriverState {
   accountId: string; revision: number; availability: DriverAvailability; expiryCount: number;
   profile: { driver: Assignment['driver']; vehicle: Assignment['vehicle'] };

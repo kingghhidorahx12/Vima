@@ -119,7 +119,7 @@ test('a rejected late action still advances a group expired by that mutation bef
   } finally { f.close(); }
 });
 
-test('availability and fresh location wake waiting requests; stale locations never create offers after restart', async () => {
+test('availability and persisted fresh location wake waiting requests; stale locations stop matching', async () => {
   const f = setup(); try {
     await f.ready(); const r = await f.c.create(p, 'quote', 'waiting'); await flush();
     await f.c.availability(driver(1), 'AVAILABLE', 'available-1'); await flush();
@@ -129,10 +129,97 @@ test('availability and fresh location wake waiting requests; stale locations nev
     await f.restart(); const offer = (await f.c.driver(driver(1))).offer!;
     assert.ok(offer); f.clock.advance(20_000); await flush();
     f.addQuote('next'); await f.c.create(p, 'next', 'next'); await flush();
+    assert.ok((await f.c.driver(driver(1))).offer);
+    f.clock.advance(40_000); await flush();
+    assert.equal((await f.c.driver(driver(1))).availability, 'LOCATING');
     assert.equal((await f.c.driver(driver(1))).offer, undefined);
     await f.c.location(driver(1), [-0.1, 0.1], undefined, 'loc-new'); await flush();
+    f.addQuote('after-refresh'); await f.c.create(p, 'after-refresh', 'after-refresh'); await flush();
     assert.ok((await f.c.driver(driver(1))).offer);
   } finally { f.close(); }
+});
+
+test('AVAILABLE intent bootstraps through LOCATING and exact 60 second freshness expiry', async () => {
+  const f = setup(1); try {
+    await f.ready(); const locating = await f.c.availability(driver(1), 'AVAILABLE', 'intent');
+    assert.equal(locating.availability, 'LOCATING'); assert.equal(locating.expiryCount, 0); assert.equal(locating.location, undefined);
+    const request = await f.c.create(p, 'quote', 'waiting-location'); await flush();
+    assert.equal((await f.c.driver(driver(1))).offer, undefined);
+    const available = await f.c.location(driver(1), [-0.1, 0.1], 90, 'first-real-sample'); await flush();
+    assert.equal(available.availability, 'AVAILABLE'); assert.equal(available.revision, locating.revision + 1);
+    assert.deepEqual(available.location?.coordinate, [-0.1, 0.1]);
+    assert.equal(available.location?.receivedAt, f.clock.now()); assert.equal((await f.c.driver(driver(1))).offer?.requestId, request.id);
+    f.clock.advance(59_999); assert.equal((await f.c.driver(driver(1))).availability, 'AVAILABLE');
+    f.clock.advance(1); await flush(); const expired = await f.c.driver(driver(1));
+    assert.equal(expired.availability, 'LOCATING'); assert.deepEqual(expired.location?.coordinate, [-0.1, 0.1]);
+    const recovered = await f.c.location(driver(1), [-0.2, 0.2], undefined, 'fresh-again');
+    assert.equal(recovered.availability, 'AVAILABLE'); assert.deepEqual(recovered.location?.coordinate, [-0.2, 0.2]);
+  } finally { f.close(); }
+});
+
+test('freshness scheduler revokes an ACTIVE offer and preserves offered history', async () => {
+  const f = setup(3); try {
+    await f.ready(); await f.available(1); f.clock.advance(50_000);
+    await f.available(2); await f.available(3);
+    const request = await f.c.create(p, 'quote', 'freshness-revoke'); await flush();
+    const first = (await f.c.driver(driver(1))).offer!; const second = (await f.c.driver(driver(2))).offer!;
+    assert.ok(first); assert.ok(second); const before = (await f.c.fetch(p, request.id)).revision;
+    f.clock.advance(10_000); await flush();
+    assert.equal((await f.c.driver(driver(1))).availability, 'LOCATING');
+    assert.equal((await f.c.driver(driver(1))).offer, undefined); assert.ok((await f.c.fetch(p, request.id)).revision > before);
+    await f.c.offerAction(driver(2), second.id, 'reject', 'reject-survivor'); await flush();
+    assert.equal((await f.c.driver(driver(1))).offer, undefined);
+    assert.equal((await f.c.driver(driver(3))).offer?.requestId, request.id);
+  } finally { f.close(); }
+});
+
+test('restart preserves fresh location, expires stale AVAILABLE, and assignment cancellation uses freshness', async () => {
+  const fresh = setup(1); try {
+    await fresh.ready(); await fresh.available(1); const stored = await fresh.c.driver(driver(1)); await fresh.restart();
+    const recovered = await fresh.c.driver(driver(1)); assert.equal(recovered.availability, 'AVAILABLE'); assert.deepEqual(recovered.location, stored.location);
+    const persisted = JSON.parse(readFileSync(join(fresh.directory, 'matching-v1.json'), 'utf8'));
+    assert.equal(persisted.version, 2); assert.deepEqual(persisted.drivers.d1.location.coordinate, stored.location?.coordinate);
+    fresh.clock.advance(60_000); await fresh.restart(); assert.equal((await fresh.c.driver(driver(1))).availability, 'LOCATING');
+  } finally { fresh.close(); }
+  const assigned = setup(1); try {
+    await assigned.ready(); await assigned.available(1); const request = await assigned.c.create(p, 'quote', 'cancel-stale'); await flush();
+    const offer = (await assigned.c.driver(driver(1))).offer!; await assigned.c.offerAction(driver(1), offer.id, 'accept', 'accept-stale');
+    assigned.clock.advance(60_000); assert.equal((await assigned.c.driver(driver(1))).availability, 'ASSIGNED');
+    assert.equal((await assigned.c.cancelAssignment(driver(1), request.id, 'cancel-stale')).availability, 'LOCATING');
+  } finally { assigned.close(); }
+});
+
+test('snapshot v1 migrates AVAILABLE without location to LOCATING and preserves request idempotency', async () => {
+  const f = setup(1); try {
+    await f.ready(); const request = await f.c.create(p, 'quote', 'migrate-request');
+    await f.c.availability(driver(1), 'AVAILABLE', 'legacy-available'); f.c.close();
+    const path = join(f.directory, 'matching-v1.json'); const legacy = JSON.parse(readFileSync(path, 'utf8'));
+    legacy.version = 1; legacy.drivers.d1.availability = 'AVAILABLE';
+    for (const action of Object.values(legacy.actions) as { result: { kind: string; driver?: { availability: string }; location?: unknown } }[]) {
+      if (action.result.kind === 'driver' && action.result.driver) action.result.driver.availability = 'AVAILABLE';
+    }
+    writeFileSync(path, JSON.stringify(legacy)); await f.restart();
+    assert.equal((await f.c.driver(driver(1))).availability, 'LOCATING');
+    assert.equal((await f.c.create(p, 'quote', 'migrate-request')).id, request.id);
+  } finally { f.close(); }
+  const corrupt = setup(1); try {
+    await corrupt.ready(); corrupt.c.close(); const path = join(corrupt.directory, 'matching-v1.json');
+    const legacy = JSON.parse(readFileSync(path, 'utf8')); legacy.version = 1;
+    legacy.drivers.d1.availability = 'AVAILABLE'; legacy.drivers.d1.expiryCount = 3;
+    writeFileSync(path, JSON.stringify(legacy)); await assert.rejects(corrupt.restart(), /invalid_matching_snapshot/);
+  } finally { corrupt.close(); }
+});
+
+test('location TTL never changes OFFLINE, PAUSED or ASSIGNED drivers', async () => {
+  const offline = setup(1); try {
+    await offline.ready(); await offline.available(1); await offline.c.availability(driver(1), 'OFFLINE', 'offline');
+    offline.clock.advance(60_000); assert.equal((await offline.c.driver(driver(1))).availability, 'OFFLINE');
+  } finally { offline.close(); }
+  const assigned = setup(1); try {
+    await assigned.ready(); await assigned.available(1); await assigned.c.create(p, 'quote', 'assigned-ttl'); await flush();
+    const offer = (await assigned.c.driver(driver(1))).offer!; await assigned.c.offerAction(driver(1), offer.id, 'accept', 'accept-ttl');
+    assigned.clock.advance(60_000); assert.equal((await assigned.c.driver(driver(1))).availability, 'ASSIGNED');
+  } finally { assigned.close(); }
 });
 
 test('logical 20 second expiry, third expiry pauses durably, explicit resume alone resets counter', async () => {
