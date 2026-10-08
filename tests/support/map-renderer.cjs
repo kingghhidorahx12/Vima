@@ -53,6 +53,9 @@ function createMapHarness({ reduced = false } = {}) {
   function load(file) {
     const absolute = path.resolve(root, file);
     if (absolute.endsWith('ReducedMotion.tsx')) return { useMotionPolicy: () => policy };
+    if (absolute.endsWith(path.join('design', 'themes', 'index.tsx'))) return {
+      useVimaTheme: () => load('src/design/themes/light.ts').lightTheme,
+    };
     // Existing vehicle interpolation is tested separately; this boundary checks native pose dispatch.
     if (absolute.endsWith('useVehicleMotion.ts')) return { useVehicleMotion: () => poses };
     if (modules.has(absolute)) return modules.get(absolute).exports;
@@ -67,7 +70,7 @@ function createMapHarness({ reduced = false } = {}) {
       if (id.endsWith('.png')) return 1;
       if (!id.startsWith('.')) return require(id);
       const base = path.resolve(path.dirname(absolute), id);
-      const target = [base, base + '.ts', base + '.tsx', path.join(base, 'index.ts')]
+      const target = [base, base + '.ts', base + '.tsx', path.join(base, 'index.ts'), path.join(base, 'index.tsx')]
         .find(p => fs.existsSync(p) && fs.statSync(p).isFile());
       if (!target) throw new Error('Missing test import ' + id);
       return load(target);

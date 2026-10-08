@@ -5,7 +5,8 @@ import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph
 import { VimaText } from '../../design/primitives';
 import { textStyle, interFamilies } from '../../design/typography';
 import { visualTokens as t } from '../../design/tokens';
-import { passengerSurfaces } from '../../design/presentation';
+import { usePassengerPresentation } from '../../design/presentation';
+import { useVimaTheme } from '../../design/themes';
 import { motionDistances, motionTimings } from '../../motion/timing';
 import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { usePressFeedback } from '../../motion/usePressFeedback';
@@ -31,14 +32,18 @@ const moveExit = FadeOutDown.duration(motionTimings.navigation.duration).easing(
 /** Visual destinations only. The three unavailable modules have no handlers or routes. */
 export function PassengerBottomNavigation({ visible, bottomInset, onHome }: { visible: boolean; bottomInset: number; onHome: () => void }) {
   const { reducedMotion } = useMotionPolicy();
+  const theme = useVimaTheme();
   return visible ? <Animated.View testID="passenger-bottom-navigation"
     entering={reducedMotion ? fadeEnter : moveEnter} exiting={reducedMotion ? fadeExit : moveExit}
-    style={[styles.navigation, { height: bottomNavigationHeight(bottomInset), paddingBottom: navigationBottomPadding(bottomInset) }]}>
+    style={[styles.navigation, { backgroundColor: theme.roles.surface,
+      height: bottomNavigationHeight(bottomInset), paddingBottom: navigationBottomPadding(bottomInset) }]}>
     {tabs.map(tab => <NavTab key={tab.label} tab={tab} onHome={onHome} />)}
   </Animated.View> : null;
 }
 function NavTab({ tab, onHome }: { tab: typeof tabs[number]; onHome: () => void }) {
   const feedback = usePressFeedback();
+  const theme = useVimaTheme();
+  const presentation = usePassengerPresentation();
   const active = useSharedValue(tab.enabled ? 1 : 0);
   useEffect(() => {
     active.set(fadeTo(Number(tab.enabled), motionTimings.feedback));
@@ -50,29 +55,28 @@ function NavTab({ tab, onHome }: { tab: typeof tabs[number]; onHome: () => void 
       accessibilityState={{ selected: tab.enabled, disabled: !tab.enabled }} disabled={!tab.enabled}
       accessibilityHint={tab.enabled ? undefined : 'Módulo no disponible'} onPress={tab.enabled ? onHome : undefined}
       onPressIn={tab.enabled ? feedback.onPressIn : undefined} onPressOut={tab.enabled ? feedback.onPressOut : undefined}
-      style={({ pressed }) => [styles.tab, pressed && tab.enabled && passengerSurfaces.pressed]}>
+      style={({ pressed }) => [styles.tab, pressed && tab.enabled && presentation.pressed]}>
       <View style={styles.tabVisual}>
         <Animated.View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           style={[styles.tabColorLayer, inactiveColor]}>
-          <VimaGlyph name={tab.icon} color={t.colors.graphite} />
-          <VimaText variant="caption" style={[styles.label, styles.inactiveLabel]}>{tab.label}</VimaText>
+          <VimaGlyph name={tab.icon} color={theme.roles.control} />
+          <VimaText variant="caption" style={[styles.label, { color: theme.roles.control }]}>{tab.label}</VimaText>
         </Animated.View>
         <Animated.View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           style={[styles.tabColorLayer, styles.activeLayer, activeColor]}>
-          <VimaGlyph name={tab.icon} color={t.colors.greenDark} />
-          <VimaText variant="caption" style={[styles.label, styles.activeLabel]}>{tab.label}</VimaText>
+          <VimaGlyph name={tab.icon} color={theme.roles.positiveStrong} />
+          <VimaText variant="caption" style={[styles.label, { color: theme.roles.positiveStrong }]}>{tab.label}</VimaText>
         </Animated.View>
       </View>
     </Pressable></Animated.View>;
 }
 const styles = StyleSheet.create({
-  navigation: { flexDirection: 'row', backgroundColor: t.colors.white, paddingTop: navigationTopPadding },
+  navigation: { flexDirection: 'row', paddingTop: navigationTopPadding },
   tabFrame: { flex: 1 },
   tab: { height: navigationTabHeight, minHeight: 44, justifyContent: 'center', alignItems: 'center', gap: 2,
     borderRadius: t.radii.fieldPx },
   tabVisual: { position: 'relative' },
   tabColorLayer: { alignItems: 'center', gap: 2 },
   activeLayer: { position: 'absolute', top: 0, left: 0, right: 0 },
-  activeLabel: { color: t.colors.greenDark }, inactiveLabel: { color: t.colors.graphite },
   label: { ...textStyle({ variant: 'caption' }), fontFamily: interFamilies[500] },
 });

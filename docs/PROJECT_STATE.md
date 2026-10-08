@@ -1,13 +1,45 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-08 en `codex/driver-ui-v1-light-dark-p0`,
-desde `codex/passenger-identity-epoch-driver-actions-p0` @ `b9917396`.
+Actualizado 2026-10-08 en `codex/global-light-dark-theme-p0`,
+desde `codex/driver-ui-v1-light-dark-p0` @ `4dd50e4c`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Theme global único light/dark — 2026-10-08
+
+- `RootProviders` resuelve exactamente un `VimaThemeProvider` productivo. Light
+  continúa como default y `EXPO_PUBLIC_VIMA_THEME=dark` habilita el preview
+  técnico global sólo en DEV; no existe selector, persistencia ni detección de
+  horario/sistema.
+- Passenger, Driver, `LiveAccountGate`, primitives y componentes compartidos
+  consumen el mismo contrato tipado de roles semánticos. Se eliminó el provider
+  anidado de Driver, `DriverThemeName`, `resolveDriverTheme` y
+  `EXPO_PUBLIC_VIMA_DRIVER_THEME`. `VimaText` obtiene su color base directamente
+  del theme activo y los componentes no ramifican por nombre de theme.
+- Passenger conserva árbol, medidas, sheet heights, route-fit, Camera, motion,
+  contenido e interacciones. Home, Search, reviewing/confirm, requesting,
+  matching y assigned cambian únicamente superficies/colores del contrato.
+  Driver conserva compact/operational, estados, critical viewport, acciones y
+  Offer sin cambios funcionales.
+- `VimaMap` deriva light/dark del contexto global para Passenger y Driver. El
+  Positron bundled conocido usa `passengerBasemap` o `darkVimaBasemap`. Un style
+  custom sigue autoritativo sin recoloring; `EXPO_PUBLIC_MAP_STYLE_DARK_URL`
+  permite un style dark explícito y su ausencia conserva el custom light.
+- StatusBar cambia contenido claro/oscuro desde el provider raíz. Los assets
+  finales Vima no se recolorean; el lockup conserva exactamente el mismo asset
+  aprobado.
+- **VERIFICADO automatizado:** TypeScript, lint, suite completa **256/256**,
+  gateway **68/68**, worklets (19 archivos), aislamiento fixture/release,
+  splash y export Hermes Android/iOS. Expo Doctor completó **20/21** únicamente
+  por los cinco patches SDK 57 conocidos; no se actualizaron dependencias en
+  esta rama visual.
+- Sin dependencias ni cambios nativos. QA físico Android global light/dark sigue
+  pendiente en Passenger y Driver; no se declara PASS funcional de
+  A→cancel→B→assigned+PIN ni retry/provenance.
 
 ### Driver UI v1 A claro + B oscuro y viewport crítico — 2026-10-08
 
@@ -25,10 +57,10 @@ sustituyen los valores visuales descritos en las secciones anteriores.
   ETA reales, sin llamada, mensaje, navegación ni fases inventadas.
 - `DriverOffer` no cambió: countdown, pickup, ETA, Aceptar/Rechazar, orden,
   región crítica, target/operationId y `offer_render` se conservan.
-- Theme A claro sigue siendo default. Theme B usa base `#0B0F0E`, surfaces
+- Theme light sigue siendo default. Dark global usa base `#0B0F0E`, surfaces
   `#121816`/`#18201D` y texto `#F6F8F7`, con las mismas keys, árbol y geometría.
-  Preview oscuro únicamente en DEV mediante `EXPO_PUBLIC_VIMA_DRIVER_THEME=dark`;
-  no hay selector ni persistencia. Passenger continúa montado en light.
+  Preview oscuro únicamente en DEV mediante `EXPO_PUBLIC_VIMA_THEME=dark`;
+  no hay selector ni persistencia y el mismo theme alcanza toda la app.
 - Sin location se centra el mapa en el único fallback Atlacomulco compartido,
   nunca en world view. El basemap oscuro sólo recolorea el Positron bundled de
   schema conocido; un style URL explícito permanece autoritativo e intacto.

@@ -754,7 +754,7 @@ async function measure(tree: ReactTestRenderer, content = 250, header = 28) {
   return visible;
 }
 
-test('transparent dark-content status bar overlays the clipped map; safe chrome, sheet and nav retain their geometry', async () => {
+test('global status chrome leaves Passenger edge-to-edge geometry and safe chrome intact', async () => {
   for (const [top, bottom] of [[0, 0], [24, 16], [48, 34]]) {
     const h = createHarness({}, { insets: { top, bottom, left: 0, right: 0 } });
     const fixture = createPassengerFixtureGateway(clock); const tree: ReactTestRenderer = await h.render(fixture.gateway);
@@ -762,7 +762,7 @@ test('transparent dark-content status bar overlays the clipped map; safe chrome,
       await settle();
       assert.equal(style(id(tree, 'passenger-root')).backgroundColor, '#F6F7F8');
       assert.equal(tree.root.findAllByType('SafeAreaView' as never).length, 0);
-      assert.equal(host(tree, 'StatusBar').props.style, 'dark');
+      assert.equal(tree.root.findAllByType('StatusBar' as never).length, 0);
       assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-map-top-gap').length, 0);
       assert.equal(tree.root.findAll(n => n.props.testID === 'passenger-status-surface').length, 0);
       const surface = id(tree, 'passenger-map-surface');

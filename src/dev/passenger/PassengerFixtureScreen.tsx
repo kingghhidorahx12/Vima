@@ -10,6 +10,7 @@ import { createPassengerFixtureGateway, type FixtureOutcome } from './gateway';
 import { locateCurrentPlace } from '../../services/location/currentPlace';
 
 import { developmentMap } from './mapConfig';
+import { useVimaTheme } from '../../design/themes';
 
 export default function PassengerFixtureScreen() {
   if (!__DEV__) throw new Error('Passenger fixtures are development-only');
@@ -18,6 +19,7 @@ export default function PassengerFixtureScreen() {
   const [outcome, setOutcome] = useState<FixtureOutcome>('prolonged');
   const [notice, setNotice] = useState('');
   const client = useQueryClient();
+  const theme = useVimaTheme();
   useEffect(() => () => { fixture.controls.dispose(); client.removeQueries({ queryKey: ['passenger', fixture.gateway.scope] }); }, [client, fixture]);
   useFocusEffect(useCallback(() => {
     let mounted = true;
@@ -54,8 +56,9 @@ export default function PassengerFixtureScreen() {
       safety: () => explain('Fixture · Seguridad: límite de integración; no se envió ninguna alerta.'),
     }} />
     {expanded ? <View style={styles.overlay}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Cerrar controles de prueba" onPress={() => setExpanded(false)} style={styles.scrim} />
-      <ScrollView style={styles.tools} contentContainerStyle={styles.toolContent}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Cerrar controles de prueba" onPress={() => setExpanded(false)}
+        style={[styles.scrim, { backgroundColor: theme.roles.scrim }]} />
+      <ScrollView style={[styles.tools, { backgroundColor: theme.roles.surface }]} contentContainerStyle={styles.toolContent}>
       <Pressable accessibilityRole="button" onPress={() => setExpanded(false)}><VimaText variant="bodyMedium">Cerrar controles de prueba</VimaText></Pressable>
       {notice ? <Pressable onPress={() => setNotice('')}><VimaText variant="caption">{notice}</VimaText></Pressable> : null}
       <VimaText variant="caption">Controles de prueba · siguiente resultado: {outcome} · trazado, puntos y viewport de mapa provisionales</VimaText>
@@ -80,13 +83,15 @@ export default function PassengerFixtureScreen() {
   </View>;
 }
 function Tool({ label, action }: { label: string; action: () => void }) {
-  return <Pressable accessibilityRole="button" onPress={action} style={styles.tool}><VimaText variant="caption">{label}</VimaText></Pressable>;
+  const theme = useVimaTheme();
+  return <Pressable accessibilityRole="button" onPress={action} style={[styles.tool, { borderColor: theme.roles.border }]}>
+    <VimaText variant="caption">{label}</VimaText></Pressable>;
 }
 const styles = StyleSheet.create({
   fill: { flex: 1 }, overlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end' },
-  scrim: { ...StyleSheet.absoluteFill, backgroundColor: t.colors.carbon, opacity: 0.65 },
-  tools: { maxHeight: '65%', backgroundColor: t.colors.white, borderTopLeftRadius: t.radii.sheetPx, borderTopRightRadius: t.radii.sheetPx },
+  scrim: { ...StyleSheet.absoluteFill, opacity: 0.65 },
+  tools: { maxHeight: '65%', borderTopLeftRadius: t.radii.sheetPx, borderTopRightRadius: t.radii.sheetPx },
   toolContent: { padding: t.spacing.mobileHorizontalMarginPx, gap: t.spacing.scalePx[1] },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.scalePx[1] },
-  tool: { padding: t.spacing.scalePx[1], borderColor: t.borders.standardColor, borderWidth: t.borders.standardWidthPx, borderRadius: t.radii.smallPx },
+  tool: { padding: t.spacing.scalePx[1], borderWidth: t.borders.standardWidthPx, borderRadius: t.radii.smallPx },
 });

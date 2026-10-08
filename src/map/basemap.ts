@@ -124,12 +124,12 @@ const darkLayers = (passengerBasemap as unknown as { layers: Record<string, unkn
   return local || labelPaint ? { ...layer, paint: { ...paint, ...local, ...labelPaint } } : layer;
 });
 
-/** Dark Driver palette over the same bundled, known OpenMapTiles schema. */
-export const darkDriverBasemap = {
+/** Global dark palette over the same bundled, known OpenMapTiles schema. */
+export const darkVimaBasemap = {
   ...passengerBasemap, layers: darkLayers,
 } as unknown as Exclude<MapProps['mapStyle'], string>;
 
 /** Explicit custom styles remain authoritative; never guess another provider's schema. */
 export function resolveBasemapStyle(url: string, variant: 'light' | 'dark' = 'light'): MapProps['mapStyle'] {
-  return url === developmentDemoStyle ? variant === 'dark' ? darkDriverBasemap : passengerBasemap : url;
+  return url === developmentDemoStyle ? variant === 'dark' ? darkVimaBasemap : passengerBasemap : url;
 }

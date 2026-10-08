@@ -6,7 +6,7 @@ import { VimaGlyph } from '../design/components/VimaGlyph';
 import { useMotionPolicy } from './ReducedMotion';
 import { motionEasings, motionTimings } from './timing';
 import { motionTokens as m } from './tokens';
-import { surfaceColors } from '../design/presentation';
+import { useVimaTheme } from '../design/themes';
 import { fadeTo } from './helpers';
 
 export interface SearchCycle {
@@ -39,6 +39,7 @@ export function useSearchCycle(visible: boolean): SearchCycle {
 /** Two matching rings maximum, driven by the shared clock. */
 export function SearchPulse({ visible, expanded, cycle }: { visible: boolean; expanded: boolean; cycle: SearchCycle }) {
   const policy = useMotionPolicy();
+  const theme = useVimaTheme();
   const expansion = useSharedValue(0);
   useEffect(() => {
     cancelAnimation(expansion);
@@ -51,15 +52,17 @@ export function SearchPulse({ visible, expanded, cycle }: { visible: boolean; ex
   const second = useAnimatedStyle(() => ring((cycle.progress.get() + 1 / m.interactionRules.searchPulseMaxRings) % 1, cycle.running && visible));
   return <View accessible={false} pointerEvents="none" style={styles.area}>
     <View style={styles.rings}>
-      <Animated.View style={[styles.ring, first]} />
-      <Animated.View style={[styles.ring, second]} />
-      <View style={styles.vehicle}><VimaGlyph name="car" color={t.colors.greenDark} /></View>
+      <Animated.View style={[styles.ring, { backgroundColor: theme.roles.positiveWash, borderColor: theme.roles.positiveStrong }, first]} />
+      <Animated.View style={[styles.ring, { backgroundColor: theme.roles.positiveWash, borderColor: theme.roles.positiveStrong }, second]} />
+      <View style={[styles.vehicle, { backgroundColor: theme.roles.positiveWash, borderColor: theme.roles.border }]}>
+        <VimaGlyph name="car" color={theme.roles.positiveStrong} /></View>
     </View>
   </View>;
 }
 
 /** A stationary exterior halo. Focus changes fade; only the shared cycle breathes. */
 export function useSearchFocusBorder(focused: boolean) {
+  const theme = useVimaTheme();
   const progress = useSharedValue(focused ? 1 : 0);
   useEffect(() => {
     cancelAnimation(progress);
@@ -67,12 +70,13 @@ export function useSearchFocusBorder(focused: boolean) {
     return () => cancelAnimation(progress);
   }, [focused, progress]);
   return useAnimatedStyle(() => ({ borderColor: interpolateColor(progress.get(), [0, 1],
-    [t.colors.green, t.colors.greenDark]) }));
+    [theme.roles.positive, theme.roles.positiveStrong]) }));
 }
 
 export function SearchInputGlow({ cycle, focused = false, home = false }: {
   cycle: SearchCycle; focused?: boolean; home?: boolean;
 }) {
+  const theme = useVimaTheme();
   const focus = useSharedValue(focused ? 1 : 0);
   useEffect(() => {
     cancelAnimation(focus);
@@ -84,7 +88,9 @@ export function SearchInputGlow({ cycle, focused = false, home = false }: {
     return { opacity: (home ? 0.18 : 0.20) + focus.get() * m.interactionRules.inputFocusHaloBoost + breath * 0.05 };
   });
   return <Animated.View testID={home ? 'passenger-home-search-glow' : 'passenger-active-search-glow'}
-    pointerEvents="none" style={[styles.inputGlow, home && styles.homeGlow, halo]} />;
+    pointerEvents="none" style={[styles.inputGlow, { backgroundColor: theme.roles.positiveWash,
+      boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 16, spreadDistance: 4, color: theme.roles.positive }] },
+      home && styles.homeGlow, halo]} />;
 }
 function ring(progress: number, animate: boolean) {
   'worklet';
@@ -95,13 +101,11 @@ function ring(progress: number, animate: boolean) {
 }
 const size = t.components.iconSizesPx[2]! * 4;
 const styles = StyleSheet.create({
-  inputGlow: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, backgroundColor: surfaceColors.brandWash,
-    boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 16, spreadDistance: 4, color: t.colors.green }] },
+  inputGlow: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx },
   homeGlow: { borderRadius: 24 },
   area: { alignItems: 'center', justifyContent: 'center', padding: t.spacing.scalePx[2] },
   rings: { width: size, height: size, alignItems: 'center', justifyContent: 'center' },
-  ring: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, backgroundColor: surfaceColors.brandWash,
-    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.greenDark },
-  vehicle: { width: size / 2, height: size / 2, borderRadius: t.radii.pillPx, backgroundColor: surfaceColors.brandWash,
-    alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border },
+  ring: { ...StyleSheet.absoluteFill, borderRadius: t.radii.pillPx, borderWidth: t.borders.standardWidthPx },
+  vehicle: { width: size / 2, height: size / 2, borderRadius: t.radii.pillPx,
+    alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx },
 });

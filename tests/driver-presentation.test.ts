@@ -5,7 +5,7 @@ import { darkTheme } from '../src/design/themes/dark.ts';
 import { lightTheme } from '../src/design/themes/light.ts';
 import { driverConnectionLabel, driverGpsLabel, driverMapFallback, driverPresentation,
   driverSurfaceVariant } from '../src/features/driver/driverPresentation.ts';
-import { resolveDriverThemeName } from '../src/features/driver/driverTheme.ts';
+import { resolveVimaThemeName } from '../src/design/themes/resolve.ts';
 import type { DriverState } from '../src/services/matching/contracts.ts';
 
 const place = { id: 'pickup', name: 'Plaza', address: 'Centro', coordinate: [-99.88, 19.79] as [number, number] };
@@ -63,9 +63,9 @@ test('light and dark share public contracts and DEV is the only dark preview gat
   assert.deepEqual(Object.keys(darkTheme), Object.keys(lightTheme));
   assert.deepEqual(Object.keys(darkTheme.surfaces), Object.keys(lightTheme.surfaces));
   assert.deepEqual(Object.keys(darkTheme.text), Object.keys(lightTheme.text));
-  assert.equal(resolveDriverThemeName(true, 'dark'), 'dark');
-  assert.equal(resolveDriverThemeName(true, ' light '), 'light');
-  assert.equal(resolveDriverThemeName(false, 'dark'), 'light');
+  assert.equal(resolveVimaThemeName(true, 'dark'), 'dark');
+  assert.equal(resolveVimaThemeName(true, ' light '), 'light');
+  assert.equal(resolveVimaThemeName(false, 'dark'), 'light');
   const panel = readFileSync('src/features/driver/DriverStatePanel.tsx', 'utf8');
   assert.doesNotMatch(panel, /dark\s*\?\s*</);
   assert.doesNotMatch(panel, /dark\s*&&\s*</);

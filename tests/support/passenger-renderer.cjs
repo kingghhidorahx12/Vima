@@ -8,7 +8,7 @@ const query = require('@tanstack/react-query');
 
 // Native boundaries are test doubles. This tests React identity/interaction, not native rendering.
 function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top: 24, bottom: 16, left: 0, right: 0 },
-  realRideSheet = false } = {}) {
+  realRideSheet = false, themeName = 'light' } = {}) {
   const animations = [];
   const delays = [];
   const repeats = [];
@@ -83,7 +83,9 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     };
     if (resolved.endsWith('haptics.ts')) return { semanticHaptics: async (event) => { mounted.haptics.push(event); } };
     if (resolved.endsWith('ReducedMotion.tsx')) return { useMotionPolicy: () => ({ reducedMotion: reduced, allowDecorativeLoops: !reduced }) };
-    if (resolved.endsWith(path.join('themes', 'index.tsx'))) return { useVimaTheme: () => load(path.join(root, 'src/design/themes/light.ts')).lightTheme };
+    if (resolved.endsWith(path.join('themes', 'index.tsx'))) return { useVimaTheme: () => themeName === 'dark'
+      ? load(path.join(root, 'src/design/themes/dark.ts')).darkTheme
+      : load(path.join(root, 'src/design/themes/light.ts')).lightTheme };
     if (resolved.endsWith('.json')) return JSON.parse(fs.readFileSync(resolved, 'utf8'));
     if (resolved.endsWith('.png')) return resolved;
     const module = { exports: {} };

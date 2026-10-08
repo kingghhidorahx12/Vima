@@ -21,7 +21,7 @@ test('approved VimaText variants render and the Passenger DEV account gate mount
   try {
     const texts = tree.root.findAllByType('Text' as never);
     assert.equal(texts.length, variants.length);
-    variants.forEach((variant, index) => assert.deepEqual(texts[index]!.props.style[1], lightTheme.text[variant]));
+    variants.forEach((variant, index) => assert.deepEqual(texts[index]!.props.style[0], lightTheme.text[variant]));
   } finally { await h.act(async () => tree.unmount()); }
 
   await h.act(async () => { tree = renderer.create(React.createElement(h.QueryClientProvider, { client: h.client },
@@ -87,21 +87,21 @@ test('button disabled state fades over 180 ms without resizing or spatial Reduce
       assert.equal(pressable().props.onPressIn, undefined);
       assert.equal(pressable().props.disabled, true);
       const content = () => tree.root.findAllByType('AnimatedView' as never).find(node => node.props.style?.[0]?.flexDirection === 'row')!;
+      const disabledLayer = () => tree.root.findAllByType('AnimatedView' as never).find(node =>
+        Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean)).backgroundColor === lightTheme.roles.disabledSurface)!;
       assert.equal(content().props.style.at(-1).opacity, 0.65);
       await h.act(async () => tree.update(scene(false)));
       await h.act(async () => tree.update(scene(false)));
       assert.equal(flat().minHeight, height);
       assert.equal(pressable().props.disabled, false);
-      assert.equal(tree.root.findAllByType('AnimatedView' as never).find(node =>
-        node.props.style?.[0]?.backgroundColor === '#F7F8F7')?.props.style.at(-1).opacity, 0);
+      assert.equal(disabledLayer().props.style.at(-1).opacity, 0);
       assert.ok(h.animations.some((animation: { duration: number }) => animation.duration === 180));
       await h.act(async () => tree.update(scene(true)));
       await h.act(async () => tree.update(scene(true)));
       assert.equal(flat().minHeight, height);
       assert.equal(pressable().props.onPressIn, undefined);
       assert.equal(content().props.style.at(-1).opacity, 0.65);
-      assert.equal(tree.root.findAllByType('AnimatedView' as never).find(node =>
-        node.props.style?.[0]?.backgroundColor === '#F7F8F7')?.props.style.at(-1).opacity, 1);
+      assert.equal(disabledLayer().props.style.at(-1).opacity, 1);
     } finally { await h.act(async () => tree.unmount()); }
   }
 });

@@ -1,14 +1,16 @@
 import { StyleSheet, Text } from 'react-native';
 import { visualTokens as t } from '../tokens';
 import { glyphCodepoints, glyphFamily } from '../glyphs';
+import { useVimaTheme } from '../themes';
 
 export type VimaGlyphName = keyof typeof glyphCodepoints;
 /** Decorative glyph; its containing control owns the accessible label and hit target. */
-export function VimaGlyph({ name, color = t.colors.carbon, size = t.components.iconSizesPx[2] }: {
+export function VimaGlyph({ name, color, size = t.components.iconSizesPx[2] }: {
   name: VimaGlyphName; color?: string; size?: number;
 }) {
+  const theme = useVimaTheme();
   return <Text accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-    allowFontScaling={false} style={[styles.icon, { color, fontSize: size, lineHeight: size, width: size, height: size }]}>
+    allowFontScaling={false} style={[styles.icon, { color: color ?? theme.roles.control, fontSize: size, lineHeight: size, width: size, height: size }]}>
     {String.fromCodePoint(glyphCodepoints[name])}</Text>;
 }
 const size = t.components.iconSizesPx[2];

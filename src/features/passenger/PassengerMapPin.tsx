@@ -10,10 +10,12 @@ import { pinEntrance } from '../../map/pinMotion';
 import { locationRingFrame, mapPersonality } from '../../motion/mapPersonality';
 import { useMotionActive } from '../../motion/useMotionActive';
 import type { Place } from './model';
+import { useVimaTheme } from '../../design/themes';
 
 /** Native Vima marker with the approved origin/destination color semantics. */
 export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' | 'destination' }) {
-  const color = kind === 'origin' ? t.colors.green : t.colors.red;
+  const theme = useVimaTheme();
+  const color = kind === 'origin' ? theme.roles.positive : theme.roles.danger;
   const { reducedMotion } = useMotionPolicy();
   const entrance = useMemo(() => pinEntrance(reducedMotion), [reducedMotion]);
   const [longitude, latitude] = place.coordinate;
@@ -35,7 +37,7 @@ export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' 
   return <Marker id={`passenger-${kind}-pin`} coordinate={place.coordinate} anchor="bottom">
     <Animated.View accessible={false} style={[styles.footprint, animated]}>
       <View style={[styles.pin, { backgroundColor: color }]} />
-      <View style={[styles.inner, { backgroundColor: t.colors.white }]} />
+      <View style={[styles.inner, { backgroundColor: theme.roles.onAction }]} />
       <Animated.View pointerEvents="none" style={[styles.pinHalo, { borderColor: color }, halo]} />
     </Animated.View>
   </Marker>;
@@ -43,6 +45,7 @@ export function PassengerMapPin({ place, kind }: { place: Place; kind: 'origin' 
 
 /** Home location dot and halo, distinct from a confirmed origin pin. */
 export function PassengerUserLocation({ place, active = true }: { place: Place; active?: boolean }) {
+  const theme = useVimaTheme();
   const { allowDecorativeLoops } = useMotionPolicy();
   const pulse = useSharedValue(0);
   const running = useMotionActive(active);
@@ -55,8 +58,9 @@ export function PassengerUserLocation({ place, active = true }: { place: Place; 
   const halo = useAnimatedStyle(() => locationRingFrame(pulse.get(), running && allowDecorativeLoops));
   return <Marker id="passenger-user-location" coordinate={place.coordinate}>
     <View accessible={false} style={styles.locationArea}>
-      <Animated.View style={[styles.locationHalo, halo]} />
-      <View style={styles.locationRing}><View style={styles.locationDot} /></View>
+      <Animated.View style={[styles.locationHalo, { borderColor: theme.roles.location, backgroundColor: theme.roles.locationWash }, halo]} />
+      <View style={[styles.locationRing, { backgroundColor: theme.roles.locationWash }]}><View style={[styles.locationDot,
+        { backgroundColor: theme.roles.location, borderColor: theme.roles.onAction }]} /></View>
     </View>
   </Marker>;
 }
@@ -72,9 +76,9 @@ const styles = StyleSheet.create({
     borderRadius: t.radii.pillPx },
   locationArea: { width: t.spacing.scalePx[8], height: t.spacing.scalePx[8], alignItems: 'center', justifyContent: 'center' },
   locationHalo: { position: 'absolute', width: t.spacing.scalePx[8], height: t.spacing.scalePx[8], borderRadius: t.radii.pillPx,
-    borderWidth: t.borders.standardWidthPx, borderColor: t.colors.blue, backgroundColor: t.colors.accentBlueGlow, alignItems: 'center', justifyContent: 'center' },
+    borderWidth: t.borders.standardWidthPx, alignItems: 'center', justifyContent: 'center' },
   locationRing: { width: t.spacing.scalePx[6], height: t.spacing.scalePx[6], borderRadius: t.radii.pillPx,
-    backgroundColor: t.colors.accentBlueGlow, alignItems: 'center', justifyContent: 'center' },
+    alignItems: 'center', justifyContent: 'center' },
   locationDot: { opacity: 1, width: t.components.iconSizesPx[0], height: t.components.iconSizesPx[0], borderRadius: t.radii.pillPx,
-    backgroundColor: t.colors.blue, borderWidth: t.borders.standardWidthPx * 2, borderColor: t.colors.white },
+    borderWidth: t.borders.standardWidthPx * 2 },
 });

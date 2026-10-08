@@ -1,26 +1,23 @@
 import { visualTokens as t } from './tokens/index.ts';
 import { elevationStyle } from './themes/light.ts';
+import { useVimaTheme } from './themes/index.tsx';
 
-/** Passenger finish derived from the existing palette; brand colors stay authoritative. */
-function wash(hex: string, opacity: number): string {
-  const rgb = [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16));
-  return `rgba(${rgb.join(', ')}, ${opacity})`;
-}
-export const surfaceColors = {
-  border: wash(t.colors.carbon, 0.08),
-  brandWash: wash(t.colors.greenDark, 0.06),
-  warningWash: wash(t.colors.amber, 0.08),
-  dangerWash: wash(t.colors.red, 0.06),
-} as const;
+/** Geometry is shared. Presentation colors always come from the active global theme. */
 export const passengerSurfaces = {
-  card: { backgroundColor: t.colors.white, borderRadius: t.radii.cardPx,
-    borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border },
-  floating: { backgroundColor: t.colors.white, borderRadius: t.radii.cardPx,
-    borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border,
+  card: { borderRadius: t.radii.cardPx, borderWidth: t.borders.standardWidthPx },
+  floating: { borderRadius: t.radii.cardPx, borderWidth: t.borders.standardWidthPx,
     ...elevationStyle('level2', t.colors.carbon) },
-  field: { backgroundColor: t.colors.background, borderRadius: t.radii.fieldPx,
-    borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border },
-  pressed: { backgroundColor: t.colors.accentBlueSoft, borderColor: t.colors.accentBlueGlow },
-  focus: { borderColor: t.colors.accentBlue, boxShadow: [{ offsetX: 0, offsetY: 0,
-    blurRadius: 0, spreadDistance: 2, color: t.colors.accentBlueGlow }] },
+  field: { borderRadius: t.radii.fieldPx, borderWidth: t.borders.standardWidthPx },
 } as const;
+
+export function usePassengerPresentation() {
+  const { roles } = useVimaTheme();
+  return {
+    card: { backgroundColor: roles.elevatedSurface, borderColor: roles.border },
+    floating: { backgroundColor: roles.elevatedSurface, borderColor: roles.border },
+    field: { backgroundColor: roles.subtleSurface, borderColor: roles.border },
+    pressed: { backgroundColor: roles.locationWash, borderColor: roles.location },
+    focus: { borderColor: roles.location, boxShadow: [{ offsetX: 0, offsetY: 0,
+      blurRadius: 0, spreadDistance: 2, color: roles.locationWash }] },
+  } as const;
+}

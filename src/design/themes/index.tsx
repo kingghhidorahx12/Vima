@@ -2,11 +2,47 @@ import { createContext, useContext, type PropsWithChildren } from 'react';
 import type { TextStyle, ViewStyle } from 'react-native';
 import type { VisualTokens } from '../tokens';
 
+export type VimaThemeName = 'light' | 'dark';
+export type VimaSurfaceVariant = 'screen' | 'contrast' | 'subtle' | 'sheet' | 'card' | 'buttonPrimary' | 'inputPrimary';
+export type VimaTextVariant = 'h1' | 'h2' | 'h3' | 'bodyRegular' | 'bodyMedium' | 'bodySmall' | 'caption';
+export interface VimaThemeRoles {
+  readonly background: string;
+  readonly surface: string;
+  readonly elevatedSurface: string;
+  readonly subtleSurface: string;
+  readonly pressedSurface: string;
+  readonly textPrimary: string;
+  readonly textSecondary: string;
+  readonly border: string;
+  readonly disabledSurface: string;
+  readonly disabledText: string;
+  readonly positive: string;
+  readonly positiveStrong: string;
+  readonly positiveWash: string;
+  readonly location: string;
+  readonly locationStrong: string;
+  readonly locationWash: string;
+  readonly warning: string;
+  readonly warningWash: string;
+  readonly danger: string;
+  readonly dangerWash: string;
+  readonly communication: string;
+  readonly communicationWash: string;
+  readonly control: string;
+  readonly controlMuted: string;
+  readonly onAction: string;
+  readonly handle: string;
+  readonly shadow: string;
+  readonly scrim: string;
+  readonly mapVariant: VimaThemeName;
+}
+
 export interface VimaTheme {
-  readonly name: string;
+  readonly name: VimaThemeName;
   readonly tokens: VisualTokens;
-  readonly surfaces: Readonly<Record<string, ViewStyle>>;
-  readonly text: Readonly<Record<string, TextStyle>>;
+  readonly roles: VimaThemeRoles;
+  readonly surfaces: Readonly<Record<VimaSurfaceVariant, ViewStyle>>;
+  readonly text: Readonly<Record<VimaTextVariant, TextStyle>>;
 }
 
 const ThemeContext = createContext<VimaTheme | null>(null);

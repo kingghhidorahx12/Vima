@@ -11,11 +11,9 @@ import { createDriverActions } from '../../services/matching/driverActions';
 import { DriverRideShell } from '../../features/driver/DriverRideShell';
 import { DriverStatePanel } from '../../features/driver/DriverStatePanel';
 import { driverMapFallback, type DriverConnection } from '../../features/driver/driverPresentation';
-import { resolveDriverTheme } from '../../features/driver/driverTheme';
 import { VimaText } from '../../design/primitives';
 import { VimaButton } from '../../design/components/VimaButton';
-import { VimaThemeProvider } from '../../design/themes';
-import { darkThemeColors } from '../../design/themes/dark';
+import { useVimaTheme } from '../../design/themes';
 import { Camera } from '../../map/Camera';
 import { PassengerUserLocation } from '../../features/passenger/PassengerMapPin';
 import { createDriverLocationSession, type DriverLocationStopReason } from './locationSession';
@@ -23,13 +21,12 @@ import { driverOperationId } from '../../services/matching/operationId';
 import { DriverOffer } from './DriverOffer';
 
 export default function DriverLiveScreen() {
-  const theme = resolveDriverTheme(__DEV__, process.env.EXPO_PUBLIC_VIMA_DRIVER_THEME);
-  return <VimaThemeProvider theme={theme}><LiveAccountGate role="driver">{session => <DriverSurface key={session.identity.accountId}
-    client={session.matching} accountId={session.identity.accountId} available={session.identity.matchingAvailable}
-    themeName={theme.name as 'light' | 'dark'} />}</LiveAccountGate></VimaThemeProvider>;
+  return <LiveAccountGate role="driver">{session => <DriverSurface key={session.identity.accountId}
+    client={session.matching} accountId={session.identity.accountId} available={session.identity.matchingAvailable} />}</LiveAccountGate>;
 }
-function DriverSurface({ client, accountId, available, themeName }: { client: MatchingClient; accountId: string;
-  available: boolean; themeName: 'light' | 'dark' }) {
+function DriverSurface({ client, accountId, available }: { client: MatchingClient; accountId: string;
+  available: boolean }) {
+  const theme = useVimaTheme();
   const queryClient = useQueryClient(); const key = ['driver', accountId];
   const state = useQuery({ queryKey: key, queryFn: ({ signal }) => client.driver(signal), enabled: available, retry: false,
     structuralSharing: (old, next) => old && (old as DriverState).revision >= (next as DriverState).revision ? old : next });
@@ -110,7 +107,7 @@ function DriverSurface({ client, accountId, available, themeName }: { client: Ma
   const data = state.data; const offer = data?.offer;
   const location = data?.location;
   const target = location?.coordinate ?? driverMapFallback;
-  return <SafeAreaView style={[styles.fill, themeName === 'dark' && styles.dark]}><DriverRideShell map={{ basemapVariant: themeName }} mapContent={<>
+  return <SafeAreaView style={[styles.fill, { backgroundColor: theme.roles.background }]}><DriverRideShell mapContent={<>
     <Camera target={{ center: target, zoom: 14 }} />
     {location ?
     <PassengerUserLocation active={availability === 'LOCATING' && foreground && focused}
@@ -129,4 +126,4 @@ function DriverSurface({ client, accountId, available, themeName }: { client: Ma
     onCancelAssignment={(requestId) => { void actions.startDriverAction({ kind: 'assignment_cancel', requestId }); }}
     onRetry={() => { void actions.retryPendingDriverAction(); }} />} /></SafeAreaView>;
 }
-const styles = StyleSheet.create({ fill: { flex: 1 }, dark: { backgroundColor: darkThemeColors.base } });
+const styles = StyleSheet.create({ fill: { flex: 1 } });

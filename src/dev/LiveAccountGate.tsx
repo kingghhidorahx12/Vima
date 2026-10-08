@@ -10,10 +10,12 @@ import { createMatchingClient, type MatchingClient } from '../services/matching/
 import type { MatchingIdentity } from '../services/matching/contracts';
 import { VimaText } from '../design/primitives';
 import { VimaButton } from '../design/components/VimaButton';
+import { useVimaTheme } from '../design/themes';
 
 interface Session { api: ApiClient; matching: MatchingClient; identity: MatchingIdentity }
 /** Technical DEV gate only. Tokens go directly to SecureStore, never to Query or public configuration. */
 export function LiveAccountGate({ role, children }: { role: MatchingIdentity['role']; children: (session: Session) => ReactNode }) {
+  const theme = useVimaTheme();
   const client = useQueryClient(); const [session, setSession] = useState<Session>(); const [editing, setEditing] = useState(false);
   const [token, setToken] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const connect = useCallback(async () => {
@@ -38,11 +40,12 @@ export function LiveAccountGate({ role, children }: { role: MatchingIdentity['ro
   }, []));
   if (!__DEV__) return null;
   if (session && !editing) return children(session);
-  return <SafeAreaView style={styles.screen}><VimaText variant="h2">Cuenta DEV · {role === 'driver' ? 'Driver' : 'Passenger'}</VimaText>
+  return <SafeAreaView style={[styles.screen, { backgroundColor: theme.roles.background }]}><VimaText variant="h2">Cuenta DEV · {role === 'driver' ? 'Driver' : 'Passenger'}</VimaText>
     {session ? <VimaText variant="bodyRegular">{session.identity.accountId}</VimaText> : null}
     <VimaText variant="bodyRegular">Token de la configuración externa del gateway. Requiere HTTPS confiable.</VimaText>
     <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={token} onChangeText={setToken}
-      placeholder="Token de prueba" accessibilityLabel="Token de prueba" style={styles.input} />
+      placeholder="Token de prueba" placeholderTextColor={theme.roles.disabledText} accessibilityLabel="Token de prueba"
+      style={[styles.input, { backgroundColor: theme.roles.elevatedSurface, borderColor: theme.roles.border, color: theme.roles.textPrimary }]} />
     <VimaButton label="Guardar y conectar" disabled={busy || !token.trim()} onPress={() => {
       const value = token.trim(); setToken(''); void credentials.write(value).then(() => { client.clear(); setSession(undefined); return connect(); })
         .catch(() => setError('No se pudo guardar la credencial.'));
@@ -55,5 +58,5 @@ export function LiveAccountGate({ role, children }: { role: MatchingIdentity['ro
     <View style={styles.links}><Link href="/dev/passenger">Modo Passenger</Link><Link href="/dev/driver">Modo Driver</Link></View>
   </SafeAreaView>;
 }
-const styles = StyleSheet.create({ screen: { flex: 1, padding: 20, gap: 16, backgroundColor: 'white' },
-  input: { minHeight: 52, borderWidth: 1, borderColor: '#2A2E2D', borderRadius: 16, paddingHorizontal: 16 }, links: { gap: 16 } });
+const styles = StyleSheet.create({ screen: { flex: 1, padding: 20, gap: 16 },
+  input: { minHeight: 52, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16 }, links: { gap: 16 } });

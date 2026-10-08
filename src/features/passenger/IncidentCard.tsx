@@ -3,24 +3,29 @@ import { VimaText } from '../../design/primitives';
 import { visualTokens as t } from '../../design/tokens';
 import type { IncidentDetails } from '../../map/incidentDetails';
 import { VimaGlyph } from '../../design/components/VimaGlyph';
-import { passengerSurfaces as surfaces, surfaceColors } from '../../design/presentation';
+import { passengerSurfaces as surfaces, usePassengerPresentation } from '../../design/presentation';
+import { useVimaTheme } from '../../design/themes';
 import { ElementEntrance } from '../../motion/ElementEntrance';
 
 export function IncidentCard({ details, onClose, maxHeight, topOffset }: {
   details: IncidentDetails; onClose: () => void; maxHeight: number; topOffset?: number;
 }) {
-  return <ElementEntrance style={[styles.card, { maxHeight }, topOffset !== undefined && { top: topOffset }]}>
+  const theme = useVimaTheme();
+  const presentation = usePassengerPresentation();
+  return <ElementEntrance style={[styles.card, presentation.floating, { maxHeight }, topOffset !== undefined && { top: topOffset }]}>
     <View style={styles.row}>
-      {details.icon ? <View style={styles.icon}><VimaGlyph name={details.icon} color={t.colors.amber} /></View> : null}
+      {details.icon ? <View style={[styles.icon, { backgroundColor: theme.roles.warningWash }]}><VimaGlyph name={details.icon} color={theme.roles.warning} /></View> : null}
       <VimaText variant="bodyMedium" style={styles.title}>{details.category || 'Incidente vial'}</VimaText>
       <Pressable accessibilityRole="button" accessibilityLabel="Cerrar detalle del incidente" onPress={onClose}
-        style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
-        <VimaGlyph name="close" color={t.colors.graphite} />
+        style={({ pressed }) => [styles.close, pressed && presentation.pressed]}>
+        <VimaGlyph name="close" color={theme.roles.control} />
       </Pressable>
     </View>
-    <ScrollView contentContainerStyle={[styles.detail, !!(details.description || details.severity) && styles.detailSeparated]}>
+    <ScrollView contentContainerStyle={[styles.detail, !!(details.description || details.severity) &&
+      [styles.detailSeparated, { borderTopColor: theme.roles.border }]]}>
       {details.description ? <VimaText variant="bodySmall">{details.description}</VimaText> : null}
-      {details.severity ? <VimaText variant="caption" style={styles.secondary}>{details.severity}</VimaText> : null}
+      {details.severity ? <VimaText variant="caption" style={[styles.secondary,
+        { color: theme.roles.textSecondary, backgroundColor: theme.roles.warningWash }]}>{details.severity}</VimaText> : null}
     </ScrollView>
   </ElementEntrance>;
 }
@@ -30,13 +35,12 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[1] },
   icon: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[7], alignItems: 'center', justifyContent: 'center',
-    borderRadius: t.radii.fieldPx, backgroundColor: surfaceColors.warningWash },
+    borderRadius: t.radii.fieldPx },
   detail: { gap: t.spacing.scalePx[1] },
   detailSeparated: { marginTop: t.spacing.scalePx[1], paddingTop: t.spacing.scalePx[2],
-    borderTopWidth: t.borders.standardWidthPx, borderTopColor: surfaceColors.border },
-  secondary: { color: t.colors.graphite, backgroundColor: surfaceColors.warningWash, borderRadius: t.radii.smallPx,
+    borderTopWidth: t.borders.standardWidthPx },
+  secondary: { borderRadius: t.radii.smallPx,
     paddingHorizontal: t.spacing.scalePx[1], paddingVertical: t.spacing.scalePx[0], alignSelf: 'flex-start' },
   title: { flex: 1 },
   close: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: t.radii.pillPx },
-  closePressed: { backgroundColor: t.colors.background },
 });

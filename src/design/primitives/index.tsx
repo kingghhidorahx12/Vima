@@ -1,7 +1,5 @@
 import { Text, View, type TextProps, type ViewProps } from 'react-native';
-import { useVimaTheme } from '../themes';
-import type { VimaSurfaceVariant, VimaTextVariant } from '../themes/light';
-import { semanticColors } from '../tokens';
+import { useVimaTheme, type VimaSurfaceVariant, type VimaTextVariant } from '../themes';
 
 export function VimaSurface({ variant, style, ...props }: ViewProps & { variant: VimaSurfaceVariant }) {
   const theme = useVimaTheme();
@@ -14,5 +12,5 @@ export function VimaText({ variant, style, ...props }: TextProps & { variant: Vi
   const theme = useVimaTheme();
   const approved = theme.text[variant];
   if (!approved) throw new Error(`Missing approved text: ${variant}`);
-  return <Text {...props} style={[{ color: semanticColors.textPrimary }, approved, style]} />;
+  return <Text {...props} style={[approved, style]} />;
 }

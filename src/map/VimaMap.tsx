@@ -3,15 +3,21 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { resolveMapStyle } from './style';
 import { resolveBasemapStyle } from './basemap';
+import { useVimaTheme } from '../design/themes';
 
 export type { MapRef as VimaMapRef } from '@maplibre/maplibre-react-native';
 
-export type VimaMapProps = Omit<MapProps, 'mapStyle' | 'attribution'> & { readonly basemapVariant?: 'light' | 'dark' };
+export type VimaMapProps = Omit<MapProps, 'mapStyle' | 'attribution'>;
 
 /** The persistent Vima renderer. Orbis style/asset URLs enter only through map configuration. */
-export function VimaMap({ style, basemapVariant = 'light', ...props }: VimaMapProps) {
+export function VimaMap({ style, ...props }: VimaMapProps) {
+  const theme = useVimaTheme();
   // Direct access is required for Expo's public environment inlining.
-  const mapStyle = resolveBasemapStyle(resolveMapStyle(process.env.EXPO_PUBLIC_MAP_STYLE_URL, __DEV__), basemapVariant);
+  const lightStyle = resolveMapStyle(process.env.EXPO_PUBLIC_MAP_STYLE_URL, __DEV__);
+  const darkStyleUrl = process.env.EXPO_PUBLIC_MAP_STYLE_DARK_URL?.trim();
+  const configuredStyle = theme.roles.mapVariant === 'dark' && darkStyleUrl
+    ? resolveMapStyle(darkStyleUrl, __DEV__) : lightStyle;
+  const mapStyle = resolveBasemapStyle(configuredStyle, theme.roles.mapVariant);
   const displayKey = process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY?.trim();
   const [credentialReady, setCredentialReady] = useState(!displayKey);
   useEffect(() => {

@@ -393,8 +393,9 @@ test('location animates only its outer ring, stops in background and remains opa
     const h = createMapHarness({ reduced }); const { PassengerUserLocation } = h.load('src/features/passenger/PassengerMapPin.tsx');
     const place = { id: 'p', coordinate: [0, 0] };
     const tree: ReactTestRenderer = await h.render(React.createElement(PassengerUserLocation, { place }));
-    const core = tree.root.findAllByType('View' as never).find(node => node.props.style?.backgroundColor === '#3B82F6');
-    assert.ok(core); assert.equal(core.props.style.opacity, 1);
+    const core = tree.root.findAllByType('View' as never).find(node =>
+      Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean)).backgroundColor === '#3B82F6');
+    assert.ok(core); assert.equal(Object.assign({}, ...[core.props.style].flat(Infinity).filter(Boolean)).opacity, 1);
     assert.equal(h.calls.some((c: unknown[]) => c[0] === 'repeat'), !reduced);
     const repeats = h.calls.filter((c: unknown[]) => c[0] === 'repeat').length;
     await h.act(async () => h.appState('background'));
