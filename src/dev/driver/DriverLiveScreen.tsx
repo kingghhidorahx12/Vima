@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { AppState, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,9 +9,13 @@ import type { MatchingClient } from '../../services/matching/client';
 import type { DriverState } from '../../services/matching/contracts';
 import { createDriverActions } from '../../services/matching/driverActions';
 import { DriverRideShell } from '../../features/driver/DriverRideShell';
+import { DriverStatePanel } from '../../features/driver/DriverStatePanel';
+import { driverMapFallback, type DriverConnection } from '../../features/driver/driverPresentation';
+import { resolveDriverTheme } from '../../features/driver/driverTheme';
 import { VimaText } from '../../design/primitives';
 import { VimaButton } from '../../design/components/VimaButton';
-import { visualTokens as t } from '../../design/tokens';
+import { VimaThemeProvider } from '../../design/themes';
+import { darkThemeColors } from '../../design/themes/dark';
 import { Camera } from '../../map/Camera';
 import { PassengerUserLocation } from '../../features/passenger/PassengerMapPin';
 import { createDriverLocationSession, type DriverLocationStopReason } from './locationSession';
@@ -19,10 +23,13 @@ import { driverOperationId } from '../../services/matching/operationId';
 import { DriverOffer } from './DriverOffer';
 
 export default function DriverLiveScreen() {
-  return <LiveAccountGate role="driver">{session => <DriverSurface key={session.identity.accountId} client={session.matching}
-    accountId={session.identity.accountId} available={session.identity.matchingAvailable} />}</LiveAccountGate>;
+  const theme = resolveDriverTheme(__DEV__, process.env.EXPO_PUBLIC_VIMA_DRIVER_THEME);
+  return <VimaThemeProvider theme={theme}><LiveAccountGate role="driver">{session => <DriverSurface key={session.identity.accountId}
+    client={session.matching} accountId={session.identity.accountId} available={session.identity.matchingAvailable}
+    themeName={theme.name as 'light' | 'dark'} />}</LiveAccountGate></VimaThemeProvider>;
 }
-function DriverSurface({ client, accountId, available }: { client: MatchingClient; accountId: string; available: boolean }) {
+function DriverSurface({ client, accountId, available, themeName }: { client: MatchingClient; accountId: string;
+  available: boolean; themeName: 'light' | 'dark' }) {
   const queryClient = useQueryClient(); const key = ['driver', accountId];
   const state = useQuery({ queryKey: key, queryFn: ({ signal }) => client.driver(signal), enabled: available, retry: false,
     structuralSharing: (old, next) => old && (old as DriverState).revision >= (next as DriverState).revision ? old : next });
@@ -100,36 +107,26 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => { clearTimeout(initial); clearInterval(timer); };
   }, [expiresAt]);
-  const data = state.data; const offer = data?.offer; const assigned = data?.assignment;
+  const data = state.data; const offer = data?.offer;
   const location = data?.location;
-  const labels = { OFFLINE: 'Desconectado', LOCATING: 'Localizando…', AVAILABLE: 'Disponible', PAUSED: 'En pausa', ASSIGNED: 'Asignado' };
-  return <SafeAreaView style={styles.fill}><DriverRideShell mapContent={location ? <>
-    <Camera target={{ center: location.coordinate, zoom: 14 }} />
-    <PassengerUserLocation active={foreground && focused} place={{ id: 'driver-current', name: '', address: '', coordinate: location.coordinate }} />
-  </> : undefined} renderPhase={() => offer ? <View>
+  const target = location?.coordinate ?? driverMapFallback;
+  return <SafeAreaView style={[styles.fill, themeName === 'dark' && styles.dark]}><DriverRideShell map={{ basemapVariant: themeName }} mapContent={<>
+    <Camera target={{ center: target, zoom: 14 }} />
+    {location ?
+    <PassengerUserLocation active={availability === 'LOCATING' && foreground && focused}
+      place={{ id: 'driver-current', name: '', address: '', coordinate: location.coordinate }} />
+      : null}
+  </>} renderPhase={() => offer ? <View>
     <DriverOffer offer={offer} revision={data!.revision} now={now} disabled={busy || !!pending.current}
       onAccept={() => { void actions.startDriverAction({ kind: 'offer_accept', offerId: offer.id, requestId: offer.requestId }); }}
       onReject={() => { void actions.startDriverAction({ kind: 'offer_reject', offerId: offer.id, requestId: offer.requestId }); }} />
     {error ? <VimaText variant="bodyRegular" accessibilityRole="alert">{error}</VimaText> : null}
     {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void actions.retryPendingDriverAction(); }} /> : null}
-  </View> : <ScrollView style={styles.panel} contentContainerStyle={styles.content}>
-    <VimaText variant="h2">Driver P0 · {data?.profile.driver.name ?? accountId}</VimaText>
-    <VimaText variant="bodyRegular">{accountId} · {connection === 'online' ? 'Conectado' : connection === 'reconnecting' ? 'Reconectando' : 'Sin conexión'}</VimaText>
-    <VimaText variant="bodyRegular">{data ? labels[data.availability] : available ? 'Cargando estado…' : 'Matching no configurado'}</VimaText>
-    {data && !assigned ? <View style={styles.actions}>
-      <VimaButton label={availability === 'PAUSED' ? 'Reanudar disponibilidad' : 'Disponible'} disabled={busy || !!pending.current || ['LOCATING', 'AVAILABLE'].includes(availability ?? '')}
-        onPress={() => { void actions.startDriverAction({ kind: 'availability_available' }); }} />
-      <VimaButton secondary label="Desconectarme" disabled={busy || !!pending.current || availability === 'OFFLINE'}
-        onPress={() => { void actions.startDriverAction({ kind: 'availability_offline' }); }} />
-    </View> : null}
-    {assigned ? <View style={styles.content}><VimaText variant="h3">Asignación confirmada</VimaText>
-      <VimaText variant="bodyRegular">{assigned.value.id}</VimaText><VimaText variant="bodyRegular">{assigned.pickup.name} · {assigned.pickup.address}</VimaText>
-      <VimaButton secondary danger label="Cancelar asignación" disabled={busy || !!pending.current}
-        onPress={() => { void actions.startDriverAction({ kind: 'assignment_cancel', requestId: assigned.requestId }); }} />
-    </View> : null}
-    {error || state.error ? <VimaText variant="bodyRegular" accessibilityRole="alert">{error || 'No se pudo leer el estado.'}</VimaText> : null}
-    {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void actions.retryPendingDriverAction(); }} /> : null}
-  </ScrollView>} /></SafeAreaView>;
+  </View> : <DriverStatePanel state={data} connection={connection as DriverConnection} configured={available}
+    busy={busy} error={error || (state.error ? 'No se pudo leer el estado.' : '')} retryAvailable={!!pending.current}
+    onAvailable={() => { void actions.startDriverAction({ kind: 'availability_available' }); }}
+    onOffline={() => { void actions.startDriverAction({ kind: 'availability_offline' }); }}
+    onCancelAssignment={(requestId) => { void actions.startDriverAction({ kind: 'assignment_cancel', requestId }); }}
+    onRetry={() => { void actions.retryPendingDriverAction(); }} />} /></SafeAreaView>;
 }
-const styles = StyleSheet.create({ fill: { flex: 1 }, panel: { maxHeight: '70%' }, content: { padding: 16, gap: 12 },
-  actions: { gap: 8 }, surface: { backgroundColor: t.colors.white } });
+const styles = StyleSheet.create({ fill: { flex: 1 }, dark: { backgroundColor: darkThemeColors.base } });

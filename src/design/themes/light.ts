@@ -32,10 +32,13 @@ export const lightTheme = {
     },
   },
   text: {
-    h1: textStyle({ variant: 'h1' }), h2: textStyle({ variant: 'h2' }), h3: textStyle({ variant: 'h3' }),
-    bodyRegular: textStyle({ variant: 'body', weight: 400 }),
-    bodyMedium: textStyle({ variant: 'body', weight: 500 }),
-    bodySmall: textStyle({ variant: 'bodySmall' }), caption: textStyle({ variant: 'caption' }),
+    h1: { color: semanticColors.textPrimary, ...textStyle({ variant: 'h1' }) },
+    h2: { color: semanticColors.textPrimary, ...textStyle({ variant: 'h2' }) },
+    h3: { color: semanticColors.textPrimary, ...textStyle({ variant: 'h3' }) },
+    bodyRegular: { color: semanticColors.textPrimary, ...textStyle({ variant: 'body', weight: 400 }) },
+    bodyMedium: { color: semanticColors.textPrimary, ...textStyle({ variant: 'body', weight: 500 }) },
+    bodySmall: { color: semanticColors.textPrimary, ...textStyle({ variant: 'bodySmall' }) },
+    caption: { color: semanticColors.textPrimary, ...textStyle({ variant: 'caption' }) },
   },
 } as const;
 

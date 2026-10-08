@@ -6,12 +6,12 @@ import { resolveBasemapStyle } from './basemap';
 
 export type { MapRef as VimaMapRef } from '@maplibre/maplibre-react-native';
 
-export type VimaMapProps = Omit<MapProps, 'mapStyle' | 'attribution'>;
+export type VimaMapProps = Omit<MapProps, 'mapStyle' | 'attribution'> & { readonly basemapVariant?: 'light' | 'dark' };
 
 /** The persistent Vima renderer. Orbis style/asset URLs enter only through map configuration. */
-export function VimaMap({ style, ...props }: VimaMapProps) {
+export function VimaMap({ style, basemapVariant = 'light', ...props }: VimaMapProps) {
   // Direct access is required for Expo's public environment inlining.
-  const mapStyle = resolveBasemapStyle(resolveMapStyle(process.env.EXPO_PUBLIC_MAP_STYLE_URL, __DEV__));
+  const mapStyle = resolveBasemapStyle(resolveMapStyle(process.env.EXPO_PUBLIC_MAP_STYLE_URL, __DEV__), basemapVariant);
   const displayKey = process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY?.trim();
   const [credentialReady, setCredentialReady] = useState(!displayKey);
   useEffect(() => {

@@ -11,6 +11,8 @@ import { primaryGradient, visualTokens as t } from '../tokens';
 import { VimaGlyph, type VimaGlyphName } from './VimaGlyph';
 import { surfaceColors } from '../presentation';
 import { elevationStyle } from '../themes/light';
+import { useVimaTheme } from '../themes';
+import { darkThemeColors } from '../themes/dark';
 import { ElementEntrance } from '../../motion/ElementEntrance';
 
 export function VimaButton({ label, onPress, disabled = false, loading = false, secondary = false, communication = false, gradient = false, compact = false, danger = false, haptic = 'buttonChip', style, icon }: {
@@ -18,6 +20,8 @@ export function VimaButton({ label, onPress, disabled = false, loading = false, 
   haptic?: HapticEvent; style?: StyleProp<ViewStyle>; communication?: boolean; gradient?: boolean; compact?: boolean; danger?: boolean;
   icon?: VimaGlyphName;
 }) {
+  const theme = useVimaTheme();
+  const dark = theme.name === 'dark';
   const feedback = usePressFeedback();
   const enabledProgress = useSharedValue(disabled ? 0 : 1);
   const loadingProgress = useSharedValue(loading ? 1 : 0);
@@ -33,16 +37,18 @@ export function VimaButton({ label, onPress, disabled = false, loading = false, 
   const contentFade = useAnimatedStyle(() => ({ opacity: (1 - loadingProgress.get()) *
     (0.65 + enabledProgress.get() * 0.35) }));
   const spinnerFade = useAnimatedStyle(() => ({ opacity: loadingProgress.get() }));
-  const labelColor = disabled ? t.colors.gray : danger ? t.colors.red : communication ? t.colors.accentBluePressed : secondary ? t.colors.carbon : t.colors.white;
+  const labelColor = disabled ? t.colors.gray : danger ? t.colors.red : communication ? t.colors.accentBluePressed
+    : secondary ? dark ? darkThemeColors.textPrimary : t.colors.carbon : t.colors.white;
   return <ElementEntrance style={style}><Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }}
       disabled={disabled || loading}
       onPressIn={disabled || loading ? undefined : feedback.onPressIn} onPressOut={disabled || loading ? undefined : feedback.onPressOut}
       onPress={() => { void semanticHaptics(haptic); onPress(); }}
       style={({ pressed }) => [styles.button, compact && styles.compact, gradient && !secondary && !disabled && styles.gradient,
-        secondary && styles.secondary, communication && styles.communication, danger && styles.danger,
+        secondary && styles.secondary, secondary && dark && styles.secondaryDark,
+        communication && styles.communication, danger && styles.danger, danger && dark && styles.dangerDark,
         pressed && !disabled && styles.pressed, disabled && styles.disabled]}>
-      <Animated.View pointerEvents="none" style={[styles.disabledWash, disabledWash]} />
+      <Animated.View pointerEvents="none" style={[styles.disabledWash, dark && styles.disabledWashDark, disabledWash]} />
       <View style={styles.loadingFrame}>
         <Animated.View style={[styles.content, contentFade]}>
           {icon ? <VimaGlyph name={icon} color={labelColor} /> : null}
@@ -65,12 +71,15 @@ const styles = StyleSheet.create({
   gradient: { experimental_backgroundImage: `linear-gradient(90deg, ${primaryGradient.stops.map((stop) => `${stop.color} ${stop.position * 100}%`).join(', ')})` },
   secondary: { backgroundColor: t.colors.background, borderWidth: t.borders.standardWidthPx,
     borderColor: surfaceColors.border, boxShadow: [] },
+  secondaryDark: { backgroundColor: darkThemeColors.elevated, borderColor: darkThemeColors.border },
   communication: { backgroundColor: t.colors.accentBlueSoft, borderColor: t.colors.accentBlueGlow },
   danger: { backgroundColor: surfaceColors.dangerWash, borderColor: surfaceColors.border },
+  dangerDark: { backgroundColor: 'rgba(255, 56, 48, 0.12)', borderColor: darkThemeColors.border },
   content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: t.spacing.scalePx[1] },
   disabled: { borderWidth: t.borders.standardWidthPx, borderColor: surfaceColors.border, boxShadow: [] },
   disabledWash: { ...StyleSheet.absoluteFill, borderRadius: t.components.buttonPrimary.radiusPx,
     backgroundColor: t.colors.background },
+  disabledWashDark: { backgroundColor: darkThemeColors.surface },
   loadingFrame: { position: 'relative' },
   spinnerFrame: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   label: { textAlign: 'center', flexShrink: 1 },

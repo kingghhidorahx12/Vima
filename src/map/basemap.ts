@@ -92,7 +92,44 @@ export const passengerBasemap = {
   layers,
 } as unknown as Exclude<MapProps['mapStyle'], string>;
 
+const darkPaintById: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  background: { 'background-color': '#0B0F0E' },
+  landuse_residential: { 'fill-color': '#121816' },
+  building: { 'fill-color': '#18201D', 'fill-outline-color': '#26302C' },
+  park: { 'fill-color': '#173323' },
+  landcover_wood: { 'fill-color': '#173323' },
+  landcover_grass: { 'fill-color': '#193A28' },
+  landcover_farmland: { 'fill-color': '#172B20' },
+  landcover_wetland: { 'fill-color': '#17342A' },
+  landuse_recreation: { 'fill-color': '#193A28' },
+  water: { 'fill-color': '#173451' },
+  waterway: { 'line-color': '#24527C' },
+  road_area_pier: { 'fill-color': '#18201D' }, road_pier: { 'line-color': '#26302C' },
+  highway_path: { 'line-color': '#26302C' }, highway_minor: { 'line-color': '#303A36' },
+  highway_major_casing: { 'line-color': '#202825' }, highway_major_inner: { 'line-color': '#414B47' },
+  highway_major_subtle: { 'line-color': '#303A36' }, highway_motorway_casing: { 'line-color': '#202825' },
+  highway_motorway_inner: { 'line-color': '#4A5550' }, highway_motorway_subtle: { 'line-color': '#303A36' },
+  highway_motorway_bridge_casing: { 'line-color': '#202825' }, highway_motorway_bridge_inner: { 'line-color': '#4A5550' },
+  tunnel_motorway_casing: { 'line-color': '#202825' }, tunnel_motorway_inner: { 'line-color': '#414B47' },
+};
+
+const darkLayers = (passengerBasemap as unknown as { layers: Record<string, unknown>[] }).layers.map((layer) => {
+  const paint = layer.paint as Record<string, unknown> | undefined;
+  const type = layer.type;
+  const labelPaint = type === 'symbol' && paint ? {
+    ...(Object.hasOwn(paint, 'text-color') ? { 'text-color': '#D9DDDC' } : {}),
+    ...(Object.hasOwn(paint, 'text-halo-color') ? { 'text-halo-color': '#0B0F0E' } : {}),
+  } : undefined;
+  const local = darkPaintById[layer.id as string];
+  return local || labelPaint ? { ...layer, paint: { ...paint, ...local, ...labelPaint } } : layer;
+});
+
+/** Dark Driver palette over the same bundled, known OpenMapTiles schema. */
+export const darkDriverBasemap = {
+  ...passengerBasemap, layers: darkLayers,
+} as unknown as Exclude<MapProps['mapStyle'], string>;
+
 /** Explicit custom styles remain authoritative; never guess another provider's schema. */
-export function resolveBasemapStyle(url: string): MapProps['mapStyle'] {
-  return url === developmentDemoStyle ? passengerBasemap : url;
+export function resolveBasemapStyle(url: string, variant: 'light' | 'dark' = 'light'): MapProps['mapStyle'] {
+  return url === developmentDemoStyle ? variant === 'dark' ? darkDriverBasemap : passengerBasemap : url;
 }

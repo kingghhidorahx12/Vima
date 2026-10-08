@@ -11,7 +11,7 @@ export interface VimaTheme {
 
 const ThemeContext = createContext<VimaTheme | null>(null);
 
-/** Only approved themes may be mounted. Exact dark tokens are still pending. */
+/** Only approved themes may be mounted. */
 export function VimaThemeProvider({ theme, children }: PropsWithChildren<{ theme: VimaTheme }>) {
   return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;
 }

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import source from '../src/map/styles/positron.json' with { type: 'json' };
-import { passengerBasemap, resolveBasemapStyle } from '../src/map/basemap.ts';
-import { resolveMapStyle } from '../src/map/style.ts';
+import { darkDriverBasemap, passengerBasemap, resolveBasemapStyle } from '../src/map/basemap.ts';
+import { developmentDemoStyle, resolveMapStyle } from '../src/map/style.ts';
 
 const require = createRequire(import.meta.url);
 const { validateStyleMin } = require('@maplibre/maplibre-gl-style-spec');
@@ -99,4 +99,20 @@ test('the active dev Positron style is polished; explicit other styles and produ
   assert.equal(resolveBasemapStyle(resolveMapStyle(undefined, true)), passengerBasemap);
   assert.equal(resolveBasemapStyle('https://example.test/style.json'), 'https://example.test/style.json');
   assert.throws(() => resolveMapStyle(undefined, false), /required/);
+});
+
+test('Driver dark basemap recolors only the known bundled style and preserves custom styles', () => {
+  if (typeof darkDriverBasemap === 'string') throw new Error('Expected native style JSON');
+  assert.deepEqual(validateStyleMin(darkDriverBasemap), []);
+  const layers = darkDriverBasemap.layers;
+  const paint = (id: string) => layers.find(value => value.id === id)!.paint as Record<string, unknown>;
+  assert.equal(paint('background')['background-color'], '#0B0F0E');
+  assert.equal(paint('water')['fill-color'], '#173451');
+  assert.equal(paint('park')['fill-color'], '#173323');
+  assert.equal(paint('landcover_grass')['fill-color'], '#193A28');
+  assert.equal(resolveBasemapStyle(developmentDemoStyle, 'dark'), darkDriverBasemap);
+  const custom = 'https://maps.example/style.json';
+  assert.equal(resolveBasemapStyle(custom, 'dark'), custom);
+  if (typeof passengerBasemap === 'string') throw new Error('Expected native style JSON');
+  assert.equal(layers.length, passengerBasemap.layers.length);
 });

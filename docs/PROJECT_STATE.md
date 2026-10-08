@@ -1,13 +1,48 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-08 en `codex/passenger-identity-epoch-driver-actions-p0`,
-desde `codex/passenger-active-offer-provenance-p0` @ `086f70b7`.
+Actualizado 2026-10-08 en `codex/driver-ui-v1-light-dark-p0`,
+desde `codex/passenger-identity-epoch-driver-actions-p0` @ `b9917396`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Driver UI v1 A claro + B oscuro y viewport crítico — 2026-10-08
+
+- `DriverLiveScreen` conserva auth, query/realtime, ciclo de ubicación y
+  `createDriverActions`; la presentación real vive en `src/features/driver/` y
+  consume exclusivamente `DriverState`. Se retiraron `Driver P0`, accountId,
+  revision, IDs y estado técnico del viewport; las trazas DEV siguen en consola.
+- OFFLINE, LOCATING, AVAILABLE y PAUSED usan composición `compact`; ASSIGNED
+  usa `operational`. Título, estado GPS/conectividad, error y acción crítica
+  permanecen en una región no desplazable. Sólo los datos secundarios reales
+  de ASSIGNED pueden usar ScrollView; `Cancelar asignación` queda fuera.
+- OFFLINE muestra `Conectarme`; LOCATING muestra estado humano de señal y sólo
+  el punto de ubicación puede pulsar; AVAILABLE permite dejar disponibilidad;
+  PAUSED reutiliza la acción vigente de reanudación. ASSIGNED muestra pickup y
+  ETA reales, sin llamada, mensaje, navegación ni fases inventadas.
+- `DriverOffer` no cambió: countdown, pickup, ETA, Aceptar/Rechazar, orden,
+  región crítica, target/operationId y `offer_render` se conservan.
+- Theme A claro sigue siendo default. Theme B usa base `#0B0F0E`, surfaces
+  `#121816`/`#18201D` y texto `#F6F8F7`, con las mismas keys, árbol y geometría.
+  Preview oscuro únicamente en DEV mediante `EXPO_PUBLIC_VIMA_DRIVER_THEME=dark`;
+  no hay selector ni persistencia. Passenger continúa montado en light.
+- Sin location se centra el mapa en el único fallback Atlacomulco compartido,
+  nunca en world view. El basemap oscuro sólo recolorea el Positron bundled de
+  schema conocido; un style URL explícito permanece autoritativo e intacto.
+- Transiciones de contenido usan Motion v1.2 (240 ms), botones conservan press
+  0.98 y Reduced Motion elimina scale/loops. El pulso de ubicación se habilita
+  sólo en LOCATING; el shell y mapa permanecen montados entre estados.
+- **VERIFICADO automatizado:** TypeScript, lint, suite completa, gateway
+  **68/68**, worklets (19 archivos), schema MapLibre incluido dark, splash,
+  aislamiento fixture/release y export Hermes Android/iOS. Expo Doctor completó
+  **20/21**: la validación remota del esquema no pudo consultar `exp.host` desde
+  el sandbox; no se cambiaron dependencias para ocultarlo.
+- Sin dependencias ni cambios nativos. La verificación física Android de ambos
+  temas y todos los estados sigue pendiente; tampoco se declara PASS el flujo
+  A→cancel→B→assigned+PIN ni retry/provenance sin ejecutarlo en dos teléfonos.
 
 ### Epoch de identidad Passenger e intenciones Driver inmutables — 2026-10-08
 
