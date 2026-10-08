@@ -9,7 +9,7 @@ import { createPassengerFixtureGateway } from '../src/dev/passenger/gateway.ts';
 import { fixturePlaces, fixtureQuote } from '../src/dev/passenger/fixtures.ts';
 import type { PassengerGateway, PassengerTrip, RideDraft } from '../src/features/passenger/model.ts';
 import type { usePassengerFlow } from '../src/features/passenger/usePassengerFlow.ts';
-import { seedActiveRequest } from '../src/features/passenger/activeRequest.ts';
+import { createPassengerIdentity } from '../src/features/passenger/tripIdentity.ts';
 import { tripKey } from '../src/features/trip/queries.ts';
 import { priceTrip } from '../gateway/pricing/engine.ts';
 import { syntheticPricing, syntheticRoute } from './support/pricing-fixture.ts';
@@ -85,12 +85,15 @@ test('reconnect with no local id discovers active request; known request uses no
 test('active identity hydration rejects cross-trip merging and null never erases a nonterminal trip', () => {
   const client = new QueryClient(); const a: PassengerTrip = { id: 'a', revision: 2, phase: 'searching', quote: fixtureQuote(draft) };
   const b = { ...a, id: 'b' };
+  const identity = createPassengerIdentity(client, { subscribeTrip: () => () => {} }, () => {});
+  const seedActiveRequest = (_client: QueryClient, _id: string | undefined, incoming: PassengerTrip | null) =>
+    identity.adoptTripIdentity(incoming, 'active_request_seed', identity.capture());
   seedActiveRequest(client, undefined, a);
   assert.equal(seedActiveRequest(client, 'a', null), null); assert.deepEqual(client.getQueryData(tripKey('a')), a);
   assert.throws(() => seedActiveRequest(client, 'a', b), /identity_violation/); assert.equal(client.getQueryData(tripKey('b')), undefined);
   const terminal = { ...a, revision: 3, phase: 'cancelled' }; client.setQueryData(tripKey('a'), terminal);
   assert.equal(seedActiveRequest(client, 'a', b)?.id, 'b'); assert.deepEqual(client.getQueryData(tripKey('a')), terminal);
-  assert.equal(seedActiveRequest(client, 'b', { ...b, revision: 1 })?.revision, 2); client.clear();
+  assert.equal(seedActiveRequest(client, 'b', { ...b, revision: 1 })?.revision, 2); identity.dispose(); client.clear();
 });
 
 test('confirmed cancellation permits a fresh Passenger create with a new intent id', async () => {

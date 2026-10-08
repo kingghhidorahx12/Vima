@@ -5,7 +5,8 @@ export type MatchingTraceEvent =
   | 'watchdog' | 'watch_retry' | 'location_post_start'
   | 'location_post_receipt' | 'location_post_error' | 'location_session_stop'
   | 'poll_start' | 'poll_result' | 'poll_error' | 'poll_retry'
-  | 'poll_reconnected' | 'poll_invalidation' | 'poll_stop' | 'offer_render';
+  | 'poll_reconnected' | 'poll_invalidation' | 'poll_stop' | 'offer_render'
+  | 'trip_reconcile' | 'driver_action_press' | 'driver_action_request';
 
 export type MatchingTraceFields = Readonly<Record<string, string | number | boolean | undefined>>;
 export type MatchingTrace = (event: MatchingTraceEvent, fields?: MatchingTraceFields) => void;

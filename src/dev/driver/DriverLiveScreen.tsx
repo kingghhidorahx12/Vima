@@ -7,7 +7,7 @@ import * as Location from 'expo-location';
 import { LiveAccountGate } from '../LiveAccountGate';
 import type { MatchingClient } from '../../services/matching/client';
 import type { DriverState } from '../../services/matching/contracts';
-import { ApiError } from '../../services/api/client';
+import { createDriverActions } from '../../services/matching/driverActions';
 import { DriverRideShell } from '../../features/driver/DriverRideShell';
 import { VimaText } from '../../design/primitives';
 import { VimaButton } from '../../design/components/VimaButton';
@@ -15,7 +15,7 @@ import { visualTokens as t } from '../../design/tokens';
 import { Camera } from '../../map/Camera';
 import { PassengerUserLocation } from '../../features/passenger/PassengerMapPin';
 import { createDriverLocationSession, type DriverLocationStopReason } from './locationSession';
-import { driverOperationId, type DriverOperationKind } from '../../services/matching/operationId';
+import { driverOperationId } from '../../services/matching/operationId';
 import { DriverOffer } from './DriverOffer';
 
 export default function DriverLiveScreen() {
@@ -29,8 +29,15 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
   const connection = useSyncExternalStore(client.subscribeConnection, client.getConnection, client.getConnection);
   const [focused, setFocused] = useState(false); const [foreground, setForeground] = useState(AppState.currentState === 'active');
   const [permissionPromptActive, setPermissionPromptActive] = useState(false);
-  const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [now, setNow] = useState(() => Date.now());
-  const pending = useRef<{ id: string; run: (id: string) => Promise<DriverState> } | undefined>(undefined);
+  const [error, setError] = useState(''); const [, refreshActions] = useState(0); const [now, setNow] = useState(() => Date.now());
+  const [actions] = useState(() => createDriverActions(client, {
+    changed: () => refreshActions(value => value + 1), error: setError,
+    received: snapshot => queryClient.setQueryData<DriverState>(['driver', accountId], old => old && old.revision >= snapshot.revision ? old : snapshot),
+    settled: () => { void queryClient.invalidateQueries({ queryKey: ['driver', accountId] }); },
+  }));
+  const { pending } = actions; const busy = actions.inFlight.current;
+  useEffect(() => { actions.resume(); return () => actions.dispose(); }, [actions]);
+  useLayoutEffect(() => { if (state.data) actions.receive(state.data); }, [actions, state.data]);
   const locationSession = useRef<ReturnType<typeof createDriverLocationSession> | undefined>(undefined);
   const actualForeground = useRef(AppState.currentState === 'active');
   const permissionPrompt = useRef(false);
@@ -93,21 +100,6 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => { clearTimeout(initial); clearInterval(timer); };
   }, [expiresAt]);
-  const act = async (kind?: DriverOperationKind, run?: (id: string) => Promise<DriverState>) => {
-    if (busy) return;
-    if (!pending.current && kind && run) pending.current = { id: driverOperationId(kind), run };
-    if (!pending.current) return;
-    setBusy(true); setError('');
-    try {
-      const snapshot = await pending.current.run(pending.current.id); pending.current = undefined;
-      queryClient.setQueryData<DriverState>(key, old => old && old.revision >= snapshot.revision ? old : snapshot);
-    } catch (error) {
-      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
-        pending.current = undefined; setError('La acción ya no está disponible. Se actualizará el estado.');
-      } else setError('Acción sin confirmar. Reintenta para reconciliar el mismo intento.');
-    }
-    finally { setBusy(false); void queryClient.invalidateQueries({ queryKey: key }); }
-  };
   const data = state.data; const offer = data?.offer; const assigned = data?.assignment;
   const location = data?.location;
   const labels = { OFFLINE: 'Desconectado', LOCATING: 'Localizando…', AVAILABLE: 'Disponible', PAUSED: 'En pausa', ASSIGNED: 'Asignado' };
@@ -116,27 +108,27 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     <PassengerUserLocation active={foreground && focused} place={{ id: 'driver-current', name: '', address: '', coordinate: location.coordinate }} />
   </> : undefined} renderPhase={() => offer ? <View>
     <DriverOffer offer={offer} revision={data!.revision} now={now} disabled={busy || !!pending.current}
-      onAccept={() => { void act('offer_accept', id => client.offerAction(offer.id, 'accept', id)); }}
-      onReject={() => { void act('offer_reject', id => client.offerAction(offer.id, 'reject', id)); }} />
+      onAccept={() => { void actions.startDriverAction({ kind: 'offer_accept', offerId: offer.id, requestId: offer.requestId }); }}
+      onReject={() => { void actions.startDriverAction({ kind: 'offer_reject', offerId: offer.id, requestId: offer.requestId }); }} />
     {error ? <VimaText variant="bodyRegular" accessibilityRole="alert">{error}</VimaText> : null}
-    {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void act(); }} /> : null}
+    {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void actions.retryPendingDriverAction(); }} /> : null}
   </View> : <ScrollView style={styles.panel} contentContainerStyle={styles.content}>
     <VimaText variant="h2">Driver P0 · {data?.profile.driver.name ?? accountId}</VimaText>
     <VimaText variant="bodyRegular">{accountId} · {connection === 'online' ? 'Conectado' : connection === 'reconnecting' ? 'Reconectando' : 'Sin conexión'}</VimaText>
     <VimaText variant="bodyRegular">{data ? labels[data.availability] : available ? 'Cargando estado…' : 'Matching no configurado'}</VimaText>
     {data && !assigned ? <View style={styles.actions}>
       <VimaButton label={availability === 'PAUSED' ? 'Reanudar disponibilidad' : 'Disponible'} disabled={busy || !!pending.current || ['LOCATING', 'AVAILABLE'].includes(availability ?? '')}
-        onPress={() => { void act('availability_available', id => client.availability('AVAILABLE', id)); }} />
+        onPress={() => { void actions.startDriverAction({ kind: 'availability_available' }); }} />
       <VimaButton secondary label="Desconectarme" disabled={busy || !!pending.current || availability === 'OFFLINE'}
-        onPress={() => { void act('availability_offline', id => client.availability('OFFLINE', id)); }} />
+        onPress={() => { void actions.startDriverAction({ kind: 'availability_offline' }); }} />
     </View> : null}
     {assigned ? <View style={styles.content}><VimaText variant="h3">Asignación confirmada</VimaText>
       <VimaText variant="bodyRegular">{assigned.value.id}</VimaText><VimaText variant="bodyRegular">{assigned.pickup.name} · {assigned.pickup.address}</VimaText>
       <VimaButton secondary danger label="Cancelar asignación" disabled={busy || !!pending.current}
-        onPress={() => { void act('assignment_cancel', id => client.cancelAssignment(assigned.requestId, id)); }} />
+        onPress={() => { void actions.startDriverAction({ kind: 'assignment_cancel', requestId: assigned.requestId }); }} />
     </View> : null}
     {error || state.error ? <VimaText variant="bodyRegular" accessibilityRole="alert">{error || 'No se pudo leer el estado.'}</VimaText> : null}
-    {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void act(); }} /> : null}
+    {pending.current ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={() => { void actions.retryPendingDriverAction(); }} /> : null}
   </ScrollView>} /></SafeAreaView>;
 }
 const styles = StyleSheet.create({ fill: { flex: 1 }, panel: { maxHeight: '70%' }, content: { padding: 16, gap: 12 },

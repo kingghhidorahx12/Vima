@@ -13,6 +13,8 @@ import type { TomTomAdapter } from '../gateway/tomtom.ts';
 import { syntheticDraft, syntheticPricing, syntheticRoute } from './support/pricing-fixture.ts';
 import { createApiClient } from '../src/services/api/client.ts';
 import { decodeMatchingTrip, decodeDriver } from '../src/services/matching/decode.ts';
+import { createMatchingClient } from '../src/services/matching/client.ts';
+import { createDriverActions } from '../src/services/matching/driverActions.ts';
 
 test('authenticated HTTP pricing → request → offer → assignment uses ownership, real adapters and scoped reads', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'vima-matching-http-'));
@@ -76,7 +78,21 @@ test('authenticated HTTP pricing → request → offer → assignment uses owner
     server = createGateway(config, adapter, options); base = await listen();
     assert.equal(decodeMatchingTrip((await call(`/v1/passenger/requests/${trip.id}`, 0)).body).assignment?.id, passenger.assignment?.id);
     assert.equal(decodeMatchingTrip((await call('/v1/passenger/requests', 0, { quoteId: quote.quote.id, requestId: 'create' })).body).id, trip.id);
-    await call(`/v1/driver/assignments/${trip.id}/cancel`, 2, { actionId: 'cancel-driver' });
+    const driverClient = createMatchingClient({ async request(input) {
+      const response = await call(input.path, 2, input.body);
+      assert.equal(response.status, 200); return input.decode(response.body);
+    } });
+    const driverActions = createDriverActions(driverClient, { changed() {}, received() {}, settled() {},
+      error(message) { assert.equal(message, ''); }, trace: (event, fields) => logs.push({ event, ...fields }) });
+    driverActions.receive(await driverClient.driver());
+    await driverActions.startDriverAction({ kind: 'assignment_cancel', requestId: trip.id });
+    const chain = logs.filter(e => (e as { intent?: string }).intent === 'assignment_cancel') as { event: string; operationId: string; requestId: string }[];
+    assert.deepEqual(chain.map(e => e.event), ['driver_action_press', 'driver_action_request', 'driver_action_http_received', 'driver_action_commit']);
+    assert.ok(chain.every(e => e.requestId === trip.id && e.operationId === chain[0]!.operationId));
+    assert.match(chain[0]!.operationId, /^driver:assignment_cancel:/);
+    // HTTP receipt may repeat on ambiguous retry; the durable commit does not.
+    await call(`/v1/driver/assignments/${trip.id}/cancel`, 2, { actionId: chain[0]!.operationId });
+    assert.equal(logs.filter(e => (e as { event?: string; intent?: string }).event === 'driver_action_commit' && (e as { intent?: string }).intent === 'assignment_cancel').length, 1);
     await call(`/v1/passenger/requests/${trip.id}/commands`, 0, { tripId: trip.id, commandId: 'cancel-new', name: 'cancel', payload: { reason: 'user' } });
     assert.deepEqual(await call('/v1/passenger/requests/active', 0), { status: 200, body: null });
     assert.ok(logs.some(e => (e as { event?: string }).event === 'offer_commit'));

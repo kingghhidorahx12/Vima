@@ -41,6 +41,8 @@ export async function matchingHttp(request: IncomingMessage, path: string, auth:
   if (method === 'GET' && path === '/v1/driver/state') { reply(200, await matching.driver(principal)); return true; }
   if (method === 'POST' && path === '/v1/driver/availability') {
     const body = allowFields(await read(), ['availability', 'operationId']);
+    if (body.availability === 'AVAILABLE' || body.availability === 'OFFLINE') matching.traceDriverAction('driver_action_http_received', principal,
+      body.operationId as string, { kind: body.availability === 'AVAILABLE' ? 'availability_available' : 'availability_offline' });
     reply(200, await matching.availability(principal, body.availability as 'AVAILABLE' | 'OFFLINE', body.operationId as string)); return true;
   }
   if (method === 'POST' && path === '/v1/driver/location') {
@@ -50,11 +52,15 @@ export async function matchingHttp(request: IncomingMessage, path: string, auth:
   const offer = /^\/v1\/driver\/offers\/([A-Za-z0-9-]+)\/(accept|reject)$/.exec(path);
   if (method === 'POST' && offer) {
     const body = allowFields(await read(), ['actionId']);
+    matching.traceDriverAction('driver_action_http_received', principal, body.actionId as string,
+      { kind: offer[2] === 'accept' ? 'offer_accept' : 'offer_reject', offerId: offer[1]! });
     reply(200, await matching.offerAction(principal, offer[1]!, offer[2] as 'accept' | 'reject', body.actionId as string)); return true;
   }
   const assignment = /^\/v1\/driver\/assignments\/([A-Za-z0-9-]+)\/cancel$/.exec(path);
   if (method === 'POST' && assignment) {
     const body = allowFields(await read(), ['actionId']);
+    matching.traceDriverAction('driver_action_http_received', principal, body.actionId as string,
+      { kind: 'assignment_cancel', requestId: assignment[1]! });
     reply(200, await matching.cancelAssignment(principal, assignment[1]!, body.actionId as string)); return true;
   }
   throw new MatchingError(404, 'matching_endpoint_not_found');

@@ -111,10 +111,9 @@ test('typed Driver operation IDs are unique, backend-safe and carry the intent',
   }));
   assert.equal(new Set(ids).size, ids.length);
   const screen = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
-  assert.match(screen, /if \(!pending.current && kind && run\) pending.current = \{ id: driverOperationId\(kind\), run \}/);
-  assert.match(screen, /pending.current.run\(pending.current.id\)/);
-  assert.match(screen, /act\('availability_offline', id => client.availability\('OFFLINE', id\)\)/);
-  assert.equal((screen.match(/client.availability\('OFFLINE'/g) ?? []).length, 1);
+  assert.match(screen, /actions.startDriverAction\(\{ kind: 'availability_offline' \}\)/);
+  assert.doesNotMatch(screen, /act\(kind\?|pending.current.run/);
+  assert.match(screen, /actions.retryPendingDriverAction\(\)/);
 });
 
 test('activeRequest reads the authenticated endpoint, accepts null and rejects malformed/terminal payloads', async () => {

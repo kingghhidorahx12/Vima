@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { tripKey } from '../../features/trip/queries';
+import { tripKey } from '../../features/trip/queries.ts';
 
 export interface TripInvalidation {
   readonly tripId: string;
@@ -10,8 +10,8 @@ export interface RealtimeTransport {
 }
 
 /** Transport messages trigger authoritative reads, not local success or phase writes. */
-export function connectTripRealtime(client: QueryClient, transport: RealtimeTransport, tripId: string) {
-  const reconcile = () => { void client.invalidateQueries({ queryKey: tripKey(tripId) }); };
+export function connectTripRealtime(client: QueryClient, transport: RealtimeTransport, tripId: string, isCurrent: () => boolean = () => true) {
+  const reconcile = () => { if (isCurrent()) void client.invalidateQueries({ queryKey: tripKey(tripId), exact: true }); };
   return transport.subscribeTrip(tripId, (event) => {
     if (event.tripId === tripId) reconcile();
   }, reconcile);

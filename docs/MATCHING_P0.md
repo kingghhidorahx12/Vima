@@ -141,6 +141,22 @@ bootstrap; con request conocida sigue realtime. `active_request_exists` durante
 create consulta `/active` y adopta por la misma regla, sin nuevo ID ni éxito
 optimista; otros 4xx conservan su semántica. `reconcileTrip` sigue estricto.
 
+La identidad móvil tiene una sola autoridad: `adoptTripIdentity`. Request helper
+sólo devuelve datos validados; adopción recibe origin tipado (request_receipt,
+active_request_seed, active_request_conflict_recovery, release_terminal).
+Cada transición a otra identidad o a none incrementa identityEpoch síncrono,
+detiene el realtime anterior y cancela su query exacta; después siembra la key
+propia, expone la nueva identidad y subscribe realtime. No elimina historial.
+La liberación requiere terminal confirmado. Null de `/active` sigue sin borrar.
+
+Bootstrap, recuperación 409, request receipts, comandos, queries/refetch por
+reconnect y callbacks realtime capturan epoch/expectedTripId. Una continuación
+obsoleta no puede adoptar A, invalidar B ni mezclar IDs aunque ignore abort.
+Queries y comandos agregan contexto de diagnóstico a `reconcileTrip`: origin,
+previousId/incomingId/expectedId, queryKey, epoch y revisions. Los eventos DEV
+`trip_reconcile` se emiten también antes de rechazar un mismatch; jamás escogen
+arbitrariamente incoming. Cada query exige su propio ID y cada comando el suyo.
+
 ## Provenance y oferta visible
 
 `matchingTrace` del servidor permite capturar eventos estructurados; el default
@@ -166,6 +182,28 @@ location_fix, location_ttl, offer_accept, offer_expiry_pause, assignment_cancel
 y snapshot_migration. El helper prohíbe OFFLINE sin explicit_offline y commit
 rechaza cambios sin provenance. No se persiste una segunda autoridad para logs.
 Background/unmount sólo controla transporte/location local: nunca OFFLINE.
+
+Las acciones UI Driver usan `startDriverAction(intent)` y
+`retryPendingDriverAction()`. Pending almacena `{ intent, operationId }` inmutable,
+sin closures. La ref síncrona se establece antes del primer await e impide
+doble press; retry no genera nuevo ID ni recalcula target. Snapshot autoritativo
+con assignment/offer distinto descarta pending; offer expirada tampoco se puede
+reintentar. 4xx definitivo descarta, error ambiguo conserva sólo target vigente.
+Availability deja de ser retryable cuando ya alcanzó el estado pedido o hay
+assignment. Location no pasa por estas acciones UI.
+
+Para correlación se añaden `driver_action_press`, `driver_action_request`,
+`driver_action_http_received`, `driver_action_commit`. Assignment cancel lleva
+el mismo intent=`assignment_cancel`, operationId y requestId en los cuatro;
+el servidor toma requestId de la URL existente. Para offer actions, el servidor
+lo deriva del registro autorizado de la oferta. No cambia el contrato HTTP ni
+se añade otro camino de cancelación. Commit se registra sólo tras persistir una
+mutación nueva; reintentar el mismo recibo no registra otra cancelación.
+
+Pruebas controladas cubren cancel A→create B→offer/accept B→assigned/PIN con
+respuestas A tardías, stop/cancel antes de B, retry con target congelado,
+invalidación B→C y correlación real HTTP hasta commit. **QA físico pendiente**
+para esa secuencia y su cadena de trazas en Android.
 
 Implementación y pruebas automatizadas completadas; **Android físico pendiente**
 para identidad activa/cancel→crear, oferta ~20 s sin scroll/cadena de trazas y

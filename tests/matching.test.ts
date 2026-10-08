@@ -11,6 +11,11 @@ import type { AuthoritativeRideQuote } from '../src/services/pricing/contracts.t
 import type { RouteResult } from '../src/services/geospatial/contracts.ts';
 import { syntheticDraft, syntheticPricing, syntheticRoute } from './support/pricing-fixture.ts';
 import type { MatchingServerEvent } from '../gateway/matching/trace.ts';
+import { QueryClient } from '@tanstack/react-query';
+import { createPassengerIdentity } from '../src/features/passenger/tripIdentity.ts';
+import { executeConfirmedCommand, tripKey, tripQueryOptions } from '../src/features/trip/queries.ts';
+import type { PassengerTrip } from '../src/features/passenger/model.ts';
+import type { TripInvalidation } from '../src/services/realtime/index.ts';
 
 class Clock implements MatchingClock {
   time = 1000; jobs = new Map<symbol, { at: number; callback: () => void }>();
@@ -52,6 +57,38 @@ function setup(count = 4, customEta?: MatchingOptions['eta']) {
     close() { coordinator.close(); rmSync(directory, { recursive: true, force: true });
       for (const event of traces) if (event.event === 'availability_transition' && event.to === 'OFFLINE') assert.equal(event.reason, 'explicit_offline'); } };
 }
+
+test('identity epoch keeps real B assignment and PIN after A cancellation, late fetch/poll/bootstrap', async () => {
+  const f = setup(1); const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const callbacks = new Map<string, (event: TripInvalidation) => void>();
+  const identity = createPassengerIdentity(client, { subscribeTrip(id, change) { callbacks.set(id, change); return () => {}; } }, () => {});
+  try {
+    await f.ready(); await f.available(1); const a = await f.c.create(p, 'quote', 'A'); await flush();
+    identity.adoptTripIdentity(a, 'request_receipt', identity.capture()); const fenceA = identity.capture();
+    let finishFetch!: (v: PassengerTrip) => void; let finishBootstrap!: (v: PassengerTrip) => void;
+    const delayedFetch = new Promise<PassengerTrip>(resolve => { finishFetch = resolve; });
+    const delayedBootstrap = new Promise<PassengerTrip>(resolve => { finishBootstrap = resolve; })
+      .then(snapshot => identity.adoptTripIdentity(snapshot, 'active_request_seed', fenceA));
+    const gateway = { fetch: (id: string) => id === a.id ? delayedFetch : f.c.fetch(p, id),
+      execute: (command: { tripId: string; commandId: string }) => f.c.cancel(p, command.tripId, command.commandId, 'user') };
+    const fetchA = client.fetchQuery(tripQueryOptions(gateway, a.id, identity.context(fenceA))).catch(e => e);
+    await executeConfirmedCommand(client, gateway, { tripId: a.id, commandId: 'cancel-A', name: 'cancel', payload: {} }, identity.context(fenceA));
+    assert.equal(await f.c.activeRequest(p), null);
+    identity.adoptTripIdentity(null, 'release_terminal', fenceA);
+    f.addQuote('B-quote'); const b = await f.c.create(p, 'B-quote', 'B');
+    identity.adoptTripIdentity(b, 'request_receipt', identity.capture()); await flush();
+    const offer = (await f.c.driver(driver(1))).offer!; assert.equal(offer.requestId, b.id);
+    await f.c.offerAction(driver(1), offer.id, 'accept', 'accept-B');
+    await client.fetchQuery(tripQueryOptions(gateway, b.id, identity.context()));
+    const assigned = client.getQueryData<PassengerTrip>(tripKey(b.id))!;
+    assert.equal(assigned.phase, 'assigned'); assert.ok(assigned.assignment?.pin);
+    callbacks.get(a.id)!({ tripId: a.id }); finishFetch(a); finishBootstrap(a); await fetchA;
+    assert.equal(await delayedBootstrap, undefined);
+    assert.equal(identity.capture().expectedTripId, b.id);
+    assert.equal(client.getQueryData<PassengerTrip>(tripKey(b.id))?.assignment?.pin, assigned.assignment.pin);
+    assert.equal((await f.c.activeRequest(p))?.id, b.id);
+  } finally { identity.dispose(); client.clear(); f.close(); }
+});
 
 test('one active request per owner preserves idempotency, serializes cancel/create and releases on deadline', async () => {
   const f = setup(0); try {

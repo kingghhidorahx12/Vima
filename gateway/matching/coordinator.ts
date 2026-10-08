@@ -13,6 +13,7 @@ import { matchingPolicy } from '../../src/features/passenger/matchingPolicy.ts';
 import type { DriverAvailability, DriverState, MatchingPassengerSnapshot, RequestState } from '../../src/services/matching/contracts.ts';
 import { isMatchingLocationFresh, matchingLocationPolicy } from '../../src/services/matching/policy.ts';
 import { matchingServerTrace, type MatchingServerTrace, type MatchingServerEvent, type AvailabilityReason } from './trace.ts';
+import type { DriverActionIntent } from '../../src/services/matching/driverActions.ts';
 
 export interface MatchingClock { now(): number; schedule(delay: number, callback: () => void): () => void }
 export const systemMatchingClock: MatchingClock = { now: Date.now, schedule(delay, callback) {
@@ -420,7 +421,7 @@ export class MatchingCoordinator {
       this.availabilityTransition(s, d, value === 'OFFLINE' ? 'OFFLINE' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING',
         value === 'OFFLINE' ? 'explicit_offline' : 'explicit_available');
       return this.driverReceipt(s, d.id);
-    }) as Promise<DriverState>;
+    }, () => this.traceDriverAction('driver_action_commit', p, operationId, { kind: value === 'AVAILABLE' ? 'availability_available' : 'availability_offline' })) as Promise<DriverState>;
   }
   async location(p: Principal, point: Coordinate, bearing: number | undefined, operationId: string) {
     this.requireRole(p, 'driver'); let coordinate: Coordinate;
@@ -449,7 +450,8 @@ export class MatchingCoordinator {
         this.revoke(s, r);
       }
       return this.driverReceipt(s, d.id);
-    }) as Promise<DriverState>;
+    }, () => this.traceDriverAction('driver_action_commit', p, actionId,
+      { kind: action === 'accept' ? 'offer_accept' : 'offer_reject', offerId })) as Promise<DriverState>;
   }
   async cancelAssignment(p: Principal, requestId: string, actionId: string) {
     this.requireRole(p, 'driver'); identifier(requestId);
@@ -462,7 +464,15 @@ export class MatchingCoordinator {
       if (r.state === 'NO_DRIVER_FOUND') delete s.activeRequestByOwner[r.owner];
       d.revision++; this.availabilityTransition(s, d, d.expiryCount >= 3 ? 'PAUSED' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING', 'assignment_cancel');
       return this.driverReceipt(s, d.id);
-    }) as Promise<DriverState>;
+    }, () => this.traceDriverAction('driver_action_commit', p, actionId, { kind: 'assignment_cancel', requestId })) as Promise<DriverState>;
+  }
+  /** HTTP calls this only after parsing the existing route/body; offer request identity comes from authority. */
+  traceDriverAction(event: 'driver_action_http_received' | 'driver_action_commit', p: Principal, operationId: string,
+    intent: { kind: DriverActionIntent['kind']; requestId?: string; offerId?: string }) {
+    this.requireRole(p, 'driver'); identifier(operationId);
+    const offer = intent.offerId ? this.state.offers[identifier(intent.offerId)] : undefined;
+    const requestId = intent.kind === 'assignment_cancel' ? identifier(intent.requestId) : offer?.driverId === p.accountId ? offer.requestId : undefined;
+    this.trace({ event, driverId: p.accountId, intent: intent.kind, operationId, requestId, offerId: intent.offerId });
   }
   async wait(p: Principal, requestId: string | undefined, after: number, signal?: AbortSignal): Promise<{ revision: number }> {
     if (!Number.isSafeInteger(after) || after < 0) return invalid();

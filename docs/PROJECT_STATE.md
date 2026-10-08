@@ -1,13 +1,51 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-08 en `codex/passenger-active-offer-provenance-p0`,
-desde `codex/driver-watchdog-first-fix-p0` @ `2467553b`.
+Actualizado 2026-10-08 en `codex/passenger-identity-epoch-driver-actions-p0`,
+desde `codex/passenger-active-offer-provenance-p0` @ `086f70b7`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Epoch de identidad Passenger e intenciones Driver inmutables — 2026-10-08
+
+- `adoptTripIdentity` es el único punto que cambia identidad Passenger. El
+  helper request devuelve un snapshot validado sin tocar cache; `seedActiveRequest`
+  queda absorbido. Request receipt, bootstrap y recuperación 409 pasan por la
+  misma operación, con origen tipado. Liberar una identidad exige estado terminal.
+- Cada cambio A→B/A→none incrementa un epoch síncrono, detiene explícitamente
+  realtime A y cancela exactamente `tripKey(A)` antes de sembrar/exponer B y
+  suscribir B. Cache histórico no se borra. Bootstrap/409/request/command/
+  fetch/reconnect y callbacks realtime llevan fences; abort no es la única defensa.
+  Respuestas de un epoch anterior no cambian UI, identidad ni cache vigente.
+- Reconciliación estricta con contexto DEV `trip_reconcile`: origin, IDs,
+  queryKey, epoch y revisions, nunca payload. Structural sharing exige el ID
+  de su queryKey; command receipts, `command.tripId`. IDs distintos siguen
+  fallando; snapshot/invariante v3 no cambia.
+- Driver reemplaza `act(kind?, run?)` por `startDriverAction(intent)` y
+  `retryPendingDriverAction()`. Pending contiene exclusivamente intent congelada
+  y operationId: ref síncrona impide doble press; retry reutiliza target/ID.
+  Snapshot autoritativo con otro target o error 4xx descarta pending; una oferta
+  expirada no admite retry. Location automática permanece fuera del mecanismo.
+- Cadena sanitizada `driver_action_press` → `driver_action_request` →
+  `driver_action_http_received` → `driver_action_commit`, correlacionada por
+  intent/operationId/requestId. HTTP usa el target de la URL; para offers el
+  servidor obtiene requestId de su registro, sin extender el body. Retry
+  idempotente puede repetir recepción HTTP, nunca un segundo commit.
+- **VERIFICADO automatizado:** suite **245/245**, gateway/matching/pricing
+  **68/68**; incluye A cancelada → B creada → oferta/accept reales → B assigned
+  con PIN, completando después fetch/poll/bootstrap A mediante deferreds.
+  TypeScript, lint, worklets, MapLibre/schema, splash, Hermes Android/iOS
+  DEV/release y aislamiento vigentes. Doctor **20/21** sólo por los cinco
+  patches SDK57 conocidos, sin cambios de dependencias.
+- Visual Passenger/Driver, mapas, pricing, ranking, TTLs, watchdog/location y
+  lifecycle post-assignment intactos. Sin cambios nativos, EAS Build ni merge.
+- **PENDIENTE físico Android:** secuencia A→cancel→B→assigned con PIN incluso
+  con reconexiones/respuestas tardías; cancelación Driver con los cuatro eventos
+  y exactamente el mismo operationId/requestId; retry ambiguo del target original
+  y ausencia de cancelación de C mediante pending B.
 
 ### Identidad Passenger activa y trazabilidad de oferta/availability — 2026-10-08
 

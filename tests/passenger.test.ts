@@ -22,24 +22,24 @@ test('request remains pending until confirmation; ambiguous errors retain the sa
   let finish!: () => void;
   const fixture = createPassengerFixtureGateway({ ...clock, delay: () => new Promise<void>((resolve) => { finish = resolve; }) });
   const client = new QueryClient();
-  const pending = requestPassengerRide(client, fixture.gateway, quote, 'test-request');
+  const pending = requestPassengerRide(fixture.gateway, quote, 'test-request');
   assert.equal(client.getQueryCache().getAll().length, 0);
   assert.equal(passengerPhase(undefined, false, true, true), 'requesting');
   finish();
   const result = await pending;
   assert.equal(result.phase, 'searching');
-  assert.equal(client.getQueryData<PassengerTrip>(tripKey(result.id))?.quote, quote);
+  assert.equal(client.getQueryData(tripKey(result.id)), undefined); // Request helper has no cache side effect.
   fixture.controls.setConnection('offline');
-  const rejected = requestPassengerRide(client, fixture.gateway, quote, 'same-retry-id');
+  const rejected = requestPassengerRide(fixture.gateway, quote, 'same-retry-id');
   finish(); await assert.rejects(rejected);
-  assert.equal(client.getQueryData<PassengerTrip>(tripKey(result.id))?.quote, quote);
+  assert.equal(client.getQueryData(tripKey(result.id)), undefined); // Request helper has no cache side effect.
   client.clear(); fixture.controls.dispose();
 });
 
 test('prolonged search continues without a command; editing requires cancellation and a new request', async () => {
   const fixture = createPassengerFixtureGateway(clock);
   const client = new QueryClient();
-  const first = await requestPassengerRide(client, fixture.gateway, quote, 'request-1');
+  const first = await requestPassengerRide(fixture.gateway, quote, 'request-1');
   fixture.controls.advance('prolonged');
   const prolonged = await fixture.gateway.fetch(first.id);
   assert.equal(prolonged.quote, quote);
@@ -50,7 +50,7 @@ test('prolonged search continues without a command; editing requires cancellatio
   fixture.controls.driverCancels();
   assert.equal((await fixture.gateway.fetch(first.id)).phase, 'reassigning');
   await executeConfirmedCommand(client, fixture.gateway, { tripId: first.id, commandId: 'edit-cancel', name: 'cancel', payload: { reason: 'edit' } });
-  const revised = await requestPassengerRide(client, fixture.gateway, quote, 'edit-1');
+  const revised = await requestPassengerRide(fixture.gateway, quote, 'edit-1');
   assert.notEqual(revised.id, first.id);
   assert.equal(revised.phase, 'searching');
   assert.equal(canRequest(quote, 'offline', false), false);
@@ -70,13 +70,13 @@ test('new fixture sessions cannot inherit an assigned trip from a previous sessi
   const first = createPassengerFixtureGateway(clock);
   const second = createPassengerFixtureGateway(clock);
   const client = new QueryClient();
-  const oldTrip = await requestPassengerRide(client, first.gateway, quote, 'request-old');
+  const oldTrip = await requestPassengerRide(first.gateway, quote, 'request-old');
   first.controls.advance('assigned');
   client.setQueryData(tripKey(oldTrip.id), await first.gateway.fetch(oldTrip.id));
-  const newTrip = await requestPassengerRide(client, second.gateway, quote, 'request-new');
+  const newTrip = await requestPassengerRide(second.gateway, quote, 'request-new');
   assert.notEqual(first.gateway.scope, second.gateway.scope);
   assert.notEqual(oldTrip.id, newTrip.id);
-  assert.equal(client.getQueryData<PassengerTrip>(tripKey(newTrip.id))?.phase, 'searching');
+  assert.equal(client.getQueryData(tripKey(newTrip.id)), undefined);
   client.clear(); first.controls.dispose(); second.controls.dispose();
 });
 

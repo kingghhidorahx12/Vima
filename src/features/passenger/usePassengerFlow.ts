@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { connectTripRealtime } from '../../services/realtime';
 import { useCriticalTripCommand, tripKey, tripQueryOptions } from '../trip/queries';
 import { canRequest, isMatching, passengerPhase, passengerTrip, validDraft, validPlace, type OriginStatus, type PassengerGateway, type PassengerTrip, type Place, type RideQuote } from './model';
 import { requestPassengerRide } from './requests';
-import { seedActiveRequest } from './activeRequest';
+import { createPassengerIdentity, type IdentityFence } from './tripIdentity';
+import { assertCurrentTrip } from '../trip/reconciliation';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 import { approvedLocalPlaces } from '../../services/geospatial/localPlaces';
 import { createSearchCoordinator } from '../../services/geospatial/searchCoordinator';
@@ -25,27 +25,30 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const [stops, setStops] = useState<readonly Place[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [editing, setEditing] = useState(false);
+  const locked = useRef(false);
   const [tripId, updateTripId] = useState<string>();
-  const currentTripId = useRef<string | undefined>(undefined);
-  const setTripId = (id: string | undefined) => { currentTripId.current = id; updateTripId(id); };
+  const [identity] = useState(() => createPassengerIdentity(client, gateway, updateTripId));
+  useEffect(() => { identity.resume(); return () => identity.dispose(); }, [identity]);
+  const releaseIdentity = () => identity.adoptTripIdentity(null, 'release_terminal', identity.capture());
   const needsBootstrap = gateway.source === 'server' && !!gateway.activeRequest;
   const [activeReady, setActiveReady] = useState(!needsBootstrap);
   const [activeError, setActiveError] = useState<Error>();
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const bootstrapComplete = useRef(false);
   useEffect(() => {
-    if (!needsBootstrap || connection !== 'online' || bootstrapComplete.current && currentTripId.current) return;
+    const fence = identity.capture();
+    if (!needsBootstrap || connection !== 'online' || bootstrapComplete.current && fence.expectedTripId) return;
     const controller = new AbortController();
     void gateway.activeRequest!(controller.signal).then(incoming => {
-      if (controller.signal.aborted) return;
-      const active = seedActiveRequest(client, currentTripId.current, incoming);
-      if (active) { currentTripId.current = active.id; updateTripId(active.id); setEditing(false); setConfirming(false); }
+      if (controller.signal.aborted || !identity.isCurrent(fence)) return;
+      const active = identity.adoptTripIdentity(incoming, 'active_request_seed', fence);
+      if (active) { locked.current = false; setEditing(false); setConfirming(false); }
       bootstrapComplete.current = true; setActiveReady(true); setActiveError(undefined);
     }).catch(error => {
-      if (!controller.signal.aborted) { setActiveReady(false); setActiveError(error instanceof Error ? error : new Error('active_request_unavailable')); }
+      if (!controller.signal.aborted && identity.isCurrent(fence)) { setActiveReady(false); setActiveError(error instanceof Error ? error : new Error('active_request_unavailable')); }
     });
     return () => controller.abort();
-  }, [client, gateway, needsBootstrap, connection, bootstrapAttempt]);
+  }, [identity, gateway, needsBootstrap, connection, bootstrapAttempt]);
   const [field, setField] = useState<'origin' | 'destination' | null>(null);
   const [savedPicker, setSavedPicker] = useState<SavedSlot | 'favorite' | null>(null);
   const [search, setSearch] = useState('');
@@ -56,7 +59,6 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const requestId = useRef<string | null>(null);
   const cancelCommand = useRef<{ fingerprint: string; id: string } | undefined>(undefined);
   const contributionRequest = useRef<{ fingerprint: string; id: string } | undefined>(undefined);
-  const locked = useRef(false);
   const selection = useRef<AbortController | undefined>(undefined);
   const [selectionError, setSelectionError] = useState<Error>();
   const [resolving, setResolving] = useState(false);
@@ -89,7 +91,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   useEffect(() => () => { selection.current?.abort(); gateway.closePlaces?.(); }, [gateway]);
   const cancelSelection = () => { selection.current?.abort(); selection.current = undefined; setResolving(false); setSelectionError(undefined); };
   const originStatus: OriginStatus = originChoice?.kind ?? (location.isPending ? 'loading' : location.data ? 'automatic' : 'unavailable');
-  const trip = useQuery({ ...tripQueryOptions(gateway, tripId ?? ''), enabled: !!tripId && connection === 'online',
+  const trip = useQuery({ ...tripQueryOptions(gateway, tripId ?? '', identity.context()), enabled: !!tripId && connection === 'online',
     select: passengerTrip, retry: false });
   const draftStops = trip.data?.phase === 'expired' ? trip.data.quote.stops : stops;
   const quote = useQuery({ queryKey: ['passenger', gateway.scope, 'quote', origin, destination, draftStops],
@@ -114,28 +116,39 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     timer = setTimeout(expire, Math.max(0, Math.min(2_147_483_647, quoteExpiry - Date.now())));
     return () => clearTimeout(timer);
   }, [confirming, quoteExpiry, client, gateway.scope]);
-  const refetchTrip = trip.refetch;
-  useEffect(() => tripId ? connectTripRealtime(client, gateway, tripId) : undefined, [client, gateway, tripId]);
   useEffect(() => {
-    if (connection === 'online' && tripId) void refetchTrip();
-  }, [connection, tripId, refetchTrip]);
+    const fence = identity.capture();
+    if (connection === 'online' && fence.expectedTripId)
+      void client.fetchQuery(tripQueryOptions(gateway, fence.expectedTripId, identity.context(fence))).catch(() => {});
+  }, [connection, tripId, client, gateway, identity]);
 
-  const request = useMutation({ mutationFn: async (snapshot: RideQuote) => {
-    try { return await requestPassengerRide(client, gateway, snapshot, requestId.current!); }
+  const request = useMutation({ mutationFn: async ({ snapshot, fence, id }: { snapshot: RideQuote; fence: IdentityFence; id: string }) => {
+    assertCurrentTrip(identity.context(fence));
+    try {
+      const receipt = await requestPassengerRide(gateway, snapshot, id);
+      assertCurrentTrip(identity.context(fence));
+      return { receipt, origin: 'request_receipt' as const };
+    }
     catch (error) {
+      assertCurrentTrip(identity.context(fence));
       if (!(error instanceof ApiError) || error.code !== 'active_request_exists' || !gateway.activeRequest) throw error;
-      const active = seedActiveRequest(client, currentTripId.current, await gateway.activeRequest());
+      const active = await gateway.activeRequest();
+      assertCurrentTrip(identity.context(fence));
       if (!active) throw error;
-      return active;
+      return { receipt: active, origin: 'active_request_conflict_recovery' as const };
     }
   }, retry: false });
   // A lost create response must be reconciled with its original payload, even after quote refresh/expiry.
-  const ambiguousRequest = gateway.source === 'server' && request.isError &&
+  const requestCurrent = !!request.variables && identity.isCurrent(request.variables.fence);
+  const requestPending = requestCurrent && request.isPending;
+  const ambiguousRequest = gateway.source === 'server' && requestCurrent && request.isError &&
     !(request.error instanceof ApiError && request.error.status >= 400 && request.error.status < 500);
   const command = useCriticalTripCommand(gateway);
-  const pending = request.isPending || command.isPending || resolving;
-  const phase = useMatchingProjection(trip.data, passengerPhase(trip.data, editing, confirming, request.isPending), gateway.source === 'server');
-  const activeQuote = ambiguousRequest || request.isPending ? request.variables :
+  const commandCurrent = command.variables?.reconciliation?.isCurrent() ?? false;
+  const commandPending = commandCurrent && command.isPending;
+  const pending = requestPending || commandPending || resolving;
+  const phase = useMatchingProjection(trip.data, passengerPhase(trip.data, editing, confirming, requestPending), gateway.source === 'server');
+  const activeQuote = ambiguousRequest || requestPending ? request.variables?.snapshot :
     phase === 'home' || phase === 'confirm' || phase === 'requesting' ? quote.data : trip.data?.quote;
 
   const applyPlace = (value: Place, target: 'origin' | 'destination') => {
@@ -241,15 +254,20 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     if (!activeReady || locked.current || phase !== 'confirm' || (ambiguousRequest ? connection !== 'online' || pending : !canRequest(quote.data, connection, pending, gateway))) return;
     locked.current = true;
     requestId.current ??= operationId(); // Keep on ambiguous failure/retry.
+    const fence = identity.capture();
     try {
-      const confirmed = await request.mutateAsync(ambiguousRequest ? request.variables! : quote.data!);
-      setTripId(confirmed.id); setEditing(false); setConfirming(false);
+      const confirmed = await request.mutateAsync({ snapshot: ambiguousRequest ? request.variables!.snapshot : quote.data!, fence, id: requestId.current });
+      if (!identity.isCurrent(fence)) return;
+      identity.adoptTripIdentity(confirmed.receipt, confirmed.origin, fence);
+      locked.current = false;
+      setEditing(false); setConfirming(false);
       requestId.current = null;
     } catch (error) {
+      if (!identity.isCurrent(fence)) return;
       if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.code !== 'active_request_exists') requestId.current = null;
       // Ambiguous failures retain the original quote and request ID for reconciliation.
     }
-    finally { locked.current = false; }
+    finally { if (identity.isCurrent(fence)) locked.current = false; }
   };
   const preserveDraft = (previous: RideQuote | undefined) => {
     if (!previous) return;
@@ -259,10 +277,12 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const act = async (name: 'cancel', reason: 'user' | 'edit' | 'schedule' = 'user') => {
     if (!tripId || locked.current || pending || connection !== 'online' || (gateway.source === 'server' && phase === 'assigned')) return;
     locked.current = true;
+    const fence = identity.capture();
     try {
       const fingerprint = `${tripId}:${reason}`;
       if (cancelCommand.current?.fingerprint !== fingerprint) cancelCommand.current = { fingerprint, id: operationId() };
-      await command.mutateAsync({ tripId, commandId: cancelCommand.current.id, name, payload: { reason } });
+      await command.mutateAsync({ tripId, commandId: cancelCommand.current.id, name, payload: { reason }, reconciliation: identity.context(fence) });
+      if (!identity.isCurrent(fence)) return false;
       cancelCommand.current = undefined;
       // A newer assignment may have arrived while cancellation was in flight.
       const confirmed = client.getQueryData<PassengerTrip>(tripKey(tripId));
@@ -271,22 +291,26 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       return true;
     }
     catch { /* No optimistic cancellation or search success. */ }
-    finally { locked.current = false; }
+    finally { if (identity.isCurrent(fence)) locked.current = false; }
   };
   const edit = async () => {
     if (locked.current || pending || ambiguousRequest || phase === 'assigned') return false;
+    const fence = identity.capture();
     if (isMatching(phase) && !await act('cancel', 'edit')) return false;
+    if (!identity.isCurrent(fence)) return false;
     const previous = trip.data?.quote ?? quote.data;
     preserveDraft(previous);
-    setTripId(undefined);
+    releaseIdentity();
     setEditing(true); setConfirming(false); setField(null); requestId.current = null;
     return true;
   };
   const schedule = async () => {
     if (locked.current || pending || ambiguousRequest || phase === 'assigned') return;
+    const fence = identity.capture();
     const previous = trip.data?.quote ?? quote.data;
     if (isMatching(phase) && !await act('cancel', 'schedule')) return;
-    preserveDraft(previous); setTripId(undefined); setEditing(true); setConfirming(false); setField(null); requestId.current = null;
+    if (!identity.isCurrent(fence)) return;
+    preserveDraft(previous); releaseIdentity(); setEditing(true); setConfirming(false); setField(null); requestId.current = null;
     return previous;
   };
   const confirmLocations = async () => {
@@ -313,7 +337,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       await client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'saved-slots'] });
     } catch { setSelectionError(new Error('No se pudo eliminar el lugar')); }
   };
-  const error = activeError ?? selectionError ?? request.error ?? command.error ?? trip.error ?? quote.error ?? recents.error ?? favorites.error ?? savedSlots.error ?? places.error;
+  const error = activeError ?? selectionError ?? (requestCurrent ? request.error : null) ?? (commandCurrent ? command.error : null) ?? trip.error ?? quote.error ?? recents.error ?? favorites.error ?? savedSlots.error ?? places.error;
   const visiblePlaces = search.trim() ? searchCoordinator.visible(search, favorites.data ?? [],
     [...(geography.data ?? []), ...(recents.data ?? [])],
     followUpResults?.query === search ? followUpResults.results : places.data,
@@ -335,11 +359,11 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     contributePlace, submitSearch, submit, act, edit, schedule,
     returnHome: () => {
       // Back never cancels or abandons an in-flight/active ride.
-      if (locked.current || ambiguousRequest || request.isPending || command.isPending || isMatching(phase) || phase === 'assigned') return false;
+      if (locked.current || ambiguousRequest || requestPending || commandPending || isMatching(phase) || phase === 'assigned') return false;
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear();
       setField(null); setSearch(''); setFollowUpResults(undefined);
       setSavedPicker(null);
-      setDestination(null); setStops([]); setConfirming(false); setEditing(false); setTripId(undefined);
+      setDestination(null); setStops([]); setConfirming(false); setEditing(false); releaseIdentity();
       setQuoteExpired(false);
       requestId.current = null; request.reset();
       return true;
@@ -358,6 +382,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     retry: () => { if (activeError) { setBootstrapAttempt(value => value + 1); return; }
       if (ambiguousRequest) { void submit(); return; }
       if (quote.data) quoteOperation.current = undefined; cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });
-      if (tripId) void trip.refetch(); },
+      const fence = identity.capture();
+      if (fence.expectedTripId) void client.fetchQuery(tripQueryOptions(gateway, fence.expectedTripId, identity.context(fence))).catch(() => {}); },
   };
 }
