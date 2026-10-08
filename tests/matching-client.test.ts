@@ -9,24 +9,54 @@ import { readFileSync } from 'node:fs';
 import { decodeDriver } from '../src/services/matching/decode.ts';
 
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
-test('live poll sends only invalidations, retries with backoff, reconnects and aborts on unmount', async t => {
+test('reconnect plus advanced revision emits one invalidation, keeps one poll, and aborts on unmount', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  let polls = 0; let signal: AbortSignal | undefined; let deliver: ((v: unknown) => void) | undefined;
+  let polls = 0; let active = 0; let maxActive = 0; let signal: AbortSignal | undefined; let deliver: ((v: unknown) => void) | undefined;
+  const events: string[] = [];
   const api: ApiClient = { async request(input) {
-    polls++; signal = input.signal;
-    if (polls === 1) throw new TypeError('offline');
-    const result = await new Promise((resolve, reject) => { deliver = resolve; signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }); });
-    return input.decode(result);
+    polls++; active++; maxActive = Math.max(maxActive, active); signal = input.signal;
+    try {
+      if (polls === 1) throw new TypeError('offline');
+      const result = await new Promise((resolve, reject) => { deliver = resolve; signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }); });
+      return input.decode(result);
+    } finally { active--; }
   } };
-  const client = createMatchingClient(api); let invalidations = 0; let reconnects = 0;
+  const client = createMatchingClient(api, { pollId: () => `poll-${polls + 1}`, trace: event => events.push(event) }); let invalidations = 0; let reconnects = 0;
   const stop = client.subscribeTrip('request', event => { assert.equal(event.tripId, 'request'); invalidations++; }, () => reconnects++);
   await flush(); assert.equal(client.getConnection(), 'offline'); assert.equal(polls, 1);
   t.mock.timers.tick(499); await flush(); assert.equal(polls, 1);
   t.mock.timers.tick(1); await flush(); assert.equal(polls, 2);
   deliver!({ revision: 7 }); await flush();
-  assert.equal(reconnects, 1); assert.equal(invalidations, 1); assert.equal(client.getConnection(), 'online');
-  assert.equal(polls, 3); stop(); await flush(); assert.equal(signal?.aborted, true);
+  assert.equal(reconnects, 0); assert.equal(invalidations, 1); assert.equal(client.getConnection(), 'online'); assert.equal(maxActive, 1);
+  assert.equal(events.filter(value => value === 'poll_invalidation').length, 1); assert.equal(events.filter(value => value === 'poll_reconnected').length, 0);
+  assert.equal(polls, 3); stop(); await flush(); assert.equal(signal?.aborted, true); assert.ok(events.includes('poll_stop'));
   t.mock.timers.tick(60_000); await flush(); assert.equal(polls, 3);
+});
+
+test('Passenger reconnect without revision reconciles once and normal revision invalidates once', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] }); let calls = 0; const pending: ((value: unknown) => void)[] = [];
+  const client = createMatchingClient({ async request(input) {
+    calls++; if (calls === 1) throw new TypeError('offline');
+    return input.decode(await new Promise(resolve => pending.push(resolve)));
+  } });
+  let invalidations = 0; let reconnects = 0;
+  const stop = client.subscribeTrip('passenger-request', () => invalidations++, () => reconnects++);
+  await flush(); t.mock.timers.tick(500); await flush();
+  pending.shift()!({ revision: 0 }); await flush();
+  assert.deepEqual({ invalidations, reconnects }, { invalidations: 0, reconnects: 1 });
+  pending.shift()!({ revision: 1 }); await flush();
+  assert.deepEqual({ invalidations, reconnects }, { invalidations: 1, reconnects: 1 }); stop(); await flush();
+});
+
+test('Driver reconnect without revision invokes its single reconcile callback once', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] }); let calls = 0; let deliver: ((value: unknown) => void) | undefined;
+  const client = createMatchingClient({ async request(input) {
+    calls++; if (calls === 1) throw new TypeError('offline');
+    return input.decode(await new Promise(resolve => { deliver = resolve; }));
+  } });
+  let reconciles = 0; const stop = client.subscribeDriver(() => reconciles++);
+  await flush(); t.mock.timers.tick(500); await flush(); deliver!({ revision: 0 }); await flush();
+  assert.equal(reconciles, 1); stop(); await flush();
 });
 
 test('connection recovers even before a request has an id, without an aggressive loop', async t => {

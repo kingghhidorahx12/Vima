@@ -43,11 +43,13 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     if (!tracksLocation || !focused || !foreground) return;
     const session = createDriverLocationSession({
       location: { requestForegroundPermissionsAsync: Location.requestForegroundPermissionsAsync,
-        getLastKnownPositionAsync: () => Location.getLastKnownPositionAsync(), watchPositionAsync: Location.watchPositionAsync,
+        getProviderStatusAsync: Location.getProviderStatusAsync, getLastKnownPositionAsync: () => Location.getLastKnownPositionAsync(),
+        watchPositionAsync: Location.watchPositionAsync,
         balancedAccuracy: Location.Accuracy.Balanced }, operationId,
       send: async (coordinate, heading, id, signal) => {
         const snapshot = await client.location(coordinate, heading, id, signal);
         if (!signal.aborted) { setError(''); queryClient.setQueryData<DriverState>(['driver', accountId], old => old && old.revision >= snapshot.revision ? old : snapshot); }
+        return { availability: snapshot.availability, revision: snapshot.revision };
       }, onError: setError,
     });
     return () => session.stop();

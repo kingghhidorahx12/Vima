@@ -3,9 +3,15 @@ import type { PassengerGateway, Connection } from '../../features/passenger/mode
 import type { TripCommand } from '../../features/trip/contracts.ts';
 import type { Coordinate } from '../../map/models.ts';
 import { decodeDriver, decodeIdentity, decodeMatchingTrip, decodeRevision } from './decode.ts';
+import { matchingDevTrace, matchingTraceError, type MatchingTrace } from './devTrace.ts';
+
+interface MatchingClientOptions { trace?: MatchingTrace; now?: () => number; pollId?: () => string }
+let pollSequence = 0;
 
 /** Revision-based invalidations only. Snapshots always come through authoritative GET/commands. */
-export function createMatchingClient(api: ApiClient) {
+export function createMatchingClient(api: ApiClient, options: MatchingClientOptions = {}) {
+  const trace = options.trace ?? matchingDevTrace; const now = options.now ?? Date.now;
+  const nextPollId = options.pollId ?? (() => `poll-${now()}-${++pollSequence}`);
   let connection: Connection = 'reconnecting'; const listeners = new Set<() => void>();
   const revisions = new Map<string, number>();
   let recovery: ReturnType<typeof setTimeout> | undefined;
@@ -37,22 +43,34 @@ export function createMatchingClient(api: ApiClient) {
     const controller = new AbortController(); let attempts = 0; let cancelDelay: (() => void) | undefined;
     void (async () => {
       while (!controller.signal.aborted) {
+        const pollId = nextPollId(); const startedAt = now();
         try {
           if (attempts) status('reconnecting');
           const after = revisions.get(key) ?? 0;
+          trace('poll_start', { pollId, attempt: attempts + 1 });
           const result = await request({ path: `${path}?afterRevision=${after}`, method: 'GET', decode: decodeRevision, signal: controller.signal }, 30_000);
-          if (controller.signal.aborted) break;
-          if (attempts) reconnect();
+          if (controller.signal.aborted) {
+            trace('poll_stop', { pollId, aborted: true, durationMs: Math.max(0, now() - startedAt) }); break;
+          }
+          const advanced = result.revision > after; const reconnected = attempts > 0;
+          trace('poll_result', { pollId, revision: result.revision, advanced, durationMs: Math.max(0, now() - startedAt) });
           attempts = 0;
-          if (result.revision > after) { revisions.set(key, result.revision); invalidate(); }
-        } catch {
-          if (controller.signal.aborted) break;
-          attempts++;
+          if (advanced) {
+            revisions.set(key, result.revision); trace('poll_invalidation', { pollId, revision: result.revision }); invalidate();
+          } else if (reconnected) { trace('poll_reconnected', { pollId, revision: result.revision }); reconnect(); }
+        } catch (error) {
+          trace('poll_error', { pollId, durationMs: Math.max(0, now() - startedAt), ...matchingTraceError(error) });
+          if (controller.signal.aborted) {
+            trace('poll_stop', { pollId, aborted: true, durationMs: Math.max(0, now() - startedAt) }); break;
+          }
+          attempts++; const retryMs = Math.min(15_000, 500 * 2 ** Math.min(attempts - 1, 5));
+          trace('poll_retry', { pollId, attempt: attempts, retryMs });
           await new Promise<void>(resolve => {
-            const timer = setTimeout(resolve, Math.min(15_000, 500 * 2 ** Math.min(attempts - 1, 5)));
+            const timer = setTimeout(resolve, retryMs);
             cancelDelay = () => { clearTimeout(timer); resolve(); };
           });
         }
+        trace('poll_stop', { pollId, aborted: controller.signal.aborted, durationMs: Math.max(0, now() - startedAt) });
       }
     })();
     return () => { controller.abort(); cancelDelay?.(); };

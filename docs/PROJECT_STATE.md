@@ -1,13 +1,50 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-07 en `codex/driver-location-bootstrap-p0`,
-desde `codex/vimatext-body-crash-fix-p0` @ `498d3b9f`.
+Actualizado 2026-10-07 en `codex/driver-location-observability-p0`,
+desde `codex/driver-location-bootstrap-p0` @ `179c41f2`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Observabilidad Driver location y coalescing realtime — 2026-10-07
+
+- Driver location emite en DEV trazas estructuradas con `locationSessionId` para
+  permiso, provider, last-known, attach/callback/error/watchdog/retry, POST y
+  cierre. Los campos quedan limitados a IDs, booleanos, frescura, availability,
+  revision, status/code sanitizado y duración; no se registran coordenadas,
+  heading, credenciales, perfiles, payloads ni URLs. El logger queda inerte con
+  `__DEV__ === false` y su marcador se comprueba ausente del bundle release.
+- La sesión usa `getProviderStatusAsync` y el error handler real, tercer
+  argumento de `watchPositionAsync` en Expo Location SDK 57. Servicios/provider
+  deshabilitados mantienen LOCATING, muestran error recuperable y usan el retry
+  controlado existente sin POST. Error async y watchdog invalidan la generación
+  anterior, retiran la subscription y comparten la misma ruta de retry.
+- Una generación identifica al watcher vigente: existe como máximo una
+  subscription, un watchdog y un retry. Un error/callback tardío de una
+  generación retirada no puede afectar al reemplazo; stop invalida callbacks,
+  aborta el POST en curso y limpia subscription/timers. LOCATING→AVAILABLE sigue
+  usando la misma sesión foreground.
+- Cada long-poll lleva `pollId` y trazas DEV de inicio/resultado/error/retry/
+  reconciliación/fin. Tras reconectar, revision nueva produce sólo invalidación;
+  sin revision nueva produce sólo callback de reconexión. Nunca se ejecutan
+  ambas reconciliaciones para el mismo resultado y cada subscription conserva
+  un único poll secuencial. GET continúa siendo la autoridad.
+- **VERIFICADO automatizado:** TypeScript y lint; suite **214/214**; gateway/
+  matching/pricing **56/56**; worklets (19 archivos), splash, export nativo DEV
+  Android/iOS, Hermes release Android/iOS y aislamiento de fixtures, servidor,
+  secretos, trazas DEV y paths. Expo Doctor queda en **20/21** sólo por los
+  mismos cinco patches SDK 57; no se actualizaron dependencias. Cambio JS/TS y
+  documentos, sin dependencia ni módulo nativo nuevo: no requiere Development
+  Build.
+- **PENDIENTE físico:** reunir la cadena `permission_result granted` →
+  `provider_result enabled` → `watch_attached` → `watch_callback` →
+  `location_post_start` → `location_post_receipt AVAILABLE`, confirmar después
+  GET Driver AVAILABLE con location, mapa centrado y oferta desde Passenger
+  SEARCHING. Repetir con GPS off/on, background/foreground, watchdog y pérdida/
+  reconexión de red; no se marca PASS hasta completar esa evidencia.
 
 ### Bootstrap Driver location → availability → matching — 2026-10-07
 
