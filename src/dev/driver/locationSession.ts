@@ -91,17 +91,22 @@ export function createDriverLocationSession(options: DriverLocationSessionOption
   };
   const attach = async () => {
     if (stopped || !foreground || permission !== 'granted' || subscription || attaching) return;
-    attaching = true; let failed = false; const generation = ++watchGeneration;
+    attaching = true; let failed = false; let firstValidSampleReceived = false; const generation = ++watchGeneration;
     event('watch_attach');
     try {
-      const created = await options.location.watchPositionAsync({ accuracy: options.location.balancedAccuracy, timeInterval: 5_000, distanceInterval: 10 }, sample => {
-        if (stopped || !foreground || generation !== watchGeneration) return; event('watch_callback'); if (send(sample)) armWatchdog();
+      const created = await options.location.watchPositionAsync({ accuracy: options.location.balancedAccuracy, timeInterval: 5_000, distanceInterval: 0 }, sample => {
+        if (stopped || !foreground || generation !== watchGeneration) return;
+        event('watch_callback');
+        if (send(sample) && !firstValidSampleReceived) {
+          firstValidSampleReceived = true;
+          clearWatchdog();
+        }
       }, () => {
         if (stopped || !foreground || failed || generation !== watchGeneration) return; failed = true; event('watch_error', { code: 'provider_error' });
         removeWatcher(); options.onError('Se interrumpió la ubicación. Reintentando…'); if (!attaching) scheduleRetry();
       });
       if (stopped || !foreground || failed || generation !== watchGeneration) { created.remove(); if (failed && !stopped && foreground) scheduleRetry(); return; }
-      subscription = created; event('watch_attached'); armWatchdog();
+      subscription = created; event('watch_attached'); if (!firstValidSampleReceived) armWatchdog();
     } catch (error) {
       if (!stopped && foreground) { event('watch_error', matchingTraceError(error)); options.onError('No se pudo iniciar la ubicación. Reintentando…'); scheduleRetry(); }
     } finally {

@@ -1,13 +1,41 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-08 en `codex/driver-lifecycle-map-hit-test-p0`,
-desde `codex/driver-location-observability-p0` @ `c55ce1b9`.
+Actualizado 2026-10-08 en `codex/driver-watchdog-first-fix-p0`,
+desde `codex/driver-lifecycle-map-hit-test-p0` @ `d9c11fa2`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Watchdog Driver limitado al primer fix nativo — 2026-10-08
+
+- La validación física confirmó permiso, sesión lógica, realtime y la transición
+  LOCATING→AVAILABLE. El error restante era un false watchdog: cada callback
+  válido volvía a armar el timeout aunque `distanceInterval: 10` no obligaba a
+  un Driver quieto a emitir otra muestra dentro de 10 s.
+- Cada nueva `watchGeneration` arma ahora un único watchdog de bootstrap al
+  completar `watch_attached`. Sólo su primer callback nativo válido lo cancela
+  definitivamente; callbacks posteriores continúan sus POST sin watchdog,
+  retry o reattach. Una muestra inválida y una last-known fresca no satisfacen
+  ese primer fix nativo. Un watcher que no entrega ninguna muestra válida sigue
+  retirándose a los 10 s y recuperándose mediante el retry único de 3 s.
+- El watcher foreground conserva Balanced accuracy y usa ahora
+  `timeInterval: 5000` con `distanceInterval: 0`, para renovar `receivedAt`
+  también cuando el Driver está estacionario. Error nativo, background y
+  foreground conservan la recuperación aprobada: cada generación nueva obtiene
+  su propio watchdog bootstrap y una generación obsoleta no puede afectarla.
+- **VERIFICADO automatizado:** TypeScript, lint, suite **221/221**, gateway/
+  matching/pricing, worklets, schema/style MapLibre, splash, Hermes DEV/release
+  Android/iOS y aislamiento de fixtures, servidor, credenciales, trazas y paths.
+  Expo Doctor conserva **20/21** sólo por los cinco patches SDK 57 conocidos;
+  no se actualizaron dependencias. Sin cambio nativo: no requiere Development
+  Build nuevo.
+- **PENDIENTE físico:** mantener un Driver quieto más de 60 s y comprobar que
+  permanece AVAILABLE, `receivedAt` se renueva, no aparece «Sin señal…», no se
+  emiten `watchdog`/`watch_retry`, existe un solo watcher y un watcher realmente
+  sin primera muestra sigue recuperándose.
 
 ### Lifecycle Driver estable y hit testing detached — 2026-10-08
 

@@ -99,6 +99,32 @@ test('foreground return during a stale native attach still produces exactly one 
   session.stop(); assert.equal(removed, 2);
 });
 
+test('background and foreground give each watcher generation its own first-fix watchdog', async () => {
+  const timers = new Timers(); let watches = 0; let removed = 0; let sends = 0;
+  const callbacks: ((sample: DriverLocationSample) => void)[] = []; const errors: ((reason: string) => void)[] = [];
+  const session = createDriverLocationSession({ locationSessionId: 'foreground-generations', operationId: () => `operation-${sends + 1}`,
+    setTimer: timers.set, clearTimer: timers.clear,
+    location: { balancedAccuracy: 3, getForegroundPermissionsAsync: async () => ({ granted: true }),
+      requestForegroundPermissionsAsync: async () => ({ granted: true }),
+      getProviderStatusAsync: async () => ({ locationServicesEnabled: true, gpsAvailable: true }),
+      getLastKnownPositionAsync: async () => null,
+      watchPositionAsync: async (_options, next, onError) => {
+        watches++; callbacks.push(next); errors.push(onError); return { remove: () => { removed++; } };
+      } },
+    send: async () => { sends++; return receipt; }, onError: () => {},
+  });
+  await flush(); assert.equal(watches, 1); assert.equal(timers.count(10_000), 1);
+  callbacks[0]!({ timestamp: 1, coords: { longitude: -99.8, latitude: 19.8 } }); await flush();
+  assert.equal(sends, 1); assert.equal(timers.count(10_000), 0);
+  session.setForeground(false); assert.equal(removed, 1); assert.equal(timers.jobs.size, 0);
+  session.setForeground(true); await flush(); assert.equal(watches, 2); assert.equal(timers.count(10_000), 1);
+  callbacks[0]!({ timestamp: 2, coords: { longitude: -99.7, latitude: 19.7 } }); errors[0]!('late'); await flush();
+  assert.equal(sends, 1); assert.equal(removed, 1); assert.equal(timers.count(10_000), 1); assert.equal(timers.count(3_000), 0);
+  callbacks[1]!({ timestamp: 3, coords: { longitude: -99.6, latitude: 19.6 } }); await flush();
+  assert.equal(sends, 2); assert.equal(timers.count(10_000), 0); assert.equal(watches, 2);
+  session.stop(); assert.equal(removed, 2); assert.equal(timers.jobs.size, 0);
+});
+
 test('disabled provider sends no location and retries through the same controlled path', async () => {
   const timers = new Timers(); let enabled = false; let providers = 0; let lastKnown = 0; let watches = 0; const errors: string[] = [];
   const session = createDriverLocationSession({ locationSessionId: 'provider', operationId: () => 'operation', setTimer: timers.set, clearTimer: timers.clear,
@@ -115,8 +141,9 @@ test('disabled provider sends no location and retries through the same controlle
   assert.deepEqual({ providers, lastKnown, watches }, { providers: 2, lastKnown: 1, watches: 1 }); session.stop();
 });
 
-test('stale last-known is ignored and each valid callback produces one sanitized POST chain', async () => {
+test('watcher uses the foreground cadence and remains stable after its first valid fix', async () => {
   const timers = new Timers(); let callback: ((sample: DriverLocationSample) => void) | undefined; let removed = 0; let watches = 0;
+  let watchOptions: { accuracy: number; timeInterval: number; distanceInterval: number } | undefined;
   const sent: { coordinate: readonly [number, number]; heading?: number; id: string; aborted: boolean }[] = []; let ids = 0;
   const traces: { event: MatchingTraceEvent; fields?: MatchingTraceFields }[] = [];
   const session = createDriverLocationSession({ locationSessionId: 'stale', now: () => 100_000, operationId: () => `sample-${++ids}`,
@@ -125,49 +152,63 @@ test('stale last-known is ignored and each valid callback produces one sanitized
       requestForegroundPermissionsAsync: async () => ({ granted: true }),
       getProviderStatusAsync: async () => ({ locationServicesEnabled: true, gpsAvailable: true }),
       getLastKnownPositionAsync: async () => ({ timestamp: 40_000, coords: { longitude: -99, latitude: 19 } }),
-      watchPositionAsync: async (_options, next) => { watches++; callback = next; return { remove: () => { removed++; } }; } },
+      watchPositionAsync: async (options, next) => { watches++; watchOptions = options; callback = next; return { remove: () => { removed++; } }; } },
     send: async (coordinate, heading, id, signal) => { sent.push({ coordinate, heading, id, aborted: signal.aborted }); return receipt; }, onError: () => {},
   });
   await flush(); assert.equal(watches, 1); assert.equal(sent.length, 0);
+  assert.deepEqual(watchOptions, { accuracy: 3, timeInterval: 5_000, distanceInterval: 0 });
+  assert.equal(timers.count(10_000), 1);
   callback!({ timestamp: 100_001, coords: { longitude: -99.8, latitude: 19.8, heading: 361 } }); await flush();
+  assert.equal(timers.count(10_000), 0);
   callback!({ timestamp: 100_002, coords: { longitude: -99.7, latitude: 19.7, heading: 45 } }); await flush();
   assert.deepEqual(sent.map(value => value.id), ['sample-1', 'sample-2']); assert.equal(sent[0]!.heading, undefined); assert.equal(sent[1]!.heading, 45);
+  assert.equal(watches, 1); assert.equal(removed, 0); assert.equal(timers.count(3_000), 0);
   assert.equal(traces.filter(value => value.event === 'watch_callback').length, 2);
   assert.equal(traces.filter(value => value.event === 'location_post_start').length, 2);
   assert.equal(traces.filter(value => value.event === 'location_post_receipt').length, 2);
+  assert.equal(traces.filter(value => value.event === 'watch_attach').length, 1);
+  assert.equal(traces.filter(value => value.event === 'watchdog' || value.event === 'watch_retry').length, 0);
   const serialized = JSON.stringify(traces); assert.doesNotMatch(serialized, /coordinate|longitude|latitude|heading|token|authorization/i);
   session.stop(); assert.equal(removed, 1); assert.equal(timers.jobs.size, 0);
 });
 
-test('fresh last-known posts once and watchdog recreates one silent watcher', async () => {
-  const timers = new Timers(); let removed = 0; let watches = 0; const sent: number[] = []; const errors: string[] = [];
+test('fresh last-known does not satisfy the native first-fix watchdog and invalid callbacks do not cancel it', async () => {
+  const timers = new Timers(); let removed = 0; let watches = 0; let callback: ((sample: DriverLocationSample) => void) | undefined;
+  const sent: number[] = []; const errors: string[] = [];
   const session = createDriverLocationSession({ locationSessionId: 'watchdog', now: () => 100_000, operationId: () => `operation-${sent.length + 1}`,
     setTimer: timers.set, clearTimer: timers.clear,
     location: { balancedAccuracy: 3, getForegroundPermissionsAsync: async () => ({ granted: true }),
       requestForegroundPermissionsAsync: async () => ({ granted: true }),
       getProviderStatusAsync: async () => ({ locationServicesEnabled: true, networkAvailable: true }),
       getLastKnownPositionAsync: async () => ({ timestamp: 99_999, coords: { longitude: -99, latitude: 19 } }),
-      watchPositionAsync: async () => { watches++; return { remove: () => { removed++; } }; } },
+      watchPositionAsync: async (_options, next) => { watches++; callback = next; return { remove: () => { removed++; } }; } },
     send: async coordinate => { sent.push(coordinate[0]); return receipt; }, onError: value => errors.push(value),
   });
   await flush(); assert.deepEqual(sent, [-99]); assert.equal(watches, 1); assert.equal(timers.count(10_000), 1);
+  callback!({ timestamp: 100_001, coords: { longitude: Number.NaN, latitude: 19 } }); await flush();
+  assert.deepEqual(sent, [-99]); assert.equal(timers.count(10_000), 1);
   timers.run(10_000); assert.equal(removed, 1); assert.match(errors.at(-1)!, /Reintentando/); assert.equal(timers.count(3_000), 1);
   timers.run(3_000); await flush(); assert.equal(watches, 2); assert.equal(timers.count(10_000), 1);
   session.stop(); assert.equal(removed, 2);
 });
 
 test('watch error handler removes once and one retry cannot create duplicate watchers', async () => {
-  const timers = new Timers(); let watches = 0; let removed = 0; const errors: ((reason: string) => void)[] = [];
+  const timers = new Timers(); let watches = 0; let removed = 0;
+  const callbacks: ((sample: DriverLocationSample) => void)[] = []; const errors: ((reason: string) => void)[] = [];
   const session = createDriverLocationSession({ locationSessionId: 'watch-error', operationId: () => 'operation', setTimer: timers.set, clearTimer: timers.clear,
     location: { balancedAccuracy: 3, getForegroundPermissionsAsync: async () => ({ granted: true }),
       requestForegroundPermissionsAsync: async () => ({ granted: true }),
       getProviderStatusAsync: async () => ({ locationServicesEnabled: true, gpsAvailable: true }), getLastKnownPositionAsync: async () => null,
-      watchPositionAsync: async (_options, _next, onError) => { watches++; errors.push(onError); return { remove: () => { removed++; } }; } },
+      watchPositionAsync: async (_options, next, onError) => { watches++; callbacks.push(next); errors.push(onError); return { remove: () => { removed++; } }; } },
     send: async () => receipt, onError: () => {},
   });
-  await flush(); assert.equal(watches, 1); errors[0]!('raw provider detail'); errors[0]!('duplicate'); await flush();
+  await flush(); assert.equal(watches, 1); assert.equal(timers.count(10_000), 1);
+  callbacks[0]!({ timestamp: 1, coords: { longitude: -99.8, latitude: 19.8 } }); await flush();
+  assert.equal(timers.count(10_000), 0);
+  errors[0]!('raw provider detail'); errors[0]!('duplicate'); await flush();
   assert.equal(removed, 1); assert.equal(timers.count(3_000), 1);
-  timers.run(3_000); await flush(); assert.equal(watches, 2); assert.equal(timers.count(3_000), 0); session.stop(); assert.equal(removed, 2);
+  timers.run(3_000); await flush(); assert.equal(watches, 2); assert.equal(timers.count(3_000), 0); assert.equal(timers.count(10_000), 1);
+  session.stop(); assert.equal(removed, 2);
 });
 
 test('an obsolete watcher error cannot remove the replacement subscription', async () => {
