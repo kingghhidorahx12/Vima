@@ -1,5 +1,5 @@
 import { useEffect, useRef, type PropsWithChildren } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { StyleProp, ViewProps, ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useMotionPolicy } from './ReducedMotion';
 import { fadeTo } from './helpers';
@@ -16,8 +16,8 @@ export function passengerSceneStyle(progress: number, reducedMotion: boolean) {
   };
 }
 
-export function PassengerScenePresence({ scene, children, style }: PropsWithChildren<{
-  scene: string; style?: StyleProp<ViewStyle>;
+export function PassengerScenePresence({ scene, children, style, pointerEvents }: PropsWithChildren<{
+  scene: string; style?: StyleProp<ViewStyle>; pointerEvents?: ViewProps['pointerEvents'];
 }>) {
   const { reducedMotion } = useMotionPolicy();
   const previousScene = useRef(scene);
@@ -36,5 +36,6 @@ export function PassengerScenePresence({ scene, children, style }: PropsWithChil
   useEffect(() => () => cancelAnimation(progress), [progress]);
 
   const animatedStyle = useAnimatedStyle(() => passengerSceneStyle(progress.get(), reducedMotion));
-  return <Animated.View testID="passenger-phase-presence" style={[style, animatedStyle]}>{children}</Animated.View>;
+  return <Animated.View testID="passenger-phase-presence" pointerEvents={pointerEvents}
+    style={[style, animatedStyle]}>{children}</Animated.View>;
 }

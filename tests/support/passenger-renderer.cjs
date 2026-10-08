@@ -7,7 +7,8 @@ const renderer = require('react-test-renderer');
 const query = require('@tanstack/react-query');
 
 // Native boundaries are test doubles. This tests React identity/interaction, not native rendering.
-function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top: 24, bottom: 16, left: 0, right: 0 } } = {}) {
+function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top: 24, bottom: 16, left: 0, right: 0 },
+  realRideSheet = false } = {}) {
   const animations = [];
   const delays = [];
   const repeats = [];
@@ -36,6 +37,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     FadeInDown: builder('FadeInDown'), FadeOutDown: builder('FadeOutDown'), FadeOutUp: builder('FadeOutUp'),
     default: { View: 'AnimatedView' }, cancelAnimation(value) { cancellations.push(value); }, ReduceMotion: { System: 'system', Never: 'never' },
     useSharedValue: (initial) => { const value = React.useRef(initial); return React.useMemo(() => ({ get: () => value.current, set: (next) => { value.current = next; } }), []); },
+    useAnimatedReaction() {},
     runOnJS: (fn) => fn,
     useAnimatedStyle: (fn) => fn(), interpolateColor: (value, range, colors) => {
       const fraction = Math.max(0, Math.min(1, (value - range[0]) / (range[1] - range[0])));
@@ -50,6 +52,11 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
   const overrides = {
     'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => insets, SafeAreaView: 'SafeAreaView' },
     'react-native-reanimated': { __esModule: true, ...animated },
+    'react-native-worklets': { scheduleOnRN: (fn, ...args) => fn(...args) },
+    'react-native-gesture-handler': { Gesture: { Pan: () => {
+      const pan = { enabled: () => pan, onStart: () => pan, onUpdate: () => pan, onFinalize: () => pan,
+        activeOffsetY: () => pan, failOffsetX: () => pan }; return pan;
+    } }, GestureDetector: ({ children }) => React.createElement('GestureDetector', null, children) },
     'expo-image': { Image: 'ExpoImage' },
     'expo-status-bar': { StatusBar: 'StatusBar' },
     'expo-router': { useFocusEffect: React.useEffect, Link: 'Link' },
@@ -69,7 +76,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
       return React.createElement('NativeMapBoundary', props, props.children);
     } };
     if (resolved.endsWith('PassengerMap.tsx')) return { PassengerMap: 'PassengerMapContent' };
-    if (resolved.endsWith('VimaRideSheet.tsx')) return {
+    if (resolved.endsWith('VimaRideSheet.tsx') && !realRideSheet) return {
       createRideSheetInteraction: (height, targetOffset, allowedOffsets) => ({ height, targetOffset, allowedOffsets }),
       VimaRideSheet: function Sheet(props) { React.useEffect(() => { mounted.sheet++; }, []);
         return React.createElement('SheetBoundary', props, props.header, props.children); },

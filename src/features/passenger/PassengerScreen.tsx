@@ -373,8 +373,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const entranceIndex = fresh ? newSearchItems++ : undefined;
     return { place, identity, entranceIndex };
   }) : [];
-  const content = <PassengerScenePresence scene={scene} style={styles.fill}>
+  const content = <PassengerScenePresence scene={scene} style={styles.fill}
+    pointerEvents={detachedPanel ? 'box-none' : undefined}>
     <Animated.View ref={viewportNode} testID="passenger-sheet-viewport"
+    pointerEvents={detachedPanel ? 'box-none' : undefined}
     style={[styles.fill, detachedPanel && styles.detachedPanelContent]}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setViewportMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
     {flow.connection !== 'online' ? <ElementEntrance timing={motionTimings.state}>
@@ -386,7 +388,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       onPress={flow.retry} accessibilityRole="button" accessibilityLabel={flow.error.message}>
       <StatusNotice retry>{flow.error.message}</StatusNotice>
     </Pressable></Animated.View></ElementEntrance> : null}
-    <ScrollView ref={scroll} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets
+    <ScrollView ref={scroll} pointerEvents={detachedPanel ? 'box-none' : undefined}
+      keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets
       onTouchStart={() => { dismissKeyboard(); setIncident(null); }} onScrollBeginDrag={dismissKeyboard}
       onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
       <View ref={contentNode} testID="passenger-sheet-content" style={[styles.content, homeFloatingSearch && styles.homeContent,
@@ -606,7 +609,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           homeBottomOcclusion={homeFloatingSearch ? bottomFootprint : undefined}
           layersMenuOpen={layersOpen}
           sheetHeight={interaction ? sheetFrameHeight - interaction.targetOffset : sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
-        sheet={{ interaction, header, style: [styles.sheet, detachedPanel && styles.detachedSheet,
+        sheet={{ interaction, header, hitTestPolicy: detachedPanel ? 'content-only' : 'sheet',
+          style: [styles.sheet, detachedPanel && styles.detachedSheet,
           !detachedPanel && roundedPassengerSheet && styles.roundedPassengerSheet], onVisibleHeightChange: reportVisibleSheetHeight }}
         renderPhase={() => content} />
       <View testID="passenger-top-chrome" pointerEvents="box-none" onTouchStart={dismissKeyboard}

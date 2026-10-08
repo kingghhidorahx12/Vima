@@ -40,9 +40,12 @@ export interface VimaRideSheetProps extends PropsWithChildren {
   /** Optional dedicated drag area so scrollable content does not compete with the pan. */
   readonly header?: ReactNode;
   readonly onVisibleHeightChange?: (height: number) => void;
+  /** `content-only` lets transparent structural regions pass touches to the map. */
+  readonly hitTestPolicy?: 'sheet' | 'content-only';
 }
 
-export function VimaRideSheet({ children, style, interaction, enabled = true, open = true, header, onVisibleHeightChange }: VimaRideSheetProps) {
+export function VimaRideSheet({ children, style, interaction, enabled = true, open = true, header, onVisibleHeightChange,
+  hitTestPolicy = 'sheet' }: VimaRideSheetProps) {
   const theme = useVimaTheme();
   const policy = useMotionPolicy();
   const offset = useSharedValue(interaction?.height ?? interaction?.targetOffset ?? 0);
@@ -86,12 +89,14 @@ export function VimaRideSheet({ children, style, interaction, enabled = true, op
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }));
   const viewportStyle = useAnimatedStyle(() => interaction?.height
     ? { height: Math.max(0, interaction.height - offset.get()) } : {});
-  const surface = <Animated.View pointerEvents={open ? 'auto' : 'none'} accessibilityElementsHidden={!open}
+  const contentOnly = hitTestPolicy === 'content-only';
+  const surface = <Animated.View testID="vima-ride-sheet-surface" pointerEvents={open ? contentOnly ? 'box-none' : 'auto' : 'none'} accessibilityElementsHidden={!open}
         importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
         style={[theme.surfaces.sheet, interaction?.height ? [styles.overlay, { height: interaction.height }] : null,
           style, !open && !interaction?.height ? { display: 'none' } : null, animatedStyle]}>
-        <Animated.View style={viewportStyle}>
-          {header ? <GestureDetector gesture={pan}><Animated.View>{header}</Animated.View></GestureDetector> : null}
+        <Animated.View testID="vima-ride-sheet-viewport" pointerEvents={contentOnly ? 'box-none' : 'auto'} style={viewportStyle}>
+          {header ? <GestureDetector gesture={pan}><Animated.View testID="vima-ride-sheet-header-slot"
+            pointerEvents={contentOnly ? 'box-none' : 'auto'}>{header}</Animated.View></GestureDetector> : null}
           {children}
         </Animated.View>
       </Animated.View>;

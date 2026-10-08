@@ -41,6 +41,7 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
   }
   function subscribe(key: string, path: string, invalidate: () => void, reconnect: () => void) {
     const controller = new AbortController(); let attempts = 0; let cancelDelay: (() => void) | undefined;
+    let stopReason = 'abort';
     void (async () => {
       while (!controller.signal.aborted) {
         const pollId = nextPollId(); const startedAt = now();
@@ -50,7 +51,7 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
           trace('poll_start', { pollId, attempt: attempts + 1 });
           const result = await request({ path: `${path}?afterRevision=${after}`, method: 'GET', decode: decodeRevision, signal: controller.signal }, 30_000);
           if (controller.signal.aborted) {
-            trace('poll_stop', { pollId, aborted: true, durationMs: Math.max(0, now() - startedAt) }); break;
+            trace('poll_stop', { pollId, aborted: true, reason: stopReason, durationMs: Math.max(0, now() - startedAt) }); break;
           }
           const advanced = result.revision > after; const reconnected = attempts > 0;
           trace('poll_result', { pollId, revision: result.revision, advanced, durationMs: Math.max(0, now() - startedAt) });
@@ -61,7 +62,7 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
         } catch (error) {
           trace('poll_error', { pollId, durationMs: Math.max(0, now() - startedAt), ...matchingTraceError(error) });
           if (controller.signal.aborted) {
-            trace('poll_stop', { pollId, aborted: true, durationMs: Math.max(0, now() - startedAt) }); break;
+            trace('poll_stop', { pollId, aborted: true, reason: stopReason, durationMs: Math.max(0, now() - startedAt) }); break;
           }
           attempts++; const retryMs = Math.min(15_000, 500 * 2 ** Math.min(attempts - 1, 5));
           trace('poll_retry', { pollId, attempt: attempts, retryMs });
@@ -70,10 +71,11 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
             cancelDelay = () => { clearTimeout(timer); resolve(); };
           });
         }
-        trace('poll_stop', { pollId, aborted: controller.signal.aborted, durationMs: Math.max(0, now() - startedAt) });
+        trace('poll_stop', { pollId, aborted: controller.signal.aborted,
+          reason: controller.signal.aborted ? stopReason : 'cycle_complete', durationMs: Math.max(0, now() - startedAt) });
       }
     })();
-    return () => { controller.abort(); cancelDelay?.(); };
+    return (reason = 'abort') => { stopReason = reason; controller.abort(); cancelDelay?.(); };
   }
   const rememberTrip = (value: ReturnType<typeof decodeMatchingTrip>) => {
     revisions.set(value.id, Math.max(revisions.get(value.id) ?? 0, value.revision)); return value;

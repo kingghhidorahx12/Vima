@@ -12,7 +12,7 @@ for (const filename of ['src/motion/ElementEntrance.tsx', 'src/motion/PassengerS
 
 // The full scene must use the transformed stable presence, without an exiting tree.
 const passenger = fs.readFileSync('src/features/passenger/PassengerScreen.tsx', 'utf8');
-assert.match(passenger, /<PassengerScenePresence scene=\{scene\} style=\{styles\.fill\}>/);
+assert.match(passenger, /<PassengerScenePresence scene=\{scene\} style=\{styles\.fill\}\s+pointerEvents=\{detachedPanel \? 'box-none' : undefined\}>/);
 assert.match(passenger, /<Animated\.View ref=\{viewportNode\} testID="passenger-sheet-viewport"/);
 assert.match(passenger, /<View ref=\{headerNode\} testID="passenger-sheet-header"/);
 assert.match(passenger, /<View ref=\{contentNode\} testID="passenger-sheet-content"/);

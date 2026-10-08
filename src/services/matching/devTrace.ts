@@ -1,5 +1,5 @@
 export type MatchingTraceEvent =
-  | 'location_session_start' | 'permission_request' | 'permission_result'
+  | 'location_session_start' | 'permission_check' | 'permission_request' | 'permission_result' | 'location_gate'
   | 'provider_check' | 'provider_result' | 'last_known_result'
   | 'watch_attach' | 'watch_attached' | 'watch_callback' | 'watch_error'
   | 'watchdog' | 'watch_retry' | 'location_post_start'

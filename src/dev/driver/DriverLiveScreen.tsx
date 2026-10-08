@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,7 +14,7 @@ import { VimaButton } from '../../design/components/VimaButton';
 import { visualTokens as t } from '../../design/tokens';
 import { Camera } from '../../map/Camera';
 import { PassengerUserLocation } from '../../features/passenger/PassengerMapPin';
-import { createDriverLocationSession } from './locationSession';
+import { createDriverLocationSession, type DriverLocationStopReason } from './locationSession';
 
 let sequence = 0;
 const operationId = () => `driver-${Date.now()}-${++sequence}`;
@@ -28,21 +28,46 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     structuralSharing: (old, next) => old && (old as DriverState).revision >= (next as DriverState).revision ? old : next });
   const connection = useSyncExternalStore(client.subscribeConnection, client.getConnection, client.getConnection);
   const [focused, setFocused] = useState(false); const [foreground, setForeground] = useState(AppState.currentState === 'active');
+  const [permissionPromptActive, setPermissionPromptActive] = useState(false);
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [now, setNow] = useState(() => Date.now());
   const pending = useRef<{ id: string; run: (id: string) => Promise<DriverState> } | undefined>(undefined);
+  const locationSession = useRef<ReturnType<typeof createDriverLocationSession> | undefined>(undefined);
+  const actualForeground = useRef(AppState.currentState === 'active');
+  const permissionPrompt = useRef(false);
+  const lifecycle = useRef({ accountId, client, available, focused, foreground, permissionPromptActive, tracksLocation: false });
+  const reportPermissionPrompt = useCallback((active: boolean) => {
+    permissionPrompt.current = active; setPermissionPromptActive(active);
+  }, []);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
-  useEffect(() => { const listener = AppState.addEventListener('change', value => setForeground(value === 'active')); return () => listener.remove(); }, []);
+  useEffect(() => { const listener = AppState.addEventListener('change', value => {
+    const active = value === 'active'; actualForeground.current = active; locationSession.current?.setForeground(active);
+    if (active || !permissionPrompt.current) setForeground(active);
+  }); return () => listener.remove(); }, []);
+  const realtimeAllowed = available && focused && (foreground || permissionPromptActive);
   useEffect(() => {
-    if (!available || !focused || !foreground) return;
+    if (!realtimeAllowed) return;
     void queryClient.invalidateQueries({ queryKey: ['driver', accountId] });
-    return client.subscribeDriver(() => { void queryClient.invalidateQueries({ queryKey: ['driver', accountId] }); });
-  }, [client, accountId, queryClient, available, focused, foreground]);
+    const stop = client.subscribeDriver(() => { void queryClient.invalidateQueries({ queryKey: ['driver', accountId] }); });
+    return () => {
+      const current = lifecycle.current;
+      const reason = !current.focused ? 'unsubscribe_unfocus'
+        : !current.available ? 'unsubscribe_availability'
+          : !current.foreground && !current.permissionPromptActive ? 'unsubscribe_background'
+            : current.accountId !== accountId || current.client !== client ? 'unsubscribe_account' : 'abort';
+      stop(reason);
+    };
+  }, [client, accountId, queryClient, realtimeAllowed]);
   const availability = state.data?.availability;
   const tracksLocation = availability === 'LOCATING' || availability === 'AVAILABLE';
+  useLayoutEffect(() => {
+    lifecycle.current = { accountId, client, available, focused, foreground, permissionPromptActive, tracksLocation };
+  }, [accountId, client, available, focused, foreground, permissionPromptActive, tracksLocation]);
   useEffect(() => {
-    if (!tracksLocation || !focused || !foreground) return;
+    if (!tracksLocation || !focused) return;
     const session = createDriverLocationSession({
-      location: { requestForegroundPermissionsAsync: Location.requestForegroundPermissionsAsync,
+      foreground: actualForeground.current, onPermissionPromptChange: reportPermissionPrompt,
+      location: { getForegroundPermissionsAsync: Location.getForegroundPermissionsAsync,
+        requestForegroundPermissionsAsync: Location.requestForegroundPermissionsAsync,
         getProviderStatusAsync: Location.getProviderStatusAsync, getLastKnownPositionAsync: () => Location.getLastKnownPositionAsync(),
         watchPositionAsync: Location.watchPositionAsync,
         balancedAccuracy: Location.Accuracy.Balanced }, operationId,
@@ -52,8 +77,15 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
         return { availability: snapshot.availability, revision: snapshot.revision };
       }, onError: setError,
     });
-    return () => session.stop();
-  }, [client, accountId, queryClient, tracksLocation, focused, foreground]);
+    locationSession.current = session;
+    return () => {
+      if (locationSession.current === session) locationSession.current = undefined;
+      const current = lifecycle.current;
+      const reason: DriverLocationStopReason = current.accountId !== accountId || current.client !== client ? 'account_changed'
+        : !current.focused ? 'unfocused' : !current.tracksLocation ? 'availability_changed' : 'unmount';
+      session.stop(reason);
+    };
+  }, [client, accountId, queryClient, tracksLocation, focused, reportPermissionPrompt]);
   const expiresAt = state.data?.offer?.expiresAt;
   useEffect(() => {
     if (!expiresAt) return;

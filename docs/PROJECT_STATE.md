@@ -1,13 +1,52 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-07 en `codex/driver-location-observability-p0`,
-desde `codex/driver-location-bootstrap-p0` @ `179c41f2`.
+Actualizado 2026-10-08 en `codex/driver-lifecycle-map-hit-test-p0`,
+desde `codex/driver-location-observability-p0` @ `c55ce1b9`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Lifecycle Driver estable y hit testing detached — 2026-10-08
+
+- La sesión lógica de ubicación Driver depende de `tracksLocation && focused` y
+  sobrevive LOCATING→AVAILABLE, el prompt de permiso y background/foreground.
+  `foreground` gobierna únicamente provider/watcher/watchdog/retry nativos: al
+  salir se retiran y al volver se revalida provider antes de adjuntar exactamente
+  un watcher. Stop lógico queda reservado para unmount, pérdida de foco, cambio
+  de availability o de cuenta/cliente; POST en curso y generaciones tardías se
+  abortan/ignoran como antes.
+- Antes de solicitar permiso se consulta `getForegroundPermissionsAsync`. El
+  prompt abre una fase explícita antes de la llamada nativa y sólo la cierra
+  cuando la solicitud resolvió y volvió foreground real, si el prompt lo perdió.
+  Sus transiciones AppState no destruyen sesión ni long-poll; un background
+  normal posterior sí pausa watcher y cancela realtime, y foreground crea uno
+  nuevo de cada tipo sin duplicados.
+- Las trazas DEV añaden `permission_check`, `location_gate` con motivos
+  `not_foreground`, `permission_prompt`, `provider_disabled` y
+  `tracking_allowed`; `location_session_stop` y `poll_stop` incluyen motivo de
+  lifecycle. Siguen sanitizadas y ausentes de release.
+- `VimaRideSheet` incorpora política explícita `sheet | content-only`, con
+  `sheet` como default. Sólo los paneles Passenger detached usan `content-only`:
+  outer, viewport, presence, viewport Passenger, ScrollView y slot estructural
+  del header dejan pasar toques en regiones transparentes; header, buscador,
+  contenido, filas, botones e inputs conservan interacción. `MapViewportClip`
+  mantiene `overflow: hidden`; no cambiaron offsets, snaps ni mediciones.
+- **VERIFICADO automatizado:** TypeScript, lint, suite **220/220**, gateway/
+  matching/pricing **57/57**, worklets (19 archivos), schema/style MapLibre,
+  splash, export DEV y compilación Hermes DEV Android/iOS, export Hermes release
+  Android/iOS y aislamiento de fixtures, servidor, credenciales, trazas y paths.
+  Expo Doctor queda en **20/21** sólo por los mismos cinco patches SDK 57; no se
+  actualizaron dependencias. Sin cambio nativo: no requiere nuevo Development
+  Build.
+- **PENDIENTE físico Driver:** completar en un Android real la cadena permiso →
+  provider → watcher → callback → POST AVAILABLE; comprobar mismo session/poll
+  durante prompt, un watcher/poll tras background real y oferta Passenger.
+- **PENDIENTE físico mapa Passenger:** en Home y Search iniciar pan desde todas
+  las regiones visualmente libres, incluida la zona inferior sin CTA, y confirmar
+  que input, quick places, resultados, scroll y botones siguen recibiendo toques.
 
 ### Observabilidad Driver location y coalescing realtime — 2026-10-07
 

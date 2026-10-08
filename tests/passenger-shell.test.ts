@@ -50,6 +50,48 @@ const assertDetachedSurface = (tree: ReactTestRenderer) => {
   assert.equal(style(viewport).borderBottomRightRadius, 0);
 };
 
+test('VimaRideSheet preserves full hit testing by default and content-only exposes only real descendants', async () => {
+  const h = createHarness({}, { realRideSheet: true });
+  const { VimaRideSheet } = h.load('src/design/components/VimaRideSheet.tsx');
+  const button = React.createElement('Pressable', { testID: 'real-sheet-button', onPress() {} });
+  let tree!: ReactTestRenderer;
+  await act(async () => { tree = create(React.createElement(VimaRideSheet, { open: true,
+    header: React.createElement('View', { testID: 'real-sheet-header' }, button) }, React.createElement('View', { testID: 'real-sheet-content' }))); });
+  try {
+    assert.equal(id(tree, 'vima-ride-sheet-surface').props.pointerEvents, 'auto');
+    assert.equal(id(tree, 'vima-ride-sheet-viewport').props.pointerEvents, 'auto');
+    assert.equal(id(tree, 'vima-ride-sheet-header-slot').props.pointerEvents, 'auto');
+    assert.equal(id(tree, 'real-sheet-button').props.pointerEvents, undefined);
+    await act(async () => tree.update(React.createElement(VimaRideSheet, { open: true, hitTestPolicy: 'content-only',
+      header: React.createElement('View', { testID: 'real-sheet-header' }, button) }, React.createElement('View', { testID: 'real-sheet-content' }))));
+    assert.equal(id(tree, 'vima-ride-sheet-surface').props.pointerEvents, 'box-none');
+    assert.equal(id(tree, 'vima-ride-sheet-viewport').props.pointerEvents, 'box-none');
+    assert.equal(id(tree, 'vima-ride-sheet-header-slot').props.pointerEvents, 'box-none');
+    assert.equal(id(tree, 'real-sheet-button').props.pointerEvents, undefined);
+  } finally { await act(async () => tree.unmount()); }
+});
+
+test('Passenger detached panels use content-only structural hit testing without disabling visible controls', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle();
+    assert.equal(host(tree, 'SheetBoundary').props.hitTestPolicy, 'content-only');
+    assert.equal(id(tree, 'passenger-phase-presence').props.pointerEvents, 'box-none');
+    assert.equal(id(tree, 'passenger-sheet-viewport').props.pointerEvents, 'box-none');
+    assert.equal(host(tree, 'ScrollView').props.pointerEvents, 'box-none');
+    assert.equal(id(tree, 'passenger-sheet-content').props.pointerEvents, undefined);
+    assert.equal(id(tree, 'passenger-home-search').props.onPress instanceof Function, true);
+    const clipped = tree.root.findAll(n => typeof n.type === 'string' && style(n).overflow === 'hidden');
+    assert.ok(clipped.length > 0, 'MapViewportClip remains overflow hidden');
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    assert.equal(host(tree, 'SheetBoundary').props.hitTestPolicy, 'sheet');
+    assert.equal(id(tree, 'passenger-phase-presence').props.pointerEvents, undefined);
+    assert.equal(id(tree, 'passenger-sheet-viewport').props.pointerEvents, undefined);
+    assert.equal(host(tree, 'ScrollView').props.pointerEvents, undefined);
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
 test('Motion 1.2 press/release and keyed entries use approved values without spatial Reduced Motion', async () => {
   for (const reduced of [false, true]) {
     const h = createHarness({}, { reduced });
