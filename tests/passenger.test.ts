@@ -801,8 +801,10 @@ test('map control press feedback and layer switches use approved timing and obey
       await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
       const button = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Capas del mapa')!;
       const paint = (node: ReactTestInstance, pressed: boolean) => Object.assign({}, ...node.props.style({ pressed }).filter(Boolean));
-      assert.equal(paint(button, false).backgroundColor, '#FFFFFF');
-      assert.equal(paint(button, true).backgroundColor, '#F7F8F7');
+      assert.equal(paint(button, false).backgroundColor, undefined);
+      assert.equal(paint(button, true).backgroundColor, undefined);
+      assert.equal(Object.assign({}, ...[button.findByProps({ testID: 'vima-glass-tint' }).props.style]
+        .flat(Infinity).filter(Boolean)).backgroundColor, 'rgba(229, 235, 238, 0.66)');
       assert.equal(paint(button, false).width, 44);
       const before = h.animations.length;
       await h.act(async () => button.props.onPressIn());
@@ -813,9 +815,9 @@ test('map control press feedback and layer switches use approved timing and obey
       assert.equal(tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Capas del mapa')!
         .props.accessibilityState.expanded, true);
       const layersButton = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Capas del mapa')!;
-      assert.equal(paint(layersButton, false).backgroundColor, '#FFFFFF');
+      assert.equal(paint(layersButton, false).backgroundColor, undefined);
       assert.equal(paint(layersButton, false).borderColor, '#00D68F');
-      assert.equal(paint(layersButton, true).backgroundColor, '#F7F8F7');
+      assert.equal(paint(layersButton, true).backgroundColor, undefined);
       assert.ok(text(tree).includes('Tráfico')); assert.ok(text(tree).includes('Incidentes'));
       assert.ok(!text(tree).includes('Siniestros'));
     } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }

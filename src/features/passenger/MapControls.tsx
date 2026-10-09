@@ -11,6 +11,7 @@ import { elevationStyle } from '../../design/themes/light';
 import { passengerSurfaces as surfaces, usePassengerPresentation } from '../../design/presentation';
 import { useVimaTheme } from '../../design/themes';
 import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph';
+import { VimaGlassSurface } from '../../design/components/VimaGlassSurface';
 import { VimaText } from '../../design/primitives';
 import { visualTokens as t } from '../../design/tokens';
 import { semanticHaptics } from '../../motion/haptics';
@@ -32,7 +33,6 @@ export function MapControls({ available, capabilities, layers, open: requestedOp
   const tap = (action: () => void) => { void semanticHaptics('toggle'); action(); };
   const { reducedMotion } = useMotionPolicy();
   const theme = useVimaTheme();
-  const presentation = usePassengerPresentation();
   const [menuHeight, setMenuHeight] = useState(0);
   const [closed, setClosed] = useState(!open);
   const revision = useRef(0);
@@ -69,7 +69,8 @@ export function MapControls({ available, capabilities, layers, open: requestedOp
     <Animated.View testID="passenger-layers-slot" pointerEvents="box-none" style={[styles.menuSlot, slotMotion]}>
       <Animated.View testID="passenger-layers-menu" pointerEvents={open ? 'auto' : 'none'}
         accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
-        onLayout={(event) => setMenuHeight(event.nativeEvent.layout.height)} style={[styles.menu, presentation.floating, menuMotion]}>
+        onLayout={(event) => setMenuHeight(event.nativeEvent.layout.height)} style={[styles.menu, menuMotion]}>
+        <VimaGlassSurface style={[StyleSheet.absoluteFill, styles.menuGlass]} />
         {!anyAvailable ? <VimaText variant="caption" style={{ color: theme.roles.disabledText }}>Capas no disponibles</VimaText> : null}
         {(['traffic', 'incidents'] as const).map((layer) => <LayerMenuRow key={layer} layer={layer}
           available={supported[layer]} checked={layers[layer]} onPress={() => tap(() => onToggle(layer))} />)}
@@ -90,7 +91,7 @@ function LayerMenuRow({ layer, available, checked, onPress }: {
     accessibilityLabel={layer === 'traffic' ? 'Tráfico' : 'Incidentes'}
     accessibilityState={{ checked: available && checked, disabled: !available }} disabled={!available}
     onPressIn={available ? feedback.onPressIn : undefined} onPressOut={available ? feedback.onPressOut : undefined} onPress={onPress}
-    style={({ pressed }) => [styles.menuRow, { backgroundColor: theme.roles.elevatedSurface },
+    style={({ pressed }) => [styles.menuRow,
       layer === 'incidents' && [styles.menuDivider, { borderTopColor: theme.roles.border }], pressed && presentation.pressed]}>
     <VimaGlyph name={layer === 'traffic' ? 'traffic' : 'warning'}
       color={available && checked ? theme.roles.positive : theme.roles.control} />
@@ -103,12 +104,11 @@ export function LocationCTA({ busy, onPress }: { busy: boolean; onPress: () => v
   const { reducedMotion } = useMotionPolicy();
   const feedback = usePressFeedback();
   const theme = useVimaTheme();
-  const presentation = usePassengerPresentation();
   return <ElementEntrance><Animated.View style={feedback.style}><Pressable accessibilityRole="button" accessibilityLabel="Tu ubicación"
     accessibilityState={{ busy }} onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
     onPress={() => { void semanticHaptics('toggle'); onPress(); }}
-    style={({ pressed }) => [styles.location, presentation.floating,
-      pressed && { backgroundColor: theme.roles.pressedSurface, boxShadow: [] }]}>
+    style={({ pressed }) => [styles.location, pressed && { boxShadow: [] }]}>
+    <VimaGlassSurface style={[StyleSheet.absoluteFill, styles.pillGlass]} />
     {busy && !reducedMotion ? <ActivityIndicator size="small" color={theme.roles.location} />
       : <VimaGlyph name="recenter" color={theme.roles.location} />}
     <VimaText variant="bodySmall">Tu ubicación</VimaText>
@@ -125,8 +125,8 @@ export function CenteredToast() {
     return () => cancelAnimation(opacity);
   }, [opacity, reducedMotion]);
   const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
-  return <Animated.View pointerEvents="none" style={[styles.toast, { backgroundColor: theme.roles.locationWash,
-    borderColor: theme.roles.surface }, style]}>
+  return <Animated.View pointerEvents="none" style={[styles.toast, { borderColor: theme.roles.surface }, style]}>
+    <VimaGlassSurface style={[StyleSheet.absoluteFill, styles.pillGlass]} />
     <VimaGlyph name="check" color={theme.roles.location} />
     <VimaText variant="caption" accessibilityLiveRegion="polite">Ubicación centrada</VimaText>
   </Animated.View>;
@@ -147,13 +147,13 @@ function MapControl({ label, icon, onPress, disabled = false, active = false, ex
   const { reducedMotion } = useMotionPolicy();
   const feedback = usePressFeedback();
   const theme = useVimaTheme();
-  const presentation = usePassengerPresentation();
   return <Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled}
       accessibilityState={{ disabled, busy, expanded: icon === 'layers' ? expanded : undefined }}
       onPressIn={disabled ? undefined : feedback.onPressIn} onPressOut={disabled ? undefined : feedback.onPressOut} onPress={onPress}
-      style={({ pressed }) => [styles.button, presentation.floating, active && { borderColor: theme.roles.positive },
-        pressed && { backgroundColor: theme.roles.pressedSurface, boxShadow: [] }, disabled && styles.buttonDisabled]}>
+      style={({ pressed }) => [styles.button, active && { borderColor: theme.roles.positive },
+        pressed && { boxShadow: [] }, disabled && styles.buttonDisabled]}>
+      <VimaGlassSurface disabled={disabled} style={[StyleSheet.absoluteFill, styles.pillGlass]} />
       {busy && !reducedMotion ? <ActivityIndicator size="small" color={theme.roles.positive} />
         : <VimaGlyph name={icon === 'layers' && expanded ? 'close' : icon}
           color={active ? theme.roles.positive : theme.roles.control} />}
@@ -166,6 +166,8 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.5 },
   stack: { alignItems: 'flex-end' },
   menuSlot: { width: mapLayersMenuWidth, overflow: 'hidden' },
+  menuGlass: { borderRadius: t.radii.cardPx },
+  pillGlass: { borderRadius: t.radii.pillPx },
   button: { width: mapControlSize, height: mapControlSize, borderRadius: t.radii.pillPx,
     alignItems: 'center', justifyContent: 'center', borderWidth: t.borders.standardWidthPx,
     ...elevationStyle('level2', t.colors.carbon) },

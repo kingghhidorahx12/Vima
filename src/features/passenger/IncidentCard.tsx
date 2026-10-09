@@ -6,13 +6,15 @@ import { VimaGlyph } from '../../design/components/VimaGlyph';
 import { passengerSurfaces as surfaces, usePassengerPresentation } from '../../design/presentation';
 import { useVimaTheme } from '../../design/themes';
 import { ElementEntrance } from '../../motion/ElementEntrance';
+import { VimaGlassSurface } from '../../design/components/VimaGlassSurface';
 
 export function IncidentCard({ details, onClose, maxHeight, topOffset }: {
   details: IncidentDetails; onClose: () => void; maxHeight: number; topOffset?: number;
 }) {
   const theme = useVimaTheme();
   const presentation = usePassengerPresentation();
-  return <ElementEntrance style={[styles.card, presentation.floating, { maxHeight }, topOffset !== undefined && { top: topOffset }]}>
+  return <ElementEntrance style={[styles.card, { maxHeight }, topOffset !== undefined && { top: topOffset }]}>
+    <VimaGlassSurface style={[StyleSheet.absoluteFill, styles.glass]} />
     <View style={styles.row}>
       {details.icon ? <View style={[styles.icon, { backgroundColor: theme.roles.warningWash }]}><VimaGlyph name={details.icon} color={theme.roles.warning} /></View> : null}
       <VimaText variant="bodyMedium" style={styles.title}>{details.category || 'Incidente vial'}</VimaText>
@@ -33,6 +35,7 @@ const styles = StyleSheet.create({
   card: { ...surfaces.floating, position: 'absolute', top: t.spacing.scalePx[2], left: t.spacing.mobileHorizontalMarginPx,
     right: t.spacing.mobileHorizontalMarginPx, paddingHorizontal: t.spacing.scalePx[3], paddingVertical: t.spacing.scalePx[2],
   },
+  glass: { borderRadius: t.radii.cardPx },
   row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[1] },
   icon: { width: t.spacing.scalePx[7], height: t.spacing.scalePx[7], alignItems: 'center', justifyContent: 'center',
     borderRadius: t.radii.fieldPx },

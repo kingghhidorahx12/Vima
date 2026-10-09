@@ -19,6 +19,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
   const mounted = { map: 0, unmountedMap: 0, sheet: 0, haptics: [], keyboardDismiss: 0, blur: 0, inputFocused: false };
   const root = path.resolve(__dirname, '../..');
   const native = Object.fromEntries(['View', 'Text', 'Pressable', 'ScrollView', 'TextInput', 'Image', 'ActivityIndicator'].map((name) => [name, name]));
+  native.Platform = { OS: 'android' };
   native.StyleSheet = { create: (styles) => styles,
     absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } };
   native.AppState = { currentState: 'active', addEventListener: (_event, listener) => {
@@ -58,6 +59,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
         activeOffsetY: () => pan, failOffsetX: () => pan }; return pan;
     } }, GestureDetector: ({ children }) => React.createElement('GestureDetector', null, children) },
     'expo-image': { Image: 'ExpoImage' },
+    'expo-blur': { BlurView: 'BlurView', BlurTargetView: 'BlurTargetView' },
     'expo-status-bar': { StatusBar: 'StatusBar' },
     'expo-router': { useFocusEffect: React.useEffect, Link: 'Link' },
     'expo-dev-client': { registerDevMenuItems: async () => {} },

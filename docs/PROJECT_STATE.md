@@ -1,13 +1,38 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-09 en `codex/driver-vehicle-worklet-interpolation-fix-p0`,
-desde `codex/passenger-structural-sharing-cross-id-fix-p0` @ `974c539bec39d68741357efbf48deae0bbc4a003`.
+Actualizado 2026-10-09 en `codex/vima-glass-light-dark-p0`,
+desde `codex/driver-vehicle-worklet-interpolation-fix-p0` @ `c625d2a85562b9e8cb972646933e5f5b3215f90c`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Vima Glass Light/Dark — 2026-10-09
+
+- Un contrato visual compartido aplica vidrio gris frío translúcido en Light y
+  carbón translúcido en Dark a chrome flotante, controles de mapa, Home/Search,
+  títulos/micro-superficies sobre mapa y al input técnico del acceso DEV. Mantiene
+  sólida la superficie principal de `VimaRideSheet`, listas/cards de contenido,
+  navegación inferior, CTAs, Offer Driver, settlement/payment y errores críticos.
+- `VimaGlassSurface` recibe la geometría del caller y sólo añade blur, tint,
+  borde, highlight y elevación. `RideShell` expone un único `BlurTargetView`
+  compartido para Passenger y Driver; Android 12+ usa
+  `dimezisBlurViewSdk31Plus`. Fuera del target o en Android anterior queda el
+  fallback translúcido con el mismo borde/highlight, sin targets redundantes ni
+  cambios de MapLibre, Camera, route-fit, lifecycle, matching o Motion.
+- Se añadió `expo-blur ~57.0.3`, compatible con Expo SDK 57. Requiere reconstruir
+  el Development Build. Login productivo sigue pendiente; `LiveAccountGate`
+  conserva exactamente su condición DEV, flujo y copy.
+- Validación automatizada: TypeScript, lint, worklets, 326/326 tests, gateway
+  87/87, MapLibre/style, aislamiento fixture/release, boundary de credenciales,
+  splash y export Hermes Android/iOS pasan. Expo Doctor conserva el estado
+  conocido 20/21 exclusivamente por cinco parches pendientes de SDK 57.
+- Android físico **PENDIENTE**: confirmar blur real y humo gris visible en Light,
+  contraste sin glow en Dark, fallback en Android <12, interacción, rendimiento
+  y geometría idéntica en Passenger Home/Search/review/confirm y Driver
+  AVAILABLE/OFFER.
 
 ### Interpolación Driver autosuficiente en UI Runtime — 2026-10-09
 

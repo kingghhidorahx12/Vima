@@ -11,6 +11,7 @@ import type { MatchingIdentity } from '../services/matching/contracts';
 import { VimaText } from '../design/primitives';
 import { VimaButton } from '../design/components/VimaButton';
 import { useVimaTheme } from '../design/themes';
+import { VimaGlassSurface } from '../design/components/VimaGlassSurface';
 
 interface Session { api: ApiClient; matching: MatchingClient; identity: MatchingIdentity }
 /** Technical DEV gate only. Tokens go directly to SecureStore, never to Query or public configuration. */
@@ -43,9 +44,12 @@ export function LiveAccountGate({ role, children }: { role: MatchingIdentity['ro
   return <SafeAreaView style={[styles.screen, { backgroundColor: theme.roles.background }]}><VimaText variant="h2">Cuenta DEV · {role === 'driver' ? 'Driver' : 'Passenger'}</VimaText>
     {session ? <VimaText variant="bodyRegular">{session.identity.accountId}</VimaText> : null}
     <VimaText variant="bodyRegular">Token de la configuración externa del gateway. Requiere HTTPS confiable.</VimaText>
-    <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={token} onChangeText={setToken}
-      placeholder="Token de prueba" placeholderTextColor={theme.roles.disabledText} accessibilityLabel="Token de prueba"
-      style={[styles.input, { backgroundColor: theme.roles.elevatedSurface, borderColor: theme.roles.border, color: theme.roles.textPrimary }]} />
+    <View style={styles.inputFrame}>
+      <VimaGlassSurface level="level1" style={[StyleSheet.absoluteFill, styles.inputGlass]} />
+      <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={token} onChangeText={setToken}
+        placeholder="Token de prueba" placeholderTextColor={theme.roles.disabledText} accessibilityLabel="Token de prueba"
+        style={[styles.input, { color: theme.roles.textPrimary }]} />
+    </View>
     <VimaButton label="Guardar y conectar" disabled={busy || !token.trim()} onPress={() => {
       const value = token.trim(); setToken(''); void credentials.write(value).then(() => { client.clear(); setSession(undefined); return connect(); })
         .catch(() => setError('No se pudo guardar la credencial.'));
@@ -59,4 +63,5 @@ export function LiveAccountGate({ role, children }: { role: MatchingIdentity['ro
   </SafeAreaView>;
 }
 const styles = StyleSheet.create({ screen: { flex: 1, padding: 20, gap: 16 },
-  input: { minHeight: 52, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16 }, links: { gap: 16 } });
+  inputFrame: { minHeight: 52, borderRadius: 16 }, inputGlass: { borderRadius: 16 },
+  input: { minHeight: 52, borderRadius: 16, paddingHorizontal: 16 }, links: { gap: 16 } });

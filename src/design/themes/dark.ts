@@ -46,6 +46,16 @@ export const darkTheme = {
   name: 'dark',
   tokens: visualTokens,
   roles: darkThemeRoles,
+  glass: {
+    base: 'rgba(18, 24, 22, 0.72)',
+    border: 'rgba(255, 255, 255, 0.16)',
+    highlight: 'rgba(255, 255, 255, 0.14)',
+    pressed: 'rgba(26, 35, 32, 0.82)',
+    disabled: 'rgba(18, 24, 22, 0.5)',
+    shadow: '#000000',
+    tint: 'dark',
+    intensity: 52,
+  },
   surfaces: {
     screen: { backgroundColor: darkThemeColors.base },
     contrast: { backgroundColor: darkThemeColors.surface },

@@ -7,6 +7,7 @@ import { fadeTo } from '../../motion/helpers';
 import { motionTimings } from '../../motion/timing';
 import { usePressFeedback } from '../../motion/usePressFeedback';
 import { useVimaTheme } from '../../design/themes';
+import { VimaGlassSurface } from '../../design/components/VimaGlassSurface';
 
 /** Mirrors map bearing; only visibility is animated. Fade is permitted by Reduced Motion. */
 export function MapCompass({ bearing, ready, onPress }: {
@@ -28,8 +29,8 @@ export function MapCompass({ bearing, ready, onPress }: {
     <Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel="Orientar mapa al norte" disabled={!visible}
       onPressIn={visible ? feedback.onPressIn : undefined} onPressOut={visible ? feedback.onPressOut : undefined}
-      onPress={onPress} style={({ pressed }) => [styles.button, { backgroundColor: theme.roles.elevatedSurface },
-        pressed && { backgroundColor: theme.roles.pressedSurface, boxShadow: [] }]}>
+      onPress={onPress} style={({ pressed }) => [styles.button, pressed && { boxShadow: [] }]}>
+      <VimaGlassSurface style={[StyleSheet.absoluteFill, styles.glass]} />
       <View testID="passenger-compass-needle" style={[styles.needle, { transform: [{ rotate: `${-angle}deg` }] }]}>
         <View testID="passenger-compass-north-outline" style={[styles.northOutline, { borderBottomColor: theme.roles.control }]} />
         <View testID="passenger-compass-north" style={[styles.north, { borderBottomColor: theme.roles.onAction }]} />
@@ -43,6 +44,7 @@ const styles = StyleSheet.create({
   position: { width: 44, height: 44 },
   button: { width: 44, height: 44, borderRadius: t.radii.pillPx,
     alignItems: 'center', justifyContent: 'center', ...elevationStyle('level1', t.colors.carbon) },
+  glass: { borderRadius: t.radii.pillPx },
   needle: { width: 24, height: 24 },
   northOutline: { position: 'absolute', top: 0, left: 6, width: 0, height: 0,
     borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 13,

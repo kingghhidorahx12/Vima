@@ -123,11 +123,13 @@ test('map controls use approved size, elevation, pressed surface and semantic ac
       const control = tree.root.findByProps({ accessibilityLabel: 'Capas del mapa' });
       const flat = (pressed: boolean) => Object.assign({}, ...control.props.style({ pressed }).filter(Boolean));
       assert.equal(flat(false).width, 44); assert.equal(flat(false).height, 44);
-      assert.equal(flat(false).backgroundColor, '#FFFFFF');
+      assert.equal(flat(false).backgroundColor, undefined);
       assert.equal(flat(false).borderColor, '#00D68F');
       assert.deepEqual(flat(false).boxShadow, [{ offsetX: 0, offsetY: 8, blurRadius: 24,
         spreadDistance: 0, color: 'rgba(11, 15, 14, 0.1)' }]);
-      assert.equal(flat(true).backgroundColor, '#F7F8F7');
+      const glassTint = control.findByProps({ testID: 'vima-glass-tint' });
+      assert.equal(Object.assign({}, ...[glassTint.props.style].flat(Infinity).filter(Boolean)).backgroundColor,
+        lightTheme.glass.base);
       const glyph = control.findByType('Text' as never);
       assert.equal(glyph.props.style[0].fontSize, 24);
       assert.equal(glyph.props.style[1].color, '#00D68F');
