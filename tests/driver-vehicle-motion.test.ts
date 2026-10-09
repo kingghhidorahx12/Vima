@@ -5,11 +5,35 @@ import test from 'node:test';
 import React from 'react';
 import type { SharedValue } from 'react-native-reanimated';
 import { glyphCodepoints } from '../src/design/glyphs.ts';
-import { validateVehicleSample, type DriverVehiclePose, type DriverVehicleSample } from '../src/map/vehicleMotion.ts';
+import { interpolateCoordinate, interpolateDriverVehiclePose, interpolateHeading, validateVehicleSample,
+  type DriverVehiclePose, type DriverVehicleSample } from '../src/map/vehicleMotion.ts';
 
 const require = createRequire(import.meta.url);
 const { createMapHarness } = require('./support/map-renderer.cjs');
 Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+
+test('Driver interpolation worklet is self-contained and mathematically equivalent', () => {
+  const source = readFileSync('src/map/vehicleMotion.ts', 'utf8');
+  const start = source.indexOf('export function interpolateDriverVehiclePose(');
+  const end = source.indexOf('export const vehicleUpdatesPerSecond', start);
+  assert.ok(start >= 0 && end > start);
+  const body = source.slice(start, end);
+  assert.match(body, /'worklet';/);
+  assert.doesNotMatch(body, /\binterpolateCoordinate\b|\binterpolateHeading\b/);
+  const cases: [DriverVehiclePose, DriverVehiclePose][] = [
+    [{ coordinate: [-99.89, 19.79], heading: 40 }, { coordinate: [-99.87, 19.81], heading: 80 }],
+    [{ coordinate: [179, 10], heading: 359 }, { coordinate: [-179, 20], heading: 0 }],
+    [{ coordinate: [-179, -10], heading: 0 }, { coordinate: [179, 5], heading: 359 }],
+    [{ coordinate: [2, 3], heading: null }, { coordinate: [4, 7], heading: 45 }],
+    [{ coordinate: [2, 3], heading: 45 }, { coordinate: [4, 7], heading: null }],
+  ];
+  for (const [from, to] of cases) for (const progress of [0, 0.25, 0.5, 0.75, 1]) {
+    assert.deepEqual(interpolateDriverVehiclePose(from, to, progress), {
+      coordinate: interpolateCoordinate(from.coordinate, to.coordinate, progress),
+      heading: from.heading === null || to.heading === null ? to.heading : interpolateHeading(from.heading, to.heading, progress),
+    });
+  }
+});
 
 test('real motion hook preserves Driver unknown/last heading, shortest arc, ordering and reconnect fences', async () => {
   const h = createMapHarness({ realMotion: true, reduced: true });

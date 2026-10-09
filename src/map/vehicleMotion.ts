@@ -35,8 +35,15 @@ export function validateDriverVehicleSample(sample: DriverVehicleSample): boolea
 }
 export function interpolateDriverVehiclePose(from: DriverVehiclePose, to: DriverVehiclePose, progress: number): DriverVehiclePose {
   'worklet';
-  return { coordinate: interpolateCoordinate(from.coordinate, to.coordinate, progress),
-    heading: from.heading === null || to.heading === null ? to.heading : interpolateHeading(from.heading, to.heading, progress) };
+  const longitudeDelta = ((to.coordinate[0] - from.coordinate[0] + 540) % 360) - 180;
+  const longitude = ((from.coordinate[0] + longitudeDelta * progress + 540) % 360) - 180;
+  const latitude = from.coordinate[1] + (to.coordinate[1] - from.coordinate[1]) * progress;
+  let heading = to.heading;
+  if (from.heading !== null && to.heading !== null) {
+    const delta = ((to.heading - from.heading + 540) % 360) - 180;
+    heading = ((from.heading + delta * progress) % 360 + 360) % 360;
+  }
+  return { coordinate: [longitude, latitude], heading };
 }
 
 /** Technical update budget requested in P0, not a Motion System duration. */

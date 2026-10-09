@@ -1,6 +1,6 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-09 en `codex/driver-maplibre-layer-crash-fix-p0`,
+Actualizado 2026-10-09 en `codex/driver-vehicle-worklet-interpolation-fix-p0`,
 desde `codex/passenger-structural-sharing-cross-id-fix-p0` @ `974c539bec39d68741357efbf48deae0bbc4a003`.
 Sin merge a main.
 
@@ -8,6 +8,21 @@ Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Interpolación Driver autosuficiente en UI Runtime — 2026-10-09
+
+- `interpolateDriverVehiclePose` conserva `'worklet'` e incorpora literalmente
+  las fórmulas vigentes de longitude envuelta, latitude lineal y heading por
+  arco corto. Conserva la semántica null. Ya no llama a helpers definidos más
+  abajo, que siguen disponibles sin cambios para sus demás consumidores.
+- Regresión focal compara ambos cálculos en longitude normal/±180, heading
+  359→0/0→359 y heading null↔válido; un guard inspecciona el cuerpo del worklet.
+- **VERIFICADO automatizado:** focal Driver/MapLibre **13/13**, suite completa
+  **322/322**, TypeScript, lint y transformación worklets. Sin dependencias,
+  cambios nativos ni modificación de capas/marker/Passenger.
+- Android físico **PENDIENTE**: OFFLINE→LOCATING→AVAILABLE sin crash; primer
+  location muestra automóvil, muestras siguientes interpolan y sin location no
+  aparece vehículo. No hay cambios nativos ni nuevo Development Build.
 
 ### Crash Android de la capa de adquisición Driver — 2026-10-09
 
