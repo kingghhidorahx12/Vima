@@ -1,13 +1,37 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-08 en `codex/passenger-trip-reconcile-qa-launcher-p0`,
-desde `codex/driver-ui-critical-offer-polish-p0` @ `f040dbd2`.
+Actualizado 2026-10-08 en `codex/qa-launcher-optional-adb-cloudflared-local-p0`,
+desde `codex/passenger-trip-reconcile-qa-launcher-p0` @ `b7823bd5`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Cloudflared local y ADB opcional para QA — 2026-10-08
+
+- En Windows el launcher resuelve y valida `cloudflared --version` primero en
+  `.runtime/tools/cloudflared.exe` y después en `PATH`; el mismo comando
+  resuelto inicia el Quick Tunnel. En otros sistemas conserva `cloudflared`
+  desde `PATH`. No descarga, instala ni versiona binarios.
+- ADB deja de ser requisito del preflight. Sólo exactamente un dispositivo en
+  estado `device` inicia `adb -s <serial> logcat`; ausencia, cero dispositivos,
+  múltiples, unauthorized, offline, error o salida inválida generan un warning
+  específico y la sesión continúa sin seleccionar arbitrariamente un serial.
+- Gateway, cloudflared y Metro conservan lifecycle crítico: su fallo limpia la
+  sesión y termina non-zero. ADB se registra para cleanup si inicia, pero su
+  error o salida posterior no dispara el fatal global. `adb.log` sólo existe
+  cuando se intentó iniciar la captura; los demás logs conservan ubicación y
+  redacción en `.runtime/qa/<timestamp>-<theme>/`.
+- `npm run qa:light` y `npm run qa:dark`, el orden Gateway → health → tunnel →
+  Metro, la URL automática, themes, configuración externa y cleanup de árboles
+  permanecen iguales. Sin dependencias ni cambios nativos.
+- **VERIFICADO automatizado:** focales del launcher **11/11**, suite completa
+  **278/278**, gateway/matching/pricing **68/68**, TypeScript, lint, worklets
+  (19 archivos), splash y sintaxis Node. Expo Doctor conserva **20/21** porque
+  el entorno no puede resolver `exp.host`; no se cambiaron dependencias.
+  QA live light/dark sin USB/ADB sigue **PENDIENTE**.
 
 ### Frontera HTTP Passenger y launcher de QA Android — 2026-10-08
 

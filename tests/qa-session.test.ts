@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const qa = require('../scripts/qa-session.cjs');
@@ -48,6 +49,47 @@ test('light/dark child envs inject the public gateway without mutating or leakin
   assert.throws(() => qa.validateRequiredEnvironment({}), /TOMTOM_API_KEY.*VIMA_PRICING_CONFIG_PATH.*VIMA_AUTH_CONFIG_PATH/);
 });
 
+test('Windows cloudflared prefers the validated repo-local tool and falls back to validated PATH', () => {
+  const cwd = 'C:\\repo'; const local = path.join(cwd, '.runtime', 'tools', 'cloudflared.exe');
+  const calls: string[] = [];
+  const localResult = qa.resolveCloudflared(cwd, { platform: 'win32', existsSyncImpl: (value: string) => value === local,
+    spawnSyncImpl(command: string, args: string[]) { calls.push(`${command} ${args.join(' ')}`); return { status: 0 }; } });
+  assert.equal(localResult, local); assert.deepEqual(calls, [`${local} --version`]);
+
+  calls.length = 0;
+  const fallback = qa.resolveCloudflared(cwd, { platform: 'win32', existsSyncImpl: () => true,
+    spawnSyncImpl(command: string, args: string[]) {
+      calls.push(`${command} ${args.join(' ')}`); return command === 'cloudflared' ? { status: 0 } : { status: 1 };
+    } });
+  assert.equal(fallback, 'cloudflared');
+  assert.deepEqual(calls, [`${local} --version`, 'cloudflared --version']);
+
+  assert.throws(() => qa.resolveCloudflared(cwd, { platform: 'win32', existsSyncImpl: () => false,
+    spawnSyncImpl() { return { status: 1 }; } }), /\.runtime\/tools\/cloudflared\.exe ni en PATH/);
+});
+
+test('ADB absence, empty, multiple, unauthorized, offline and invalid output remain optional', () => {
+  const result = (devices: unknown, version = { status: 0 }) => qa.detectAdb({ spawnSyncImpl(_command: string, args: string[]) {
+    return args[0] === 'version' ? version : devices;
+  } });
+  assert.match(result(undefined, { status: 1 }).warning, /ADB no disponible/);
+  assert.match(result({ status: 0, stdout: 'List of devices attached\n\n' }).warning, /sin dispositivos/);
+  assert.match(result({ status: 0, stdout: 'List of devices attached\nA\tdevice\nB\tdevice\n' }).warning, /múltiples/);
+  assert.match(result({ status: 0, stdout: 'List of devices attached\nA\tunauthorized\n' }).warning, /no autorizado/);
+  assert.match(result({ status: 0, stdout: 'List of devices attached\nA\toffline\n' }).warning, /offline/);
+  assert.match(result({ status: 0, stdout: 'unexpected' }).warning, /no válida/);
+  assert.match(result({ status: 1, stdout: '' }).warning, /No se pudo consultar/);
+});
+
+test('exactly one authorized ADB device yields an explicit serial-scoped logcat command', () => {
+  const detected = qa.detectAdb({ spawnSyncImpl(_command: string, args: string[]) {
+    return args[0] === 'version' ? { status: 0 } : { status: 0, stdout: 'List of devices attached\nserial-1\tdevice\n' };
+  } });
+  assert.deepEqual(detected, { command: 'adb', serial: 'serial-1' });
+  const source = readFileSync('scripts/qa-session.cjs', 'utf8');
+  assert.match(source, /\['-s', preflight\.adb\.serial, 'logcat'\]/);
+});
+
 test('QA logging redacts required secret/config values and never serializes the environment', () => {
   const env = { TOMTOM_API_KEY: 'tom-secret', VIMA_PRICING_CONFIG_PATH: 'private-pricing', VIMA_AUTH_CONFIG_PATH: 'private-auth' };
   const result = qa.redactForLog('tom-secret private-pricing private-auth', env);
@@ -78,6 +120,21 @@ test('a critical child exit reports the child and cleanup state suppresses false
   stopping.emit('exit', 0, null); assert.equal(errors.length, 1);
 });
 
+test('ADB exit is non-critical and a started capture remains registered for cleanup', async () => {
+  const child = fakeChild(); const warnings: string[] = [];
+  qa.watchOptionalChild(child, 'adb', () => false, (message: string) => warnings.push(message));
+  child.emit('exit', 1, null);
+  assert.match(warnings[0]!, /sesión continúa/);
+
+  const cleanupChild = fakeChild(); cleanupChild.pid = 77; cleanupChild.exitCode = null; cleanupChild.killed = false;
+  const commands: unknown[][] = [];
+  const registry = qa.createProcessRegistry({ platform: 'win32', spawnSyncImpl(command: string, args: string[]) {
+    commands.push([command, args]); cleanupChild.exitCode = 0; return { status: 0 };
+  } });
+  registry.register('adb', cleanupChild); await registry.cleanup();
+  assert.deepEqual(commands, [['taskkill', ['/pid', '77', '/T', '/F']]]);
+});
+
 test('launcher source preserves exact Gateway → health → tunnel → Metro → ADB order without shell or fixed startup sleep', () => {
   const source = readFileSync('scripts/qa-session.cjs', 'utf8');
   const gateway = source.indexOf("start('gateway'");
@@ -86,6 +143,7 @@ test('launcher source preserves exact Gateway → health → tunnel → Metro �
   const metro = source.indexOf("start('metro'", tunnel);
   const adb = source.indexOf("start('adb'", metro);
   assert.ok(gateway < health && health < tunnel && tunnel < metro && metro < adb);
+  assert.match(source, /start\('tunnel', preflight\.cloudflaredCommand/);
   assert.doesNotMatch(source, /shell:\s*true|sleep\s+/);
   assert.match(source, /taskkill.*\/T.*\/F/s);
 });

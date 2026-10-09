@@ -9,8 +9,14 @@ Metro como `EXPO_PUBLIC_VIMA_API_BASE_URL`.
 
 Precondiciones externas:
 
-- `cloudflared` y `adb` disponibles en `PATH`, con un dispositivo Android
-  autorizado;
+- en Windows, `cloudflared` disponible primero como
+  `.runtime/tools/cloudflared.exe` o, como fallback, en `PATH`; en otros
+  sistemas sigue resolviéndose desde `PATH`. El launcher valida `--version` y
+  no descarga ni instala binarios;
+- ADB es opcional. Si `adb devices` devuelve exactamente un dispositivo en
+  estado `device`, se captura `adb -s <serial> logcat`. ADB ausente, sin
+  dispositivos, con varios, unauthorized, offline o con salida inválida sólo
+  produce un warning y la sesión continúa;
 - dependencias npm del repositorio instaladas;
 - `TOMTOM_API_KEY`, `VIMA_PRICING_CONFIG_PATH` y `VIMA_AUTH_CONFIG_PATH`
   presentes en el environment que inicia la sesión;
@@ -27,9 +33,11 @@ Light elimina cualquier override técnico previo de theme para Metro; dark
 inyecta `EXPO_PUBLIC_VIMA_THEME=dark`. El launcher respeta `VIMA_GEO_HOST` y
 `VIMA_GEO_PORT`; el default sigue siendo `127.0.0.1:8787`. Los logs separados
 se guardan en `.runtime/qa/<timestamp>-light|dark/` como `gateway.log`,
-`tunnel.log`, `metro.log` y `adb.log`. `.runtime/` está ignorado por Git.
-Ctrl+C, SIGTERM o la salida inesperada de un hijo cierran el árbol completo de
-procesos y no imprimen valores de configuración sensible.
+`tunnel.log` y `metro.log`; `adb.log` se crea sólo cuando inicia logcat.
+`.runtime/` está ignorado por Git. Ctrl+C, SIGTERM o la salida inesperada de
+Gateway, cloudflared o Metro cierran el árbol completo. Una salida posterior
+de ADB sólo detiene esa captura y no termina QA. Ningún log imprime valores de
+configuración sensible.
 
 ## Visual y motion
 

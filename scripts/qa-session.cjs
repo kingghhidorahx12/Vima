@@ -90,17 +90,60 @@ function commandAvailable(command, args, spawnSyncImpl = spawnSync) {
   return !result.error && result.status === 0;
 }
 
+function resolveCloudflared(cwd, options = {}) {
+  const platform = options.platform ?? process.platform;
+  const run = options.spawnSyncImpl ?? spawnSync;
+  const exists = options.existsSyncImpl ?? fs.existsSync;
+  const candidates = [];
+  if (platform === 'win32') {
+    const local = path.join(cwd, '.runtime', 'tools', 'cloudflared.exe');
+    if (exists(local)) candidates.push(local);
+  }
+  candidates.push('cloudflared');
+  for (const command of candidates) if (commandAvailable(command, ['--version'], run)) return command;
+  const location = platform === 'win32' ? 'en .runtime/tools/cloudflared.exe ni en PATH' : 'en PATH';
+  throw new Error(`No se encontró un cloudflared funcional ${location}. Instálalo o configúralo antes de iniciar QA.`);
+}
+
+function parseAdbDevices(value) {
+  const lines = String(value).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (!lines.length || lines[0] !== 'List of devices attached') return undefined;
+  const entries = [];
+  for (const line of lines.slice(1)) {
+    const match = /^(\S+)\s+(\S+)$/.exec(line);
+    if (!match) return undefined;
+    entries.push({ serial: match[1], state: match[2] });
+  }
+  return entries;
+}
+
+function detectAdb(options = {}) {
+  const run = options.spawnSyncImpl ?? spawnSync;
+  if (!commandAvailable('adb', ['version'], run))
+    return { warning: '[qa] ADB no disponible; continuando sin logcat.' };
+  const result = run('adb', ['devices'], { encoding: 'utf8', windowsHide: true, timeout: 5_000 });
+  if (result.error || result.status !== 0)
+    return { warning: '[qa] No se pudo consultar ADB; continuando sin logcat.' };
+  const entries = parseAdbDevices(result.stdout);
+  if (!entries) return { warning: '[qa] Salida de ADB no válida; continuando sin logcat.' };
+  if (entries.length === 0) return { warning: '[qa] ADB sin dispositivos; continuando sin logcat.' };
+  if (entries.length > 1) return { warning: '[qa] ADB detectó múltiples dispositivos; continuando sin elegir uno.' };
+  const [entry] = entries;
+  if (entry.state === 'device') return { command: 'adb', serial: entry.serial };
+  if (entry.state === 'unauthorized') return { warning: '[qa] Dispositivo ADB no autorizado; continuando sin logcat.' };
+  if (entry.state === 'offline') return { warning: '[qa] Dispositivo ADB offline; continuando sin logcat.' };
+  return { warning: `[qa] Estado ADB no compatible (${entry.state}); continuando sin logcat.` };
+}
+
 function assertPreflight(env, options = {}) {
   validateRequiredEnvironment(env);
   const run = options.spawnSyncImpl ?? spawnSync;
-  if (!commandAvailable('cloudflared', ['--version'], run)) throw new Error('Falta cloudflared en PATH. Instálalo antes de iniciar QA.');
-  if (!commandAvailable('adb', ['version'], run)) throw new Error('Falta adb en PATH. Instala Android platform-tools antes de iniciar QA.');
-  const devices = run('adb', ['devices'], { encoding: 'utf8', windowsHide: true });
-  if (devices.error || devices.status !== 0 || !/^\S+\s+device$/m.test(devices.stdout ?? ''))
-    throw new Error('No hay un dispositivo Android autorizado en adb.');
+  const cwd = options.cwd ?? process.cwd();
+  const cloudflaredCommand = resolveCloudflared(cwd, { ...options, spawnSyncImpl: run });
+  const adb = detectAdb({ spawnSyncImpl: run });
   const expoCli = path.join(path.dirname(require.resolve('expo/package.json')), 'bin', 'cli');
   if (!fs.existsSync(expoCli)) throw new Error('No se encontró Expo CLI local. Ejecuta npm install.');
-  return { expoCli };
+  return { expoCli, cloudflaredCommand, adb };
 }
 
 function createProcessRegistry(options = {}) {
@@ -133,6 +176,13 @@ function createProcessRegistry(options = {}) {
 function watchCriticalChild(child, name, isStopping, onFatal) {
   child.once('error', error => { if (!isStopping()) onFatal(new Error(`${name} no pudo iniciar: ${error.message}`)); });
   child.once('exit', (code, signal) => { if (!isStopping()) onFatal(new Error(`${name} terminó inesperadamente (${code ?? signal})`)); });
+}
+
+function watchOptionalChild(child, name, isStopping, warn = console.warn) {
+  child.once('error', error => { if (!isStopping()) warn(`[qa] ${name} dejó de estar disponible (${error.message}); la sesión continúa.`); });
+  child.once('exit', (code, signal) => {
+    if (!isStopping()) warn(`[qa] ${name} terminó (${code ?? signal}); la sesión continúa sin esa captura.`);
+  });
 }
 
 function attachLoggedOutput(child, name, logPath, env, onText) {
@@ -169,13 +219,14 @@ async function runQaSession(theme, options = {}) {
   const registry = createProcessRegistry(options);
   let fatalReject;
   const fatal = new Promise((_resolve, reject) => { fatalReject = reject; });
-  const start = (name, command, args, childEnv, onText) => {
+  const start = (name, command, args, childEnv, onText, critical = true) => {
     if (registry.stopping) throw new Error('La sesión QA ya se está cerrando');
     const child = registry.register(name, spawnImpl(command, args, {
       cwd, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32',
     }));
     attachLoggedOutput(child, name, path.join(runDir, `${name}.log`), env, onText);
-    watchCriticalChild(child, name, () => registry.stopping, fatalReject);
+    if (critical) watchCriticalChild(child, name, () => registry.stopping, fatalReject);
+    else watchOptionalChild(child, name, () => registry.stopping);
     return child;
   };
   const stopSignal = new Promise(resolve => {
@@ -187,7 +238,7 @@ async function runQaSession(theme, options = {}) {
     start('gateway', process.execPath, ['--experimental-strip-types', path.join(cwd, 'gateway', 'main.ts')], provisional.gateway);
     await Promise.race([waitForHealth(target.localUrl, options.healthOptions), fatal]);
     let tunnelText = '';
-    const tunnel = start('tunnel', 'cloudflared', ['tunnel', '--url', target.localUrl, '--no-autoupdate'], provisional.tunnel,
+    const tunnel = start('tunnel', preflight.cloudflaredCommand, ['tunnel', '--url', target.localUrl, '--no-autoupdate'], provisional.tunnel,
       value => { tunnelText += value; });
     const publicUrl = await Promise.race([waitForQuickTunnel(tunnel, options.tunnelTimeoutMs), fatal]);
     const urls = extractQuickTunnelUrls(tunnelText);
@@ -195,7 +246,9 @@ async function runQaSession(theme, options = {}) {
     console.log(`[qa] Gateway público: ${publicUrl}`);
     const childEnvs = buildChildEnvironments(env, theme, publicUrl);
     start('metro', process.execPath, [preflight.expoCli, 'start', '--dev-client', '--tunnel'], childEnvs.metro);
-    start('adb', 'adb', ['logcat'], childEnvs.adb);
+    if (preflight.adb.command && preflight.adb.serial)
+      start('adb', preflight.adb.command, ['-s', preflight.adb.serial, 'logcat'], childEnvs.adb, undefined, false);
+    else if (preflight.adb.warning) console.warn(preflight.adb.warning);
     const result = await Promise.race([stopSignal, fatal]);
     if (result instanceof Error) throw result;
   } finally {
@@ -211,8 +264,8 @@ async function main() {
 
 module.exports = {
   REQUIRED_ENV, validateRequiredEnvironment, gatewayTarget, extractQuickTunnelUrls, buildChildEnvironments,
-  redactForLog, waitForQuickTunnel, waitForHealth, commandAvailable, assertPreflight, createProcessRegistry,
-  watchCriticalChild, runQaSession,
+  redactForLog, waitForQuickTunnel, waitForHealth, commandAvailable, resolveCloudflared, parseAdbDevices, detectAdb,
+  assertPreflight, createProcessRegistry, watchCriticalChild, watchOptionalChild, runQaSession,
 };
 
 if (require.main === module) main().catch(error => { console.error(`[qa] ${redactForLog(error.message, process.env)}`); process.exitCode = 1; });
