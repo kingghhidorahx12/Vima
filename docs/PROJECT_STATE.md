@@ -11,12 +11,14 @@ sustituyen los valores visuales descritos en las secciones anteriores.
 
 ### Frontera HTTP Passenger y launcher de QA Android — 2026-10-08
 
-- El snapshot infractor queda identificado en la frontera HTTP Passenger: una
-  respuesta de `fetch(B)` con `id=A` podía fallar dentro de
-  `decodeMatchingTrip` antes de alcanzar `trip_reconcile`. La nueva frontera
-  `trip_http_snapshot` valida y diagnostica el envelope antes del decode
-  completo; `validateTrip`, `reconcileTripWithContext` y las invariantes de
-  identidad permanecen estrictas.
+- La excepción previa a `trip_reconcile` queda localizada en la frontera HTTP
+  Passenger: un envelope con revision/phase inválidos o un snapshot matching
+  estructuralmente inválido podía lanzar dentro de `decodeMatchingTrip` sin
+  diagnóstico de origen. La reproducción separada `fetch(B)` con `id=A`
+  confirma además el riesgo de identidad tardía. La nueva frontera
+  `trip_http_snapshot` clasifica ambos casos antes del decode completo;
+  `validateTrip`, `reconcileTripWithContext` y las invariantes de identidad
+  permanecen estrictas.
 - La traza DEV sanitizada registra sólo origin/endpoint lógico, `expectedId`
   cuando existe autoridad, `incomingId`, revision/phase válidos, epoch,
   accepted/rejected y una razón tipada: `id_invalid`, `id_mismatch`,
