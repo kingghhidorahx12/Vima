@@ -9,7 +9,7 @@ export function tripQueryOptions(gateway: TripGateway, tripId: string, context?:
     queryKey: tripKey(tripId),
     queryFn: async ({ signal }) => {
       assertCurrentTrip(context);
-      const incoming = await gateway.fetch(tripId, signal);
+      const incoming = await gateway.fetch(tripId, signal, { epoch: context?.epoch, expectedId: tripId });
       assertCurrentTrip(context);
       return reconcileTripWithContext(undefined, incoming, { origin: 'query_structural_sharing', expectedId: tripId, epoch: context?.epoch });
     },
@@ -21,7 +21,7 @@ export function tripQueryOptions(gateway: TripGateway, tripId: string, context?:
 
 export async function executeConfirmedCommand(client: QueryClient, gateway: TripGateway, command: TripCommand, context?: TripFenceContext) {
   assertCurrentTrip(context);
-  const confirmed = await gateway.execute(command);
+  const confirmed = await gateway.execute(command, { epoch: context?.epoch, expectedId: command.tripId });
   assertCurrentTrip(context);
   client.setQueryData<AuthoritativeTrip>(tripKey(command.tripId), (previous) => reconcileTripWithContext(previous, confirmed,
     { origin: 'command_receipt', expectedId: command.tripId, epoch: context?.epoch }));

@@ -12,10 +12,15 @@ export interface TripCommand {
   readonly payload: Readonly<Record<string, unknown>>;
 }
 
+export interface TripRequestContext {
+  readonly epoch?: number;
+  readonly expectedId?: string;
+}
+
 export interface TripGateway {
-  fetch(tripId: string, signal?: AbortSignal): Promise<AuthoritativeTrip>;
+  fetch(tripId: string, signal?: AbortSignal, context?: TripRequestContext): Promise<AuthoritativeTrip>;
   /** Resolve only after the server confirms the resulting trip state. */
-  execute(command: TripCommand): Promise<AuthoritativeTrip>;
+  execute(command: TripCommand, context?: TripRequestContext): Promise<AuthoritativeTrip>;
 }
 
 export function validateTrip(trip: AuthoritativeTrip, expectedId: string): AuthoritativeTrip {

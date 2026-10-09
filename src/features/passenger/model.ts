@@ -1,7 +1,7 @@
 import type { Coordinate, VehicleSample } from '../../map/vehicleMotion.ts';
 import type { RouteFeature } from '../../map/routeGeometry.ts';
 import type { RealtimeTransport } from '../../services/realtime/index';
-import type { AuthoritativeTrip, TripGateway } from '../trip/contracts.ts';
+import type { AuthoritativeTrip, TripGateway, TripRequestContext } from '../trip/contracts.ts';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts.ts';
 import type { QuoteResponse } from '../../services/pricing/contracts.ts';
 import type { PlaceImageRef, PlaceMediaResolver } from '../../services/geospatial/placeMedia.ts';
@@ -52,7 +52,7 @@ export type Connection = 'online' | 'offline' | 'reconnecting';
 
 /** Internal UI adapter, not a declaration of backend endpoints or cancellation rules. */
 export interface PassengerGateway extends TripGateway, RealtimeTransport {
-  activeRequest?(signal?: AbortSignal): Promise<PassengerTrip | null>;
+  activeRequest?(signal?: AbortSignal, context?: TripRequestContext): Promise<PassengerTrip | null>;
   readonly scope: string;
   readonly source: 'server' | 'fixture';
   readonly paymentReady?: boolean;
@@ -81,8 +81,8 @@ export interface PassengerGateway extends TripGateway, RealtimeTransport {
   closePlaces?(): void;
   quote(draft: RideDraft, signal?: AbortSignal, operationId?: string): Promise<RideQuote>;
   /** Editing/scheduling must confirm cancellation of the active request before a new request. */
-  request(quote: RideQuote, requestId: string): Promise<PassengerTrip>;
-  fetch(tripId: string, signal?: AbortSignal): Promise<PassengerTrip>;
+  request(quote: RideQuote, requestId: string, context?: TripRequestContext): Promise<PassengerTrip>;
+  fetch(tripId: string, signal?: AbortSignal, context?: TripRequestContext): Promise<PassengerTrip>;
   getConnection(): Connection;
   subscribeConnection(listener: () => void): () => void;
 }

@@ -24,6 +24,7 @@ import { PassengerBottomNavigation, bottomNavigationHeight } from './PassengerBo
 import { usePassengerRouteFit } from './usePassengerRouteFit';
 import { isMatching, validDraft, type Assignment, type OriginStatus, type PassengerGateway, type Place, type RideQuote } from './model';
 import { usePassengerFlow } from './usePassengerFlow';
+import { passengerErrorMessage } from './passengerErrors';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 import { normalizeCoordinate, type Coordinate } from '../../map/models';
 import { defaultTrafficLayers, displayKeyAvailable, type TrafficLayerPreferences } from '../../map/traffic';
@@ -380,6 +381,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const entranceIndex = fresh ? newSearchItems++ : undefined;
     return { place, identity, entranceIndex };
   }) : [];
+  const visibleError = flow.error ? passengerErrorMessage(flow.error) : undefined;
   const content = <PassengerScenePresence scene={scene} style={styles.fill}
     pointerEvents={detachedPanel ? 'box-none' : undefined}>
     <Animated.View ref={viewportNode} testID="passenger-sheet-viewport"
@@ -390,10 +392,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       <StatusNotice>Sin conexión · Intentando reconectar</StatusNotice></ElementEntrance> : null}
     {flow.quoteExpired ? <ElementEntrance timing={motionTimings.state}>
       <StatusNotice>La cotización venció. Revisa y confirma la nueva cotización.</StatusNotice></ElementEntrance> : null}
-    {flow.error ? <ElementEntrance timing={motionTimings.success}><Animated.View style={errorPress.style}><Pressable
+    {visibleError ? <ElementEntrance timing={motionTimings.success}><Animated.View style={errorPress.style}><Pressable
       onPressIn={errorPress.onPressIn} onPressOut={errorPress.onPressOut}
-      onPress={flow.retry} accessibilityRole="button" accessibilityLabel={flow.error.message}>
-      <StatusNotice retry>{flow.error.message}</StatusNotice>
+      onPress={flow.retry} accessibilityRole="button" accessibilityLabel={visibleError}>
+      <StatusNotice retry>{visibleError}</StatusNotice>
     </Pressable></Animated.View></ElementEntrance> : null}
     <ScrollView ref={scroll} pointerEvents={detachedPanel ? 'box-none' : undefined}
       keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets

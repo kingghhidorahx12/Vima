@@ -2,8 +2,9 @@ import { ApiError, type ApiClient, type ApiRequest } from '../api/client.ts';
 import type { PassengerGateway, Connection } from '../../features/passenger/model.ts';
 import type { TripCommand } from '../../features/trip/contracts.ts';
 import type { Coordinate } from '../../map/models.ts';
-import { decodeDriver, decodeIdentity, decodeMatchingTrip, decodeRevision } from './decode.ts';
+import { decodeDriver, decodeIdentity, decodeRevision } from './decode.ts';
 import { matchingDevTrace, matchingTraceError, type MatchingTrace } from './devTrace.ts';
+import { decodeTripHttpSnapshot } from './tripHttpSnapshot.ts';
 
 interface MatchingClientOptions { trace?: MatchingTrace; now?: () => number; pollId?: () => string }
 let pollSequence = 0;
@@ -79,27 +80,28 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
     })();
     return (reason = 'abort') => { stopReason = reason; controller.abort(); cancelDelay?.(); };
   }
-  const rememberTrip = (value: ReturnType<typeof decodeMatchingTrip>) => {
+  const rememberTrip = (value: ReturnType<typeof decodeTripHttpSnapshot>) => {
     revisions.set(value.id, Math.max(revisions.get(value.id) ?? 0, value.revision)); return value;
   };
   return {
     identity: (signal?: AbortSignal) => request({ path: '/v1/matching/session', method: 'GET', decode: decodeIdentity, signal }),
-    activeRequest: async (signal?: AbortSignal) => {
+    activeRequest: async (signal?: AbortSignal, context?: { epoch?: number; expectedId?: string }) => {
       const value = await request({ path: '/v1/passenger/requests/active', method: 'GET', signal,
         decode: raw => {
           if (raw === null) return null;
-          const trip = decodeMatchingTrip(raw);
+          const trip = decodeTripHttpSnapshot(raw, { origin: 'active_request', endpoint: 'active',
+            expectedId: context?.expectedId, epoch: context?.epoch, trace });
           if (!['searching', 'reassigning', 'assigned'].includes(trip.phase)) throw new Error('invalid_active_request');
           return trip;
         } });
       return value ? rememberTrip(value) : null;
     },
-    request: async (quoteId: string, requestId: string) => rememberTrip(await request({ path: '/v1/passenger/requests', method: 'POST',
-      body: { quoteId, requestId }, decode: decodeMatchingTrip })),
-    fetch: async (id: string, signal?: AbortSignal) => rememberTrip(await request({ path: `/v1/passenger/requests/${encodeURIComponent(id)}`,
-      method: 'GET', decode: decodeMatchingTrip, signal })),
-    execute: async (command: TripCommand) => rememberTrip(await request({ path: `/v1/passenger/requests/${encodeURIComponent(command.tripId)}/commands`,
-      method: 'POST', body: command, decode: decodeMatchingTrip })),
+    request: async (quoteId: string, requestId: string, context?: { epoch?: number }) => rememberTrip(await request({ path: '/v1/passenger/requests', method: 'POST',
+      body: { quoteId, requestId }, decode: raw => decodeTripHttpSnapshot(raw, { origin: 'request_create', endpoint: 'collection', epoch: context?.epoch, trace }) })),
+    fetch: async (id: string, signal?: AbortSignal, context?: { epoch?: number }) => rememberTrip(await request({ path: `/v1/passenger/requests/${encodeURIComponent(id)}`,
+      method: 'GET', decode: raw => decodeTripHttpSnapshot(raw, { origin: 'request_fetch', endpoint: 'request', expectedId: id, epoch: context?.epoch, trace }), signal })),
+    execute: async (command: TripCommand, context?: { epoch?: number }) => rememberTrip(await request({ path: `/v1/passenger/requests/${encodeURIComponent(command.tripId)}/commands`,
+      method: 'POST', body: command, decode: raw => decodeTripHttpSnapshot(raw, { origin: 'request_command', endpoint: 'commands', expectedId: command.tripId, epoch: context?.epoch, trace }) })),
     getConnection: () => connection,
     subscribeConnection: (fn: () => void) => {
       listeners.add(fn); scheduleRecovery(); return () => {

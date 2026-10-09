@@ -39,7 +39,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     const fence = identity.capture();
     if (!needsBootstrap || connection !== 'online' || bootstrapComplete.current && fence.expectedTripId) return;
     const controller = new AbortController();
-    void gateway.activeRequest!(controller.signal).then(incoming => {
+    void gateway.activeRequest!(controller.signal, { epoch: fence.epoch, expectedId: fence.expectedTripId }).then(incoming => {
       if (controller.signal.aborted || !identity.isCurrent(fence)) return;
       const active = identity.adoptTripIdentity(incoming, 'active_request_seed', fence);
       if (active) { locked.current = false; setEditing(false); setConfirming(false); }
@@ -125,14 +125,14 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const request = useMutation({ mutationFn: async ({ snapshot, fence, id }: { snapshot: RideQuote; fence: IdentityFence; id: string }) => {
     assertCurrentTrip(identity.context(fence));
     try {
-      const receipt = await requestPassengerRide(gateway, snapshot, id);
+      const receipt = await requestPassengerRide(gateway, snapshot, id, { epoch: fence.epoch });
       assertCurrentTrip(identity.context(fence));
       return { receipt, origin: 'request_receipt' as const };
     }
     catch (error) {
       assertCurrentTrip(identity.context(fence));
       if (!(error instanceof ApiError) || error.code !== 'active_request_exists' || !gateway.activeRequest) throw error;
-      const active = await gateway.activeRequest();
+      const active = await gateway.activeRequest(undefined, { epoch: fence.epoch, expectedId: fence.expectedTripId });
       assertCurrentTrip(identity.context(fence));
       if (!active) throw error;
       return { receipt: active, origin: 'active_request_conflict_recovery' as const };

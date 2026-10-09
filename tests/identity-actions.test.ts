@@ -64,6 +64,49 @@ test('A cancel → B create → B assigned/PIN survives late A fetch, poll, reco
   } finally { identity.dispose(); client.clear(); f.controls.dispose(); }
 });
 
+test('A → B → C fences deferred HTTP and realtime continuations across two released identities', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const subscriptions = new Map<string, { change: (value: TripInvalidation) => void; reconnect: () => void }>();
+  const starts: string[] = []; const exposed: (string | undefined)[] = []; const invalidations: unknown[] = [];
+  const identity = createPassengerIdentity(client, { subscribeTrip(id, change, reconnect) {
+    starts.push(id); subscriptions.set(id, { change, reconnect }); return () => {};
+  } }, id => exposed.push(id));
+  const originalInvalidate = client.invalidateQueries.bind(client);
+  client.invalidateQueries = (...args) => { invalidations.push(args[0]); return originalInvalidate(...args); };
+  const makeTrip = (id: string, revision = 1): PassengerTrip => ({ id, revision, phase: 'searching', quote });
+  const lateA = deferred<PassengerTrip>(); const activeA = deferred<PassengerTrip>();
+  const lateB = deferred<PassengerTrip>(); const activeB = deferred<PassengerTrip>();
+  try {
+    const a = makeTrip('A'); identity.adoptTripIdentity(a, 'request_receipt', identity.capture()); const fenceA = identity.capture();
+    const queryA = client.fetchQuery(tripQueryOptions({ fetch: () => lateA.promise, execute: async () => a }, 'A', identity.context(fenceA))).catch(error => error);
+    const bootstrapA = activeA.promise.then(value => identity.adoptTripIdentity(value, 'active_request_seed', fenceA));
+    client.setQueryData(tripKey('A'), { ...a, revision: 2, phase: 'cancelled' });
+    identity.adoptTripIdentity(null, 'release_terminal', fenceA);
+
+    const b = makeTrip('B'); identity.adoptTripIdentity(b, 'request_receipt', identity.capture()); const fenceB = identity.capture();
+    const queryB = client.fetchQuery(tripQueryOptions({ fetch: () => lateB.promise, execute: async () => b }, 'B', identity.context(fenceB))).catch(error => error);
+    const bootstrapB = activeB.promise.then(value => identity.adoptTripIdentity(value, 'active_request_seed', fenceB));
+    client.setQueryData(tripKey('B'), { ...b, revision: 3, phase: 'expired' });
+    identity.adoptTripIdentity(null, 'release_terminal', fenceB);
+
+    const c = makeTrip('C', 4); identity.adoptTripIdentity(c, 'request_receipt', identity.capture());
+    const invalidationsBeforeStale = invalidations.length;
+    subscriptions.get('A')!.change({ tripId: 'A' }); subscriptions.get('B')!.reconnect();
+    lateB.resolve({ ...b, revision: 90 }); activeA.resolve({ ...a, revision: 91 });
+    lateA.resolve({ ...a, revision: 92 }); activeB.resolve({ ...b, revision: 93 });
+    await Promise.all([queryA, queryB]);
+    assert.equal(await bootstrapA, undefined); assert.equal(await bootstrapB, undefined);
+    assert.equal(identity.capture().expectedTripId, 'C');
+    assert.deepEqual(client.getQueryData(tripKey('C')), c);
+    assert.equal(client.getQueryData<PassengerTrip>(tripKey('A'))?.revision, 2);
+    assert.equal(client.getQueryData<PassengerTrip>(tripKey('B'))?.revision, 3);
+    assert.equal(invalidations.length, invalidationsBeforeStale);
+    assert.deepEqual(starts, ['A', 'B', 'C']);
+    assert.equal(exposed.at(-1), 'C');
+    assert.notEqual(client.getQueryState(tripKey('C'))?.status, 'error');
+  } finally { identity.dispose(); client.clear(); }
+});
+
 test('late request/conflict adoption, commands and disposed callbacks cannot write current identity', async () => {
   const client = new QueryClient();
   const identity = createPassengerIdentity(client, { subscribeTrip: () => () => {} }, () => {});

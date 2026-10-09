@@ -591,7 +591,8 @@ test('missing location requires an explicit valid origin; recoverable request fa
     fixture.controls.failNext();
     await harness.act(async () => press(tree, 'Solicitar viaje'));
     await settle(harness);
-    assert.ok(text(tree).includes('Error recuperable'));
+    assert.ok(text(tree).includes('No pudimos completar la acción. Reintenta.'));
+    assert.equal(text(tree).includes('Error recuperable'), false);
     assert.ok(text(tree).includes(fixturePlaces[1]!.name));
     assert.ok(text(tree).includes('Confirma tu viaje'));
     await harness.act(async () => press(tree, 'Solicitar viaje'));
@@ -740,12 +741,13 @@ test('ambiguous live create retries the original quote/id after refresh and cann
   const h = createHarness(); const tree: ReactTestRenderer = await h.render(gateway);
   try {
     await reachMatching(h, tree);
-    assert.equal(attempts.length, 1); assert.ok(text(tree).includes('Lost create response'));
+    assert.equal(attempts.length, 1); assert.ok(text(tree).includes('No pudimos completar la acción. Reintenta.'));
+    assert.equal(text(tree).includes('Lost create response'), false);
     await h.act(async () => { h.back(); });
     assert.ok(text(tree).includes('Solicitar viaje'));
     await h.act(async () => { await h.client.invalidateQueries({ queryKey: ['passenger', gateway.scope, 'quote'] }); });
     await settle(h); assert.equal(quotes, 2);
-    await h.act(async () => press(tree, 'Lost create response')); await settle(h);
+    await h.act(async () => press(tree, 'No pudimos completar la acción. Reintenta.')); await settle(h);
     assert.equal(attempts.length, 2); assert.deepEqual(attempts[0], attempts[1]);
     assert.ok(text(tree).includes('Buscando un conductor'));
   } finally { await h.act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }

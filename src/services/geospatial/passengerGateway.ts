@@ -54,7 +54,7 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
         durationMinutes: Math.ceil((route.trafficDurationSeconds ?? route.durationSeconds) / 60),
         distanceKm: Math.round(route.distanceMeters / 100) / 10 };
     },
-    request: live?.available ? (quote, id) => live.matching.request(quote.id, id) : unavailable,
+    request: live?.available ? (quote, id, context) => live.matching.request(quote.id, id, context) : unavailable,
     activeRequest: live?.available ? live.matching.activeRequest : undefined,
     fetch: live?.matching.fetch ?? unavailable, execute: live?.matching.execute ?? unavailable,
     getConnection: live?.matching.getConnection ?? (() => 'online'),
