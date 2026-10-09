@@ -10,7 +10,6 @@ import { createVehicleMotion, validHeading, type DriverVehicleSample } from './v
 import type { DriverState } from '../services/matching/contracts';
 
 const AnimatedSource = Animated.createAnimatedComponent(GeoJSONSource);
-const AnimatedLayer = Animated.createAnimatedComponent(Layer);
 const images = { 'vima-driver-light': require('../../assets/driver/vehicle-light.png'),
   'vima-driver-dark': require('../../assets/driver/vehicle-dark.png') };
 const motion = createVehicleMotion(() => { 'worklet'; return false; });
@@ -42,12 +41,15 @@ export function DriverVehicleMarker({ location, sequence, online = true }: {
   useEffect(() => () => cancelAnimation(pulse), [pulse]);
   const pose = useVehicleMotion(sample, motion, { driver: true, essential: true });
   const animatedProps = useAnimatedProps(() => ({ data: pose.get() ? JSON.stringify({ type: 'Feature',
-    properties: { heading: pose.get()!.heading }, geometry: { type: 'Point', coordinates: pose.get()!.coordinate } }) : empty }));
-  const halo = useAnimatedProps(() => ({ paint: { 'circle-radius': reducedMotion ? 28 : 28 + pulse.get() * 8,
-    'circle-color': theme.roles.positive, 'circle-opacity': reducedMotion ? 0 : (1 - pulse.get()) * 0.18 } }));
+    properties: { heading: pose.get()!.heading, acquisition: reducedMotion ? 1 : pulse.get() },
+    geometry: { type: 'Point', coordinates: pose.get()!.coordinate } }) : empty }));
   return <><Images images={images} /><AnimatedSource id="driver-vehicle-source" data={empty} animatedProps={animatedProps}>
     <Layer id="driver-vehicle-base" type="circle" paint={{ 'circle-radius': 28, 'circle-color': theme.roles.positive, 'circle-opacity': 0.08 }} />
-    <AnimatedLayer id="driver-vehicle-acquisition" type="circle" animatedProps={halo} />
+    <Layer id="driver-vehicle-acquisition" type="circle" paint={{
+      'circle-radius': ['interpolate', ['linear'], ['get', 'acquisition'], 0, 28, 1, 36],
+      'circle-color': theme.roles.positive,
+      'circle-opacity': ['interpolate', ['linear'], ['get', 'acquisition'], 0, 0.18, 1, 0],
+    }} />
     <Layer id="driver-vehicle" type="symbol" filter={['!=', ['get', 'heading'], null]} layout={{ 'icon-image': `vima-driver-${theme.name}`, 'icon-size': 1,
       'icon-allow-overlap': true, 'icon-ignore-placement': true,
       'icon-rotation-alignment': 'map', 'icon-rotate': ['get', 'heading'] }} />

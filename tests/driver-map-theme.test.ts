@@ -145,13 +145,19 @@ test('fonts gate productive UI independently; native Driver layers follow phases
     await h.act(async () => tree.update(h.element(snapshot('OFFLINE', 1, false)))); await h.flush();
     const source = () => tree.root.findAllByType('MapLibreSource' as never).find(n => n.props.id === 'driver-vehicle-source')!;
     assert.deepEqual(JSON.parse(source().props.data).features, []);
+    assert.equal(tree.root.findAllByType('MapLibreLayer' as never).filter(n => n.props.id === 'driver-vehicle-acquisition').length, 1);
     for (const phase of ['AVAILABLE', 'OFFER', 'ASSIGNED', 'ARRIVED_PICKUP', 'IN_PROGRESS', 'PAYMENT_PENDING']) {
       const s = snapshot(phase, 2);
       await h.act(async () => tree.update(h.element(s))); await h.flush();
       await h.act(async () => tree.update(h.element({ ...s })));
       const data = JSON.parse(source().props.data);
       assert.deepEqual(data.geometry.coordinates, s.location!.coordinate); assert.equal(data.properties.heading, null);
+      assert.equal(typeof data.properties.acquisition, 'number');
       const vehicleLayers = tree.root.findAllByType('MapLibreLayer' as never).filter(n => n.props.id.startsWith('driver-vehicle'));
+      assert.ok(vehicleLayers.every(n => n.props.animatedProps === undefined));
+      const acquisition = vehicleLayers.find(n => n.props.id === 'driver-vehicle-acquisition')!;
+      assert.deepEqual(acquisition.props.paint['circle-radius'], ['interpolate', ['linear'], ['get', 'acquisition'], 0, 28, 1, 36]);
+      assert.deepEqual(acquisition.props.paint['circle-opacity'], ['interpolate', ['linear'], ['get', 'acquisition'], 0, 0.18, 1, 0]);
       assert.equal(vehicleLayers.find(n => n.props.id === 'driver-vehicle-unoriented')!.props.layout['icon-rotate'], undefined);
       const { validateStyleMin } = require('@maplibre/maplibre-gl-style-spec');
       assert.deepEqual(validateStyleMin({ version: 8, sources: { vehicle: { type: 'geojson', data } },
@@ -190,11 +196,17 @@ test('capabilities disable individual switches and the whole menu only when neit
 test('Reduced Motion toggle crossfades without rotation; vehicle halo contains no loop', async () => {
   const h = integratedHarness(true); const tree: ReactTestRenderer = await h.render(h.element(snapshot('AVAILABLE')));
   try {
+    await h.flush();
+    await h.act(async () => tree.update(h.element(snapshot('AVAILABLE'))));
+    const source = tree.root.findAllByType('MapLibreSource' as never).find(n => n.props.id === 'driver-vehicle-source')!;
+    assert.equal(JSON.parse(source.props.data).properties.acquisition, 1);
     const toggle = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Cambiar a modo oscuro')!;
     const iconStyles = () => toggle.findAllByType('View' as never).map(n => Object.assign({}, ...[n.props.style].flat().filter(Boolean))).filter(s => s.transform?.[0]?.rotate !== undefined);
     assert.ok(iconStyles().length >= 2); assert.ok(iconStyles().every(s => s.transform[0].rotate === '0deg'));
     await h.act(async () => toggle.props.onPress());
     assert.ok(h.calls.some((c: unknown[]) => c[0] === 'timing')); assert.equal(h.calls.some((c: unknown[]) => c[0] === 'repeat'), false);
   } finally { await h.act(async () => tree.unmount()); }
-  assert.doesNotMatch(readFileSync('src/map/DriverVehicleMarker.tsx', 'utf8'), /withRepeat|setInterval|PassengerUserLocation/);
+  const marker = readFileSync('src/map/DriverVehicleMarker.tsx', 'utf8');
+  assert.doesNotMatch(marker, /withRepeat|setInterval|PassengerUserLocation|AnimatedLayer|createAnimatedComponent\(Layer\)/);
+  assert.equal((marker.match(/createAnimatedComponent\(/g) ?? []).length, 1);
 });

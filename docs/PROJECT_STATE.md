@@ -1,6 +1,6 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-09 en `codex/driver-map-theme-toggle-p0`,
+Actualizado 2026-10-09 en `codex/driver-maplibre-layer-crash-fix-p0`,
 desde `codex/passenger-structural-sharing-cross-id-fix-p0` @ `974c539bec39d68741357efbf48deae0bbc4a003`.
 Sin merge a main.
 
@@ -8,6 +8,19 @@ Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Crash Android de la capa de adquisición Driver — 2026-10-09
+
+- Se quitó `Animated.createAnimatedComponent(Layer)` del halo de adquisición:
+  Android rechazaba su `animatedProps.paint` con `0 is not a valid MapLibre layer style`.
+  `AnimatedSource` conserva posición/heading y añade `acquisition` a la feature
+  real. Un `Layer` normal lee esa propiedad mediante interpolaciones MapLibre:
+  radio 28→36, opacidad 0.18→0; Reduced Motion fija acquisition=1.
+  Sin ubicación, GeoJSON vacío. Base/automóvil/orden, assets y motion intactos.
+- **Validación automatizada:** focal Driver map, style spec, TypeScript, lint,
+  suite completa, worklets y checks afectados ejecutados en esta rama.
+- **Android físico PENDIENTE:** abrir Driver sin error de render; OFFLINE→AVAILABLE
+  sólo muestra automóvil al recibir ubicación real.
 
 ### Driver Map v1 y preferencia global Sol/Luna — 2026-10-09
 
