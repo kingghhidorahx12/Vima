@@ -9,6 +9,22 @@ sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
 
+### Structural sharing Passenger aislado por identidad — 2026-10-09
+
+- `tripQueryOptions` sólo entrega a la reconciliación el `oldData` cuyo `id`
+  coincide con el `expectedId` de la query. Al reutilizar un observer de A para B,
+  el resultado anterior A deja de contaminar el structural sharing de B; el
+  snapshot incoming continúa validándose estrictamente y un incoming cross-ID
+  sigue fallando cerrado.
+- Regresión con `QueryClient` + `QueryObserver` real reproduce A terminal cacheado,
+  cambio del mismo observer a B ya recibido, y avance B rev1 → rev2 → ASSIGNED
+  rev3 sin restart. `tripKey(A)` permanece intacto y las trazas B no usan A como
+  previous. Sin cambios en reconciliación, identidad/epochs, realtime o backend.
+- **VERIFICADO automatizado:** focal **2/2**, suite completa **309/309**,
+  gateway/matching/lifecycle/pricing **87/87**, TypeScript y lint.
+- Android físico **PENDIENTE**: repetir A terminal → B creado/asignado en la misma
+  sesión y confirmar ausencia de `query_structural_sharing previousId=A`.
+
 ### Lifecycle autoritativo, meter, settlement y journal Driver — 2026-10-09
 
 - RequestRecord/MatchingCoordinator extiende ASSIGNED → ARRIVED_PICKUP →

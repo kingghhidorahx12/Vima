@@ -14,8 +14,11 @@ export function tripQueryOptions(gateway: TripGateway, tripId: string, context?:
       return reconcileTripWithContext(undefined, incoming, { origin: 'query_structural_sharing', expectedId: tripId, epoch: context?.epoch });
     },
     // Prevent an older HTTP response from overwriting a newer confirmed revision.
-    structuralSharing: (oldData, newData) => reconcileTripWithContext(oldData as AuthoritativeTrip | undefined, newData as AuthoritativeTrip,
-      { origin: 'query_structural_sharing', expectedId: tripId, epoch: context?.epoch }),
+    structuralSharing: (oldData, newData) => {
+      const previous = oldData as AuthoritativeTrip | undefined;
+      return reconcileTripWithContext(previous?.id === tripId ? previous : undefined, newData as AuthoritativeTrip,
+        { origin: 'query_structural_sharing', expectedId: tripId, epoch: context?.epoch });
+    },
   });
 }
 
