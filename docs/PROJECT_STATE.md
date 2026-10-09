@@ -1,13 +1,54 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-08 en `codex/driver-ui-critical-offer-polish-p0`,
-desde `codex/global-light-dark-theme-p0` @ `0d3600f2`.
+Actualizado 2026-10-08 en `codex/passenger-trip-reconcile-qa-launcher-p0`,
+desde `codex/driver-ui-critical-offer-polish-p0` @ `f040dbd2`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Frontera HTTP Passenger y launcher de QA Android — 2026-10-08
+
+- El snapshot infractor queda identificado en la frontera HTTP Passenger: una
+  respuesta de `fetch(B)` con `id=A` podía fallar dentro de
+  `decodeMatchingTrip` antes de alcanzar `trip_reconcile`. La nueva frontera
+  `trip_http_snapshot` valida y diagnostica el envelope antes del decode
+  completo; `validateTrip`, `reconcileTripWithContext` y las invariantes de
+  identidad permanecen estrictas.
+- La traza DEV sanitizada registra sólo origin/endpoint lógico, `expectedId`
+  cuando existe autoridad, `incomingId`, revision/phase válidos, epoch,
+  accepted/rejected y una razón tipada: `id_invalid`, `id_mismatch`,
+  `revision_invalid`, `phase_invalid` o `snapshot_invalid`. No incluye quote,
+  coordenadas, assignment, perfil/PIN, bearer, headers ni payload completo.
+  Create no confunde `requestId` con trip ID y `/active` no inventa identidad.
+- La regresión A→B→C completa respuestas HTTP/realtime tardías de A y B en
+  órdenes distintos: C permanece visible, query keys y revisions siguen
+  aisladas, no se reinicia realtime obsoleto y Passenger no queda bloqueado.
+  `adoptTripIdentity` y su epoch síncrono siguen siendo la única autoridad.
+- Passenger deja de renderizar `flow.error.message`. Los errores internos de
+  snapshot/identity/reconciliation se proyectan como `No pudimos actualizar tu
+  viaje. Reintenta.`; otros errores no allowlisted usan copy genérico seguro,
+  conservando Error, retry y request activa para diagnóstico y recuperación.
+- `scripts/qa-session.cjs` implementa un único launcher para `npm run qa:light`
+  y `npm run qa:dark`: preflight → Gateway → `/health` → Cloudflare Quick
+  Tunnel → URL pública → Metro dev-client `--tunnel` → captura ADB. Hereda la
+  configuración externa, no lee rutas personales ni imprime secretos, y
+  guarda streams separados en `.runtime/qa/<timestamp>-<theme>/`.
+- Ctrl+C, SIGTERM, error de startup o salida de un hijo crítico detienen nuevos
+  hijos y limpian Metro, cloudflared, Gateway y ADB. En Windows se cierra el
+  árbol con `taskkill /T`; en POSIX se usan grupos de proceso. El cleanup es
+  idempotente y no depende de sleeps fijos.
+- **VERIFICADO automatizado:** TypeScript, lint, suite completa **274/274**,
+  gateway/matching/pricing **68/68**, worklets (19 archivos), splash, exports
+  Hermes Android/iOS release y development, y aislamiento fixture/release y
+  frontera móvil del release. Expo Doctor conserva **20/21** por no poder
+  resolver `exp.host`; no se actualizaron dependencias. El check de frontera
+  sobre export DEV sigue encontrando el header público `TomTom-Api-Key` de
+  Orbis Display ya presente en la base; el export release pasa limpio.
+- Sin dependencias ni cambios nativos. La sesión real con cloudflared, Metro,
+  ADB y Android físico sigue **PENDIENTE**; no se ejecutó el launcher live.
 
 ### Driver UI final y critical viewport de Offer — 2026-10-08
 

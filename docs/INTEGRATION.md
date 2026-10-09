@@ -1,5 +1,36 @@
 # Contratos para trasladar P0
 
+## Sesión QA Android light/dark
+
+El launcher único coordina, en este orden, Gateway → `/health` → Cloudflare
+Quick Tunnel → Metro dev-client `--tunnel` → captura ADB. No requiere copiar la
+URL pública: la detecta desde stdout o stderr de `cloudflared` y la inyecta en
+Metro como `EXPO_PUBLIC_VIMA_API_BASE_URL`.
+
+Precondiciones externas:
+
+- `cloudflared` y `adb` disponibles en `PATH`, con un dispositivo Android
+  autorizado;
+- dependencias npm del repositorio instaladas;
+- `TOMTOM_API_KEY`, `VIMA_PRICING_CONFIG_PATH` y `VIMA_AUTH_CONFIG_PATH`
+  presentes en el environment que inicia la sesión;
+- los archivos operativos referenciados permanecen fuera de Git.
+
+Desde PowerShell, después de cargar esa configuración en el proceso:
+
+```powershell
+npm run qa:light
+npm run qa:dark
+```
+
+Light elimina cualquier override técnico previo de theme para Metro; dark
+inyecta `EXPO_PUBLIC_VIMA_THEME=dark`. El launcher respeta `VIMA_GEO_HOST` y
+`VIMA_GEO_PORT`; el default sigue siendo `127.0.0.1:8787`. Los logs separados
+se guardan en `.runtime/qa/<timestamp>-light|dark/` como `gateway.log`,
+`tunnel.log`, `metro.log` y `adb.log`. `.runtime/` está ignorado por Git.
+Ctrl+C, SIGTERM o la salida inesperada de un hijo cierran el árbol completo de
+procesos y no imprimen valores de configuración sensible.
+
 ## Visual y motion
 
 Las fuentes de verdad P0 están en `docs/design/`: `vima.visual.final.json`, `vima.motion.final.json` y `VIMA_VISUAL_MOTION_HANDOFF_FINAL_v1.md`. Los adaptadores importan los JSON directamente, manteniendo sus nombres y valores; el Markdown gobierna reglas, semántica y límites. No editar copias de tokens en componentes. Las reglas funcionales aprobadas y el alcance de la solicitud prevalecen. El primer bloque de pasajero autorizado después del bootstrap se documenta en [PASSENGER_P0.md](PASSENGER_P0.md).
