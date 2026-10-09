@@ -6,17 +6,19 @@ import type { GatewayConfig } from '../config.ts';
 import type { PricingConfiguration } from './config.ts';
 import { selectPricing } from './selector.ts';
 import { priceTrip } from './engine.ts';
-import { createQuoteStore } from './quoteStore.ts';
+import { freezeSnapshot, createQuoteStore } from './quoteStore.ts';
 import type { QuoteResponse, QuoteDraft } from './contracts.ts';
 
 export function createQuoteService(adapter: TomTomAdapter, gateway: GatewayConfig, pricing: PricingConfiguration, now = Date.now) {
   const store = createQuoteStore(now);
+  // A service instance prices every quote against this exact immutable configuration.
+  pricing = freezeSnapshot(structuredClone(pricing));
   function place(raw: unknown): ResolvedPlace {
     const p = allowFields(raw, ['id', 'name', 'address', 'coordinate']);
     return { id: query(p.id, gateway), name: query(p.name, gateway),
       address: p.address === '' ? '' : query(p.address, gateway), coordinate: coordinate(p.coordinate) };
   }
-  return { store, async quote(input: unknown, context: UpstreamContext, owner?: string): Promise<QuoteResponse> {
+  return { store, pricingBasis: pricing.status === 'ready' ? pricing.config : undefined, async quote(input: unknown, context: UpstreamContext, owner?: string): Promise<QuoteResponse> {
     const b = allowFields(input, ['operationId', 'origin', 'destination', 'stops']);
     if (typeof b.operationId !== 'string' || !/^[A-Za-z0-9._:-]{16,128}$/.test(b.operationId) ||
       !Array.isArray(b.stops) || b.stops.length > gateway.maxStops) throw new GeospatialError('invalid_result');

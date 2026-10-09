@@ -275,13 +275,13 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     setDestination(previous.destination); setStops(previous.stops);
   };
   const act = async (name: 'cancel', reason: 'user' | 'edit' | 'schedule' = 'user') => {
-    if (!tripId || locked.current || pending || connection !== 'online' || (gateway.source === 'server' && phase === 'assigned')) return;
+    if (!tripId || locked.current || pending || connection !== 'online' || (phase === 'assigned' && !['ASSIGNED', 'ARRIVED_PICKUP'].includes(trip.data?.requestState ?? 'ASSIGNED'))) return;
     locked.current = true;
     const fence = identity.capture();
     try {
       const fingerprint = `${tripId}:${reason}`;
       if (cancelCommand.current?.fingerprint !== fingerprint) cancelCommand.current = { fingerprint, id: operationId() };
-      await command.mutateAsync({ tripId, commandId: cancelCommand.current.id, name, payload: { reason }, reconciliation: identity.context(fence) });
+      await command.mutateAsync({ tripId, commandId: cancelCommand.current.id, name, payload: { reason, ...(trip.data?.assignment ? { assignmentId: trip.data.assignment.id } : {}) }, reconciliation: identity.context(fence) });
       if (!identity.isCurrent(fence)) return false;
       cancelCommand.current = undefined;
       // A newer assignment may have arrived while cancellation was in flight.

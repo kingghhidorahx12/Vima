@@ -17,7 +17,7 @@ function validSnapshot(id = 'B') {
   const quote = { ...base, pricing: { status: 'priced' as const, quote: { ...draft, id: 'quote', createdAt: now,
     expiresAt: now + 300_000, route: syntheticRoute, configVersion: 'SYNTHETIC_PRICING_TEST_ONLY', profile: 'URBANO' as const,
     distanceMeters: syntheticRoute.distanceMeters, ...priceTrip({ config: syntheticPricing(), profile: 'URBANO', routeMetrics: syntheticRoute }) } } };
-  return { id, revision: 1, phase: 'searching' as const, requestState: 'SEARCHING' as const,
+  return { id, revision: 1, phase: 'searching' as const, requestState: 'SEARCHING' as const, lifecycle: { completedStops: 0, incurredAdditionCodes: [] },
     searchStartedAt: now, searchDeadlineAt: now + 900_000, quote };
 }
 

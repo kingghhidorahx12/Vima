@@ -1,5 +1,10 @@
 # Request / matching / Driver P0
 
+> Actualización 2026-10-08: [Lifecycle y settlement P0](TRIP_LIFECYCLE_P0.md)
+> extiende el límite histórico ASSIGNED descrito abajo. Snapshot vigente v4;
+> PIN sólo Passenger; cancelación asignada requiere assignmentId y sólo pre-PIN.
+
+
 Implementado en `codex/request-matching-driver-p0`, desde `f007a532`.
 Alcance: crear request, buscar, ofertar, asignar y cancelar/reasignar. No hay
 llegada, inicio, finalización, cobro, tracking posterior, push ni multi-instance.

@@ -17,7 +17,17 @@ export function decodeQuoteResponse(value: unknown): QuoteResponse {
     if (response.reason !== 'pricing_not_configured' && response.reason !== 'pricing_unavailable') fail();
     return { status: 'unpriced', reason: response.reason as 'pricing_not_configured' | 'pricing_unavailable', routePreview: preview };
   }
-  const p = object(q.price);
+  const price = decodePriceBreakdown(q.price);
+  if (q.profile !== 'URBANO' && q.profile !== 'REGIONAL' || q.durationSource !== 'traffic' && q.durationSource !== 'static') fail();
+  if (q.distanceMeters !== preview.route.distanceMeters || q.durationSeconds !==
+    (q.durationSource === 'traffic' ? preview.route.trafficDurationSeconds : preview.route.durationSeconds)) fail();
+  return { status: 'priced', quote: { ...preview, configVersion: text(q.configVersion), profile: q.profile as 'URBANO' | 'REGIONAL',
+    ...(q.overrideId === undefined ? {} : { overrideId: text(q.overrideId) }), distanceMeters: integer(q.distanceMeters),
+    durationSeconds: integer(q.durationSeconds), durationSource: q.durationSource as 'traffic' | 'static', price } };
+}
+
+export function decodePriceBreakdown(value: unknown): PriceBreakdown {
+  const p = object(value);
   if (p.currency !== 'MXN' || typeof p.minimumApplied !== 'boolean' || !Array.isArray(p.extras) || p.extras.length > 100) fail();
   const price: PriceBreakdown = { currency: 'MXN', minimumApplied: p.minimumApplied as boolean,
     baseMinor: integer(p.baseMinor), distanceChargeMinor: integer(p.distanceChargeMinor), durationChargeMinor: integer(p.durationChargeMinor),
@@ -25,14 +35,9 @@ export function decodeQuoteResponse(value: unknown): QuoteResponse {
     totalBeforeRoundingMinor: integer(p.totalBeforeRoundingMinor), roundingAdjustmentMinor: integer(p.roundingAdjustmentMinor, true), totalMinor: integer(p.totalMinor),
     extras: (p.extras as unknown[]).map(v => { const e = object(v); if (e.kind !== 'toll' && e.kind !== 'extra') fail();
       return { code: text(e.code), label: text(e.label), kind: e.kind as 'toll' | 'extra', amountMinor: integer(e.amountMinor) }; }) };
-  if (q.profile !== 'URBANO' && q.profile !== 'REGIONAL' || q.durationSource !== 'traffic' && q.durationSource !== 'static') fail();
   if (price.baseMinor + price.distanceChargeMinor + price.durationChargeMinor !== price.meteredSubtotalMinor ||
     price.fareBeforeExtrasMinor !== Math.max(price.minimumMinor, price.meteredSubtotalMinor) ||
     price.fareBeforeExtrasMinor + price.extras.reduce((sum, a) => sum + a.amountMinor, 0) !== price.totalBeforeRoundingMinor ||
     price.totalBeforeRoundingMinor + price.roundingAdjustmentMinor !== price.totalMinor) fail();
-  if (q.distanceMeters !== preview.route.distanceMeters || q.durationSeconds !==
-    (q.durationSource === 'traffic' ? preview.route.trafficDurationSeconds : preview.route.durationSeconds)) fail();
-  return { status: 'priced', quote: { ...preview, configVersion: text(q.configVersion), profile: q.profile as 'URBANO' | 'REGIONAL',
-    ...(q.overrideId === undefined ? {} : { overrideId: text(q.overrideId) }), distanceMeters: integer(q.distanceMeters),
-    durationSeconds: integer(q.durationSeconds), durationSource: q.durationSource as 'traffic' | 'static', price } };
+  return price;
 }

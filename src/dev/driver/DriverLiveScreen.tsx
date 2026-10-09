@@ -4,6 +4,8 @@ import { useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import { useDriverLifecycle } from './useDriverLifecycle';
+import { DriverLifecycleControls } from '../../features/driver/DriverLifecycleControls';
 import { LiveAccountGate } from '../LiveAccountGate';
 import type { MatchingClient } from '../../services/matching/client';
 import type { DriverState } from '../../services/matching/contracts';
@@ -28,6 +30,12 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
   const queryClient = useQueryClient(); const key = ['driver', accountId];
   const state = useQuery({ queryKey: key, queryFn: ({ signal }) => client.driver(signal), enabled: available, retry: false,
     structuralSharing: (old, next) => old && (old as DriverState).revision >= (next as DriverState).revision ? old : next });
+  const tripLifecycle = useDriverLifecycle(client, accountId, snapshot => queryClient.setQueryData<DriverState>(['driver', accountId],
+    old => old && old.revision >= snapshot.revision ? old : snapshot));
+  const latest = useRef(state.data);
+  const tripOps = useRef(tripLifecycle);
+  useLayoutEffect(() => { latest.current = state.data; tripOps.current = tripLifecycle; }, [state.data, tripLifecycle]);
+  const syncTrip = tripLifecycle.sync;
   const connection = useSyncExternalStore(client.subscribeConnection, client.getConnection, client.getConnection);
   const [focused, setFocused] = useState(false); const [foreground, setForeground] = useState(AppState.currentState === 'active');
   const [permissionPromptActive, setPermissionPromptActive] = useState(false);
@@ -67,7 +75,8 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     };
   }, [client, accountId, queryClient, realtimeAllowed]);
   const availability = state.data?.availability;
-  const tracksLocation = availability === 'LOCATING' || availability === 'AVAILABLE';
+  const tracksLocation = availability === 'LOCATING' || availability === 'AVAILABLE' || availability === 'ASSIGNED';
+  useEffect(() => { if (realtimeAllowed && connection === 'online') void syncTrip(); }, [realtimeAllowed, connection, syncTrip]);
   useLayoutEffect(() => {
     lifecycle.current = { accountId, client, available, focused, foreground, permissionPromptActive, tracksLocation };
   }, [accountId, client, available, focused, foreground, permissionPromptActive, tracksLocation]);
@@ -80,7 +89,11 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
         getProviderStatusAsync: Location.getProviderStatusAsync, getLastKnownPositionAsync: () => Location.getLastKnownPositionAsync(),
         watchPositionAsync: Location.watchPositionAsync,
         balancedAccuracy: Location.Accuracy.Balanced }, operationId: () => driverOperationId('location'),
-      send: async (coordinate, heading, id, signal) => {
+      send: async (coordinate, heading, id, signal, capturedAt) => {
+        if (latest.current?.assignment?.state === 'IN_PROGRESS') {
+          await tripOps.current.telemetry(latest.current, coordinate, capturedAt ?? Date.now());
+          return { availability: latest.current.availability, revision: latest.current.revision };
+        }
         const snapshot = await client.location(coordinate, heading, id, signal);
         if (!signal.aborted) { setError(''); queryClient.setQueryData<DriverState>(['driver', accountId], old => old && old.revision >= snapshot.revision ? old : snapshot); }
         return { availability: snapshot.availability, revision: snapshot.revision };
@@ -118,10 +131,12 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
       onReject={() => { void actions.startDriverAction({ kind: 'offer_reject', offerId: offer.id, requestId: offer.requestId }); }}
       onRetry={() => { void actions.retryPendingDriverAction(); }} />
     : <DriverStatePanel state={data} connection={connection as DriverConnection} configured={available}
-    busy={busy} error={error || (state.error ? 'No se pudo leer el estado.' : '')} retryAvailable={!!pending.current}
+    busy={busy || tripLifecycle.busy} error={error || tripLifecycle.error || (state.error ? 'No se pudo leer el estado.' : '')} retryAvailable={!!pending.current}
+    lifecycleControls={data?.assignment ? <DriverLifecycleControls assignment={data.assignment} busy={tripLifecycle.busy || busy}
+      queued={tripLifecycle.queued} pendingCommands={tripLifecycle.pendingCommands} onSync={() => { void tripLifecycle.sync(); }} onCommand={command => { void tripLifecycle.command(data, command); }} /> : null}
     onAvailable={() => { void actions.startDriverAction({ kind: 'availability_available' }); }}
     onOffline={() => { void actions.startDriverAction({ kind: 'availability_offline' }); }}
-    onCancelAssignment={(requestId) => { void actions.startDriverAction({ kind: 'assignment_cancel', requestId }); }}
+    onCancelAssignment={(requestId) => { void actions.startDriverAction({ kind: 'assignment_cancel', requestId, assignmentId: data!.assignment!.value.id }); }}
     onRetry={() => { void actions.retryPendingDriverAction(); }} />} /></SafeAreaView>;
 }
 const styles = StyleSheet.create({ fill: { flex: 1 } });

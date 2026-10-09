@@ -129,7 +129,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const input = useRef<TextInput>(null);
   const dismissKeyboard = useCallback(() => { input.current?.blur(); Keyboard.dismiss(); }, []);
   const matching = isMatching(flow.phase);
-  const assignment = flow.phase === 'assigned' ? flow.trip?.assignment : undefined;
+  const lifecycleTitle = flow.trip?.requestState === 'ARRIVED_PICKUP' ? 'Tu conductor llegó' : flow.trip?.requestState === 'IN_PROGRESS' ? 'Viaje en curso' : flow.trip?.requestState === 'PAYMENT_PENDING' ? 'Pago pendiente' : flow.phase === 'completed' ? 'Viaje completado' : 'Tu conductor va en camino';
+  const assignment = (flow.phase === 'assigned' || flow.phase === 'completed') ? flow.trip?.assignment : undefined;
   const homeNormal = flow.phase === 'home' && flow.field === null && flow.destination === null;
   const navVisible = homeNormal;
   const navHeight = navVisible ? bottomNavigationHeight(bottomInset) : 0;
@@ -251,7 +252,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const openSearch = (query = '') => { dismissKeyboard(); openField('destination'); flow.setSearch(query); };
   const sheetTitle = flow.field ? pickingMap ? 'Elegir en el mapa' : searchAction === 'contribute-form' ? 'Agregar lugar' :
     searchAction === 'contribute-done' ? '' : flow.field === 'origin' ? '¿Desde dónde?' : '¿A dónde vamos?'
-    : assignment ? `Llegará en ${assignment.etaMinutes} min` : homePanel === 'saved' ? 'Lugares guardados'
+    : assignment ? (flow.trip?.requestState && flow.trip.requestState !== 'ASSIGNED' ? lifecycleTitle : `Llegará en ${assignment.etaMinutes} min`) : homePanel === 'saved' ? 'Lugares guardados'
       : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
   const blocked = flow.pending || flow.connection !== 'online';
   const searchField = <View style={styles.searchFieldFrame}><SearchInputGlow cycle={searchCycle} focused={searchFocused} />
@@ -560,7 +561,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         </View>
         <View style={styles.row}><VimaButton style={styles.fill} secondary communication icon="phone" label="Llamar" onPress={() => boundaries.call(assignment)} disabled={blocked} />
           <VimaButton style={styles.fill} secondary icon="shield" label="Seguridad" onPress={() => boundaries.safety(assignment)} /></View>
-        <TextAction danger label="Cancelar viaje" onPress={() => { void flow.act('cancel'); }} disabled={blocked || gateway.source === 'server'} />
+        <TextAction danger label="Cancelar viaje" onPress={() => { void flow.act('cancel'); }} disabled={blocked || !['ASSIGNED', 'ARRIVED_PICKUP'].includes(flow.trip?.requestState ?? 'ASSIGNED')} />
+        {flow.trip?.lifecycle?.settlement ? <VimaText variant="bodyMedium">Efectivo: {money(flow.trip.lifecycle.settlement.price.totalMinor / 100, 'MXN')}</VimaText> : null}
+        {flow.trip?.lifecycle?.disputeId ? <VimaText variant="caption" selectable>Referencia de pago: {flow.trip.lifecycle.disputeId}</VimaText> : null}
+        {flow.phase === 'completed' ? <VimaButton label="Volver al inicio" onPress={() => flow.returnHome()} /> : null}
       </> : matching ? <>
         <View onLayout={(event) => { pulseHeight.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height;
           setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
@@ -641,7 +645,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
               pressed && presentation.pressed]}><VimaGlyph name="back" color={theme.roles.control} /></Pressable></Animated.View> : null}
           {!confirmationPillVisible ? <VimaText variant={assignment || matching ? 'bodyMedium' : 'h3'}
             style={[styles.headerTitle, { color: theme.roles.textPrimary }]} accessibilityRole="header">
-            {assignment ? 'Tu conductor va en camino' : matching ? 'Buscando un conductor' : ''}
+            {assignment ? lifecycleTitle : matching ? 'Buscando un conductor' : ''}
           </VimaText> : null}
         </>}
       </View>

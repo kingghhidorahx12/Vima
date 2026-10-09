@@ -141,7 +141,7 @@ test('query and command reconciliation enforce their own expected ID and diagnos
 
 const driver: DriverState = { accountId: 'driver', revision: 1, availability: 'ASSIGNED', expiryCount: 0,
   profile: { driver: { name: 'Test', rating: 4 }, vehicle: { name: 'Test', plate: 'TEST', color: 'Test' } },
-  assignment: { requestId: 'B', pickup: quote.origin, value: { id: 'assignment-B' } as NonNullable<DriverState['assignment']>['value'] } };
+  assignment: { requestId: 'B', pickup: quote.origin, state: 'ASSIGNED', lifecycle: { completedStops: 0, incurredAdditionCodes: [] }, stops: [], additionCodes: [], value: { id: 'assignment-B' } as NonNullable<DriverState['assignment']>['value'] } };
 function actionHarness(run: (requestId: string, id: string) => Promise<DriverState>) {
   const events: { event: string; fields?: MatchingTraceFields }[] = []; const trace: MatchingTrace = (event, fields) => events.push({ event, fields });
   const actions = createDriverActions({ cancelAssignment: run, availability: async () => driver, offerAction: run },
@@ -152,9 +152,9 @@ function actionHarness(run: (requestId: string, id: string) => Promise<DriverSta
 test('synchronous duplicate press creates one frozen cancellation and ambiguous retry preserves operation/target', async () => {
   const first = deferred<DriverState>(); const calls: string[][] = [];
   const { actions, events } = actionHarness(async (requestId, id) => { calls.push([requestId, id]); if (calls.length === 1) return first.promise; return { ...driver, revision: 2, assignment: undefined, availability: 'AVAILABLE' }; });
-  const input = { kind: 'assignment_cancel' as const, requestId: 'B' };
+  const input = { kind: 'assignment_cancel' as const, requestId: 'B', assignmentId: 'assignment-B' };
   const result = actions.startDriverAction(input); input.requestId = 'C';
-  actions.startDriverAction({ kind: 'assignment_cancel', requestId: 'B' }); actions.retryPendingDriverAction();
+  actions.startDriverAction({ kind: 'assignment_cancel', requestId: 'B', assignmentId: 'assignment-B' }); actions.retryPendingDriverAction();
   assert.equal(calls.length, 1); assert.equal(calls[0]![0], 'B');
   first.reject(new TypeError('offline')); await result;
   const pending = actions.pending.current!; assert.equal(pending.intent.kind, 'assignment_cancel'); assert.ok(Object.isFrozen(pending.intent));
@@ -167,16 +167,16 @@ test('synchronous duplicate press creates one frozen cancellation and ambiguous 
 test('new assignment invalidates pending B and late failures/retry never cancel C', async () => {
   const fail = deferred<DriverState>(); const calls: string[] = [];
   const { actions } = actionHarness(async requestId => { calls.push(requestId); return fail.promise; });
-  const started = actions.startDriverAction({ kind: 'assignment_cancel', requestId: 'B' });
+  const started = actions.startDriverAction({ kind: 'assignment_cancel', requestId: 'B', assignmentId: 'assignment-B' });
   actions.receive({ ...driver, revision: 2, assignment: { ...driver.assignment!, requestId: 'C' } });
   assert.equal(actions.pending.current, undefined);
   fail.reject(new TypeError('offline')); await started; await actions.retryPendingDriverAction(); assert.deepEqual(calls, ['B']);
-  assert.equal(actions.startDriverAction({ kind: 'assignment_cancel', requestId: 'B' }), undefined);
+  assert.equal(actions.startDriverAction({ kind: 'assignment_cancel', requestId: 'B', assignmentId: 'assignment-B' }), undefined);
 });
 
 test('definitive 4xx drops pending; ambiguous keeps only current target; expired/replaced offers cannot retry', async () => {
   const definitive = actionHarness(async () => { throw new ApiError(409, 'forbidden'); });
-  await definitive.actions.startDriverAction({ kind: 'assignment_cancel', requestId: 'B' }); assert.equal(definitive.actions.pending.current, undefined);
+  await definitive.actions.startDriverAction({ kind: 'assignment_cancel', requestId: 'B', assignmentId: 'assignment-B' }); assert.equal(definitive.actions.pending.current, undefined);
   let time = 0; let requests = 0;
   const actions = createDriverActions({ availability: async () => driver, cancelAssignment: async () => driver,
     offerAction: async () => { requests++; throw new TypeError('offline'); } },

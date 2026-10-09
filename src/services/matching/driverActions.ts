@@ -7,14 +7,14 @@ import { driverOperationId } from './operationId.ts';
 export type DriverActionIntent =
   | Readonly<{ kind: 'availability_available' | 'availability_offline' }>
   | Readonly<{ kind: 'offer_accept' | 'offer_reject'; offerId: string; requestId: string }>
-  | Readonly<{ kind: 'assignment_cancel'; requestId: string }>;
+  | Readonly<{ kind: 'assignment_cancel'; requestId: string; assignmentId: string }>;
 export interface PendingDriverAction { readonly intent: DriverActionIntent; readonly operationId: string }
 type ActionClient = Pick<MatchingClient, 'availability' | 'offerAction' | 'cancelAssignment'>;
 
 export function driverActionApplies(intent: DriverActionIntent, state: DriverState | undefined, now: number) {
   if (!state) return false;
   switch (intent.kind) {
-    case 'assignment_cancel': return state.assignment?.requestId === intent.requestId;
+    case 'assignment_cancel': return state.assignment?.requestId === intent.requestId && state.assignment.value.id === intent.assignmentId && ['ASSIGNED', 'ARRIVED_PICKUP'].includes(state.assignment.state);
     case 'offer_accept': case 'offer_reject': return state.offer?.id === intent.offerId && state.offer.requestId === intent.requestId &&
       state.offer.expiresAt > now && state.availability === 'AVAILABLE';
     case 'availability_available': return !state.assignment && ['OFFLINE', 'PAUSED'].includes(state.availability);
@@ -50,7 +50,7 @@ export function createDriverActions(client: ActionClient, options: {
         case 'availability_available': snapshot = await client.availability('AVAILABLE', operationId); break;
         case 'availability_offline': snapshot = await client.availability('OFFLINE', operationId); break;
         case 'offer_accept': case 'offer_reject': snapshot = await client.offerAction(intent.offerId, intent.kind === 'offer_accept' ? 'accept' : 'reject', operationId); break;
-        case 'assignment_cancel': snapshot = await client.cancelAssignment(intent.requestId, operationId); break;
+        case 'assignment_cancel': snapshot = await client.cancelAssignment(intent.requestId, operationId, intent.assignmentId); break;
       }
       if (!mounted) return;
       receive(snapshot); options.received(snapshot);

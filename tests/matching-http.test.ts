@@ -73,7 +73,7 @@ test('authenticated HTTP pricing → request → offer → assignment uses owner
     const passenger = decodeMatchingTrip((await call(`/v1/passenger/requests/${trip.id}`, 0)).body);
     assert.equal(accepted.assignment?.value.id, passenger.assignment?.id);
     assert.equal(passenger.assignment?.sample.heading, 90);
-    assert.equal((await call(`/v1/passenger/requests/${trip.id}/commands`, 0, { tripId: trip.id, commandId: 'cancel-after', name: 'cancel', payload: { reason: 'user' } })).status, 409);
+    assert.equal((await call(`/v1/passenger/requests/${trip.id}/commands`, 0, { tripId: trip.id, commandId: 'cancel-after', name: 'cancel', payload: { reason: 'user' } })).status, 400);
     await new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); });
     server = createGateway(config, adapter, options); base = await listen();
     assert.equal(decodeMatchingTrip((await call(`/v1/passenger/requests/${trip.id}`, 0)).body).assignment?.id, passenger.assignment?.id);
@@ -85,7 +85,7 @@ test('authenticated HTTP pricing → request → offer → assignment uses owner
     const driverActions = createDriverActions(driverClient, { changed() {}, received() {}, settled() {},
       error(message) { assert.equal(message, ''); }, trace: (event, fields) => logs.push({ event, ...fields }) });
     driverActions.receive(await driverClient.driver());
-    await driverActions.startDriverAction({ kind: 'assignment_cancel', requestId: trip.id });
+    await driverActions.startDriverAction({ kind: 'assignment_cancel', requestId: trip.id, assignmentId: (await driverClient.driver()).assignment!.value.id });
     const chain = logs.filter(e => (e as { intent?: string }).intent === 'assignment_cancel') as { event: string; operationId: string; requestId: string }[];
     assert.deepEqual(chain.map(e => e.event), ['driver_action_press', 'driver_action_request', 'driver_action_http_received', 'driver_action_commit']);
     assert.ok(chain.every(e => e.requestId === trip.id && e.operationId === chain[0]!.operationId));

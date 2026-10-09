@@ -17,6 +17,14 @@ import { executeConfirmedCommand, tripKey, tripQueryOptions } from '../src/featu
 import type { PassengerTrip } from '../src/features/passenger/model.ts';
 import type { TripInvalidation } from '../src/services/realtime/index.ts';
 
+// Manufacture actual legacy schema, rather than merely relabelling a v4 snapshot.
+function stripV4(value: Record<string, any>) {
+  delete value.pricingBases;
+  const strip = (r: Record<string, unknown> | undefined) => { if (r) { delete r.pricingBasisId; delete r.lifecycle; } };
+  Object.values(value.requests).forEach(r => strip(r as Record<string, unknown>));
+  Object.values(value.actions).forEach(a => strip((a as { result: { request?: Record<string, unknown> } }).result.request));
+  return value;
+}
 class Clock implements MatchingClock {
   time = 1000; jobs = new Map<symbol, { at: number; callback: () => void }>();
   now = () => this.time;
@@ -36,7 +44,7 @@ function setup(count = 4, customEta?: MatchingOptions['eta']) {
   const quotes = new Map<string, { owner: string; quote: AuthoritativeRideQuote }>();
   const addQuote = (id: string, owner = 'p') => {
     const quote: AuthoritativeRideQuote = { ...syntheticDraft, id, route: syntheticRoute, createdAt: clock.now(), expiresAt: clock.now() + 300_000,
-      ...priceTrip({ config: syntheticPricing(), profile: 'URBANO', routeMetrics: syntheticRoute }), configVersion: 'synthetic', profile: 'URBANO', distanceMeters: syntheticRoute.distanceMeters };
+      ...priceTrip({ config: syntheticPricing(), profile: 'URBANO', routeMetrics: syntheticRoute }), configVersion: syntheticPricing().version, profile: 'URBANO', distanceMeters: syntheticRoute.distanceMeters };
     quotes.set(id, { owner, quote }); return quote;
   };
   addQuote('quote');
@@ -45,7 +53,7 @@ function setup(count = 4, customEta?: MatchingOptions['eta']) {
     bounds: { southwest: [Math.min(origin[0], pickup[0]), Math.min(origin[1], pickup[1])], northeast: [Math.max(origin[0], pickup[0]), Math.max(origin[1], pickup[1])] },
     distanceMeters: 1000, durationSeconds: Math.abs(origin[0]) * 1000, trafficDurationSeconds: Math.abs(origin[0]) * 1000 }));
   const traces: MatchingServerEvent[] = [];
-  const options = { auth, directory, clock, eta, trace: (event: MatchingServerEvent) => traces.push(event), quote: (id: string, owner: string) => {
+  const options = { auth, directory, clock, eta, pricingConfig: syntheticPricing(), trace: (event: MatchingServerEvent) => traces.push(event), quote: (id: string, owner: string) => {
     const entry = quotes.get(id); return entry?.owner === owner ? entry.quote : undefined;
   } };
   let coordinator = new MatchingCoordinator(options);
@@ -111,7 +119,7 @@ test('one active request per owner preserves idempotency, serializes cancel/crea
     assert.equal((await f.c.activeRequest(p))?.id, secondRace[1].id);
     f.clock.advance(900_000); await flush(); assert.equal(await f.c.activeRequest(p), null);
     const snapshot = JSON.parse(readFileSync(join(f.directory, 'matching-v1.json'), 'utf8'));
-    assert.equal(snapshot.version, 3); assert.deepEqual(snapshot.activeRequestByOwner, {});
+    assert.equal(snapshot.version, 4); assert.deepEqual(snapshot.activeRequestByOwner, {});
     assert.equal(Object.keys(snapshot.requestIds).length, 4);
   } finally { f.close(); }
 });
@@ -129,7 +137,7 @@ test('ASSIGNED remains active, driver cancellation preserves identity, and offer
     await f.c.offerAction(driver(1), o.id, 'accept', 'accept'); f.addQuote('second');
     await assert.rejects(f.c.create(p, 'second', 'second'), /active_request_exists/);
     await f.restart(); assert.equal((await f.c.activeRequest(p))?.phase, 'assigned');
-    await f.c.cancelAssignment(driver(1), r.id, 'cancel-assignment');
+    await f.c.cancelAssignment(driver(1), r.id, 'cancel-assignment', (await f.c.fetch(p, r.id)).assignment!.id);
     assert.equal((await f.c.activeRequest(p))?.id, r.id);
     f.clock.advance(60_000); await flush();
     assert.ok(f.traces.some(e => e.event === 'availability_transition' && e.from === 'AVAILABLE' && e.to === 'LOCATING' && e.reason === 'location_ttl'));
@@ -145,10 +153,10 @@ test('v2 migration indexes a single active request without discarding historical
   const f = setup(0); try {
     await f.ready(); const r = await f.c.create(p, 'quote', 'single'); f.c.close();
     const path = join(f.directory, 'matching-v1.json'); const legacy = JSON.parse(readFileSync(path, 'utf8'));
-    legacy.version = 2; delete legacy.activeRequestByOwner; writeFileSync(path, JSON.stringify(legacy));
+    stripV4(legacy); legacy.version = 2; delete legacy.activeRequestByOwner; writeFileSync(path, JSON.stringify(legacy));
     await f.restart(); const next = JSON.parse(readFileSync(path, 'utf8'));
-    assert.deepEqual(next.activeRequestByOwner, { p: r.id }); assert.equal(next.version, 3);
-    for (const key of ['requests', 'offers', 'drivers', 'actions', 'requestIds']) assert.deepEqual(next[key], legacy[key]);
+    assert.deepEqual(next.activeRequestByOwner, { p: r.id }); assert.equal(next.version, 4);
+    for (const key of ['requests', 'offers', 'drivers', 'actions', 'requestIds']) assert.deepEqual(stripV4(structuredClone(next))[key], legacy[key]);
   } finally { f.close(); }
 });
 
@@ -164,7 +172,7 @@ for (const mode of ['oldest', 'tie', 'assigned', 'two-assigned'] as const) test(
       const offer = (await f.c.driver(driver(2))).offer!; await f.c.offerAction(driver(2), offer.id, 'accept', 'accept-b');
     }
     f.c.close(); const path = join(f.directory, 'matching-v1.json'); const legacy = JSON.parse(readFileSync(path, 'utf8'));
-    legacy.version = 2; delete legacy.activeRequestByOwner;
+    stripV4(legacy); legacy.version = 2; delete legacy.activeRequestByOwner;
     legacy.requests[b.id].owner = p.accountId; delete legacy.requestIds['other:legacy-b']; legacy.requestIds['p:legacy-b'] = b.id;
     if (mode === 'tie') {
       legacy.requests[b.id].createdAt = legacy.requests[a.id].createdAt;
@@ -178,7 +186,7 @@ for (const mode of ['oldest', 'tie', 'assigned', 'two-assigned'] as const) test(
     assert.equal(next.activeRequestByOwner.p, keep); assert.equal(next.requests[discarded].state, 'CANCELLED');
     assert.equal(next.requests[discarded].revision, legacy.requests[discarded].revision + 1);
     assert.equal(Object.values(next.offers).some(o => (o as { requestId: string; state: string }).requestId === discarded && (o as { state: string }).state === 'ACTIVE'), false);
-    assert.deepEqual(next.requestIds, legacy.requestIds); assert.deepEqual(next.actions, legacy.actions);
+    assert.deepEqual(next.requestIds, legacy.requestIds); assert.deepEqual(stripV4(structuredClone(next)).actions, legacy.actions);
     assert.deepEqual(next.requests[keep].assignment, legacy.requests[keep].assignment);
   } finally { f.close(); }
 });
@@ -327,14 +335,14 @@ test('restart preserves fresh location, expires stale AVAILABLE, and assignment 
     await fresh.ready(); await fresh.available(1); const stored = await fresh.c.driver(driver(1)); await fresh.restart();
     const recovered = await fresh.c.driver(driver(1)); assert.equal(recovered.availability, 'AVAILABLE'); assert.deepEqual(recovered.location, stored.location);
     const persisted = JSON.parse(readFileSync(join(fresh.directory, 'matching-v1.json'), 'utf8'));
-    assert.equal(persisted.version, 3); assert.deepEqual(persisted.drivers.d1.location.coordinate, stored.location?.coordinate);
+    assert.equal(persisted.version, 4); assert.deepEqual(persisted.drivers.d1.location.coordinate, stored.location?.coordinate);
     fresh.clock.advance(60_000); await fresh.restart(); assert.equal((await fresh.c.driver(driver(1))).availability, 'LOCATING');
   } finally { fresh.close(); }
   const assigned = setup(1); try {
     await assigned.ready(); await assigned.available(1); const request = await assigned.c.create(p, 'quote', 'cancel-stale'); await flush();
     const offer = (await assigned.c.driver(driver(1))).offer!; await assigned.c.offerAction(driver(1), offer.id, 'accept', 'accept-stale');
     assigned.clock.advance(60_000); assert.equal((await assigned.c.driver(driver(1))).availability, 'ASSIGNED');
-    assert.equal((await assigned.c.cancelAssignment(driver(1), request.id, 'cancel-stale')).availability, 'LOCATING');
+    assert.equal((await assigned.c.cancelAssignment(driver(1), request.id, 'cancel-stale', (await assigned.c.fetch(p, request.id)).assignment!.id)).availability, 'LOCATING');
   } finally { assigned.close(); }
 });
 
@@ -343,7 +351,7 @@ test('snapshot v1 migrates AVAILABLE without location to LOCATING and preserves 
     await f.ready(); const request = await f.c.create(p, 'quote', 'migrate-request');
     await f.c.availability(driver(1), 'AVAILABLE', 'legacy-available'); f.c.close();
     const path = join(f.directory, 'matching-v1.json'); const legacy = JSON.parse(readFileSync(path, 'utf8'));
-    legacy.version = 1; delete legacy.activeRequestByOwner; legacy.drivers.d1.availability = 'AVAILABLE';
+    stripV4(legacy); legacy.version = 1; delete legacy.activeRequestByOwner; legacy.drivers.d1.availability = 'AVAILABLE';
     for (const action of Object.values(legacy.actions) as { result: { kind: string; driver?: { availability: string }; location?: unknown } }[]) {
       if (action.result.kind === 'driver' && action.result.driver) action.result.driver.availability = 'AVAILABLE';
     }
@@ -401,7 +409,7 @@ test('concurrent accepts commit one assignment; Passenger cancel cannot undo it;
     const assigned = await f.c.fetch(p, r.id); assert.equal(assigned.phase, 'assigned');
     assert.equal((await f.c.driver(driver(1))).assignment?.value.id, assigned.assignment!.id);
     assert.equal((await f.c.driver(driver(2))).offer, undefined);
-    await assert.rejects(f.c.cancel(p, r.id, 'late-cancel', 'user'), /request_not_searching/);
+    await assert.rejects(f.c.cancel(p, r.id, 'late-cancel', 'user'), /invalid_matching_input/);
     await f.restart(); assert.deepEqual((await f.c.fetch(p, r.id)).assignment, assigned.assignment);
     assert.equal((await f.c.offerAction(driver(1), a.id, 'accept', 'accept-1')).assignment?.value.id, assigned.assignment!.id);
   } finally { f.close(); }
@@ -429,7 +437,8 @@ test('Driver cancel reuses request/deadline, restarts visual clock, excludes Dri
     await f.ready(); for (let n = 1; n <= 4; n++) await f.available(n);
     const r = await f.c.create(p, 'quote', 'reassign'); await flush();
     const offer = (await f.c.driver(driver(1))).offer!; await f.c.offerAction(driver(1), offer.id, 'accept', 'accept');
-    f.clock.advance(1000); const cancelled = await f.c.cancelAssignment(driver(1), r.id, 'driver-cancel'); await flush();
+    const originalAssignmentId = (await f.c.fetch(p, r.id)).assignment!.id;
+    f.clock.advance(1000); const cancelled = await f.c.cancelAssignment(driver(1), r.id, 'driver-cancel', originalAssignmentId); await flush();
     assert.equal(cancelled.availability, 'AVAILABLE');
     const next = await f.c.fetch(p, r.id); assert.equal(next.id, r.id); assert.equal(next.phase, 'reassigning');
     assert.equal(next.searchDeadlineAt, r.searchDeadlineAt); assert.equal(next.searchStartedAt, f.clock.now());
@@ -438,7 +447,7 @@ test('Driver cancel reuses request/deadline, restarts visual clock, excludes Dri
     const third = (await f.c.driver(driver(3))).offer!; assert.ok(third);
     await f.c.offerAction(driver(3), third.id, 'accept', 'accept-third');
     assert.equal((await f.c.fetch(p, r.id)).assignment?.driver.name, 'Synthetic Driver 3');
-    await f.restart(); assert.deepEqual(await f.c.cancelAssignment(driver(1), r.id, 'driver-cancel'), cancelled);
+    await f.restart(); assert.deepEqual(await f.c.cancelAssignment(driver(1), r.id, 'driver-cancel', originalAssignmentId), cancelled);
   } finally { f.close(); }
 });
 
@@ -481,7 +490,7 @@ test('location change during ETA re-plans from new sample; cancellation excludes
     const offer = (await f.c.driver(driver(1))).offer!; assert.ok(offer); assert.equal(calls, 2);
     const accepted = await f.c.offerAction(driver(1), offer.id, 'accept', 'accept');
     assert.deepEqual(accepted.assignment?.value.sample.coordinate, [-0.4, 0.1]);
-    await f.c.cancelAssignment(driver(1), first.id, 'cancel-driver');
+    await f.c.cancelAssignment(driver(1), first.id, 'cancel-driver', (await f.c.fetch(p, first.id)).assignment!.id);
     f.addQuote('another', other.accountId); const second = await f.c.create(other, 'another', 'another'); await flush();
     assert.equal((await f.c.driver(driver(1))).offer?.requestId, second.id);
     assert.equal((await f.c.fetch(p, first.id)).phase, 'reassigning');

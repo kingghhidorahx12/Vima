@@ -41,6 +41,8 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
   const popularity = createPopularityRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const quotes = createQuoteService(adapter, config, options.pricing ?? { status: 'pricing_not_configured' }, now);
   const matching = options.auth && options.configured && options.pricing?.status === 'ready' ? new MatchingCoordinator({
+    pricingConfig: options.pricing.config,
+    quotePricingConfig: () => quotes.pricingBasis,
     auth: options.auth, directory: config.runtimeDir ?? '.runtime', clock: options.matchingClock, trace: options.matchingTrace,
     quote: (id, owner) => { const value = quotes.store.lookupOwned(id, owner); return value?.status === 'priced' ? value.quote : undefined; },
     eta: (origin, destination) => adapter.route({ origin, destination, stops: [] }, { signal: AbortSignal.timeout(config.upstreamTimeoutMs) }),

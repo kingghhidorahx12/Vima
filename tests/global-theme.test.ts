@@ -103,8 +103,8 @@ test('Driver OFFLINE, LOCATING, AVAILABLE, ASSIGNED and Offer render with identi
       location: { coordinate: place.coordinate, receivedAt: 1 },
     } : {}) });
   const assigned: DriverState = { ...state('ASSIGNED'),
-    assignment: { requestId: 'request', pickup: place, value: { id: 'assignment', driver: profile.driver,
-      vehicle: profile.vehicle, etaMinutes: 7, pin: '1234', sample: { coordinate: place.coordinate, heading: 0, sequence: 1 },
+    assignment: { requestId: 'request', pickup: place, state: 'ASSIGNED' as const, lifecycle: { completedStops: 0, incurredAdditionCodes: [] }, stops: [], additionCodes: [], value: { id: 'assignment', driver: profile.driver,
+      vehicle: profile.vehicle, etaMinutes: 7, sample: { coordinate: place.coordinate, heading: 0, sequence: 1 },
       routeToOrigin: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [place.coordinate, [-99.87, 19.8]] } } } } };
   const structures: Record<'light' | 'dark', string[]> = { light: [], dark: [] };
   for (const themeName of ['light', 'dark'] as const) {

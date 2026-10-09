@@ -116,7 +116,7 @@ test('confirmed cancellation permits a fresh Passenger create with a new intent 
 });
 
 test('active client decodes snapshots with frozen pricing and rejects terminal requests', async () => {
-  const value = { id: 'active', revision: 1, phase: 'searching', quote: priced(), requestState: 'SEARCHING', searchStartedAt: Date.now(), searchDeadlineAt: Date.now() + 900000 };
+  const value = { id: 'active', revision: 1, phase: 'searching', quote: priced(), requestState: 'SEARCHING', lifecycle: { completedStops: 0, incurredAdditionCodes: [] }, searchStartedAt: Date.now(), searchDeadlineAt: Date.now() + 900000 };
   let raw: unknown = value;
   const client = createMatchingClient({ async request(input) { return input.decode(raw); } });
   assert.equal((await client.activeRequest())?.id, 'active');

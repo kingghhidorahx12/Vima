@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { VimaButton } from '../../design/components/VimaButton';
 import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph';
@@ -11,9 +12,9 @@ import type { DriverState } from '../../services/matching/contracts';
 import { driverConnectionLabel, driverGpsLabel, driverPresentation, type DriverConnection } from './driverPresentation';
 
 export function DriverStatePanel({ state, connection, configured, busy, error, retryAvailable,
-  onAvailable, onOffline, onCancelAssignment, onRetry }: {
+  onAvailable, onOffline, onCancelAssignment, onRetry, lifecycleControls }: {
   state?: DriverState; connection: DriverConnection; configured: boolean; busy: boolean; error: string;
-  retryAvailable: boolean; onAvailable: () => void; onOffline: () => void;
+  lifecycleControls?: ReactNode; retryAvailable: boolean; onAvailable: () => void; onOffline: () => void;
   onCancelAssignment: (requestId: string) => void; onRetry: () => void;
 }) {
   const theme = useVimaTheme();
@@ -43,6 +44,9 @@ export function DriverStatePanel({ state, connection, configured, busy, error, r
         <DriverStatus icon="recenter" label={gps.label} tone={gps.tone} />
         <DriverStatus icon={network.tone === 'critical' ? 'warning' : 'check'} label={network.label} tone={network.tone} />
       </View>
+      {!assignment && state?.lastTrip?.state === 'COMPLETED' ? <VimaText variant="bodySmall" selectable>
+        {state.lastTrip.lifecycle.paymentOutcome === 'cash_problem' ? 'Pago reportado · ' + state.lastTrip.lifecycle.disputeId : 'Viaje completado · Efectivo recibido'}
+      </VimaText> : null}
       {assignment ? <View style={[styles.pickup, { backgroundColor: theme.roles.elevatedSurface,
         ...elevationStyle('level1', theme.roles.shadow) }]}>
         <VimaGlyph name="route" color={theme.roles.positive} />
@@ -65,7 +69,8 @@ export function DriverStatePanel({ state, connection, configured, busy, error, r
         <VimaGlyph name="warning" color={theme.roles.danger} />
         <VimaText variant="bodySmall" numberOfLines={2} style={styles.errorCopy}>{error}</VimaText>
       </View> : null}
-      {presentation.actionLabel ? <VimaButton label={presentation.actionLabel} secondary={presentation.action !== 'availability_available'}
+      {lifecycleControls}
+      {presentation.actionLabel && (!assignment || ['ASSIGNED', 'ARRIVED_PICKUP'].includes(assignment.state)) ? <VimaButton label={presentation.actionLabel} secondary={presentation.action !== 'availability_available'}
         danger={presentation.action === 'assignment_cancel'} loading={busy} disabled={disabled} onPress={action} /> : null}
       {retryAvailable ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={onRetry} /> : null}
     </View>

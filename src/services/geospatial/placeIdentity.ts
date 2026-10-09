@@ -8,11 +8,11 @@ interface Candidate extends PlaceSuggestion {
   readonly coordinate?: Coordinate; readonly providerRef?: string;
   readonly providerRefs?: readonly string[]; readonly aliases?: readonly string[];
 }
-const distanceMeters = (a: Coordinate, b: Coordinate) => {
+export const distanceMeters = (a: Coordinate, b: Coordinate) => {
   const radians = (degrees: number) => degrees * Math.PI / 180;
   const dLat = radians(b[1] - a[1]); const dLng = radians(b[0] - a[0]);
   const area = Math.sin(dLat / 2) ** 2 + Math.cos(radians(a[1])) * Math.cos(radians(b[1])) * Math.sin(dLng / 2) ** 2;
-  return 2 * 6371000 * Math.atan2(Math.sqrt(area), Math.sqrt(1 - area));
+  return 2 * 6371000 * Math.atan2(Math.sqrt(area), Math.sqrt(Math.max(0, 1 - area)));
 };
 
 /** Explicit reference wins; a declared alias needs a spatial check. Never collapse branches by similar names. */

@@ -23,7 +23,7 @@ export interface DriverLocationSessionOptions {
   location: DriverLocationAdapter; now?: () => number; operationId: () => string;
   locationSessionId?: string; trace?: MatchingTrace; foreground?: boolean;
   onPermissionPromptChange?: (active: boolean) => void;
-  send: (coordinate: Coordinate, heading: number | undefined, operationId: string, signal: AbortSignal) =>
+  send: (coordinate: Coordinate, heading: number | undefined, operationId: string, signal: AbortSignal, capturedAt?: number) =>
     Promise<{ availability: string; revision: number }>;
   onError: (message: string) => void; setTimer?: typeof setTimeout; clearTimer?: typeof clearTimeout;
 }
@@ -68,7 +68,7 @@ export function createDriverLocationSession(options: DriverLocationSessionOption
       if (stopped || controller.signal.aborted) return;
       event('location_post_start');
       try {
-        const receipt = await options.send(value.coordinate, value.heading, operationId, controller.signal);
+        const receipt = await options.send(value.coordinate, value.heading, operationId, controller.signal, sample.timestamp);
         if (!stopped && !controller.signal.aborted) event('location_post_receipt', { availability: receipt.availability, revision: receipt.revision });
       } catch (error) {
         if (!stopped && !controller.signal.aborted) {

@@ -1,13 +1,45 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-08 en `codex/qa-launcher-optional-adb-cloudflared-local-p0`,
-desde `codex/passenger-trip-reconcile-qa-launcher-p0` @ `b7823bd5`.
+Actualizado 2026-10-09 en `codex/trip-lifecycle-settlement-p0`,
+desde `codex/qa-launcher-optional-adb-cloudflared-local-p0` @ `16e2f292`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Lifecycle autoritativo, meter, settlement y journal Driver — 2026-10-09
+
+- RequestRecord/MatchingCoordinator extiende ASSIGNED → ARRIVED_PICKUP →
+  IN_PROGRESS → PAYMENT_PENDING → COMPLETED. Active request y Driver ASSIGNED
+  permanecen ocupados hasta terminal. Cancelaciones pre-PIN/no-show persistidos,
+  assignmentId obligatorio y commits serializados/idempotentes; PIN sólo Passenger.
+- Snapshot v4 deduplica PricingConfig exacta congelada por hash de contenido.
+  Migraciones v1/v2/v3 preservadas: bases legacy activas sólo mediante equivalencia
+  demostrada de version/profile/override/quote.price; mismatch falla cerrado.
+- Meter durable de telemetry consecutiva con timestamp y coordenadas reales,
+  segmentos geodésicos y métricas enteras. Paradas ordenadas e incurred codes
+  explícitos. Finish exige última sequence confirmada; no routing/repricing remoto.
+- Normal conserva quote.price exacto. Early reutiliza priceTrip con basis congelada,
+  meter real, minimum normal y sólo extras incurridos. Sin cap ni penalizaciones.
+  Cash recibido/problema cierra COMPLETED; disputeId estable cuando corresponde.
+- Driver incorpora acciones mínimas en el shell/themes existentes. SQLite KV
+  guarda outbox versionado post-PIN con IDs estables, GET antes de replay,
+  acknowledgements durables y descarte stale sólo confirmado. Paradas pendientes
+  no se presentan como confirmadas. Passenger refleja lifecycle/pago y conserva PIN.
+- API, recuperación y procedimiento QA: [TRIP_LIFECYCLE_P0.md](TRIP_LIFECYCLE_P0.md).
+  Sin cambios al PricingEngine, launcher, proveedor, navegación externa o Motion.
+  Sin dependencias nuevas, cambios nativos ni EAS Build.
+- **VERIFICADO automatizado:** focales lifecycle/HTTP/journal **28/28**, suite
+  completa **307/307**, gateway/matching/pricing **87/87**, TypeScript y lint.
+  Worklets (19 archivos), splash, export Hermes Android/iOS y bundles DEV pasan;
+  aislamiento fixture/release, pricing/server, paths y credenciales pasan en
+  ambas plataformas. Expo Doctor **20/21** sólo por los cinco patches SDK 57
+  conocidos (expo, constants, linking, router y sqlite); no se actualizaron.
+  Warning Node MODULE_TYPELESS_PACKAGE_JSON preexistente, no bloqueante.
+  **Android físico PENDIENTE**: E2E ambos themes, PIN/llegada/no-show, normal/early,
+  paradas/extras, pagos, modo avión/reinicio/replay, teclado/safe-area/CTAs.
 
 ### Cloudflared local y ADB opcional para QA — 2026-10-08
 

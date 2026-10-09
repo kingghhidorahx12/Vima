@@ -240,3 +240,15 @@ La barra inferior reutiliza acciones existentes; no autoriza nuevos destinos fun
   Snapshot v2 migra v1 sin location a LOCATING, preservando requests, assignments
   e idempotencia. El cliente Driver usa watcher foreground con last-known fresca
   opcional y watchdog, nunca coordenadas por defecto ni polling bloqueante.
+
+## Lifecycle y settlement cash P0 — ratificado 2026-10-08
+
+Esta extensión sustituye la limitación histórica de matching hasta ASSIGNED.
+RequestRecord sigue siendo la única autoridad; ARRIVED_PICKUP/IN_PROGRESS/
+PAYMENT_PENDING mantienen ownership activo. Cancel/no-show sólo pre-PIN.
+Normal cobra quote.price exacto; early usa la misma config comercial congelada,
+profile/override, meter real, mínimo normal y extras incurridos, sin cap.
+Snapshot v4 deduplica bases por contenido y migra activos sólo con equivalencia
+comprobada; no hay fallback comercial. Offline Driver sólo post-PIN mediante
+journal de intenciones y GET antes de replay. PIN nunca se expone en DriverState.
+Detalles y QA pendiente en TRIP_LIFECYCLE_P0.md.

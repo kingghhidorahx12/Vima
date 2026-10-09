@@ -29,7 +29,13 @@ export function driverPresentation(state?: DriverState): DriverPresentation {
     case 'PAUSED': return { availability, variant: 'compact', title: 'Disponibilidad en pausa',
       copy: 'Vuelve a conectarte cuando estés listo para recibir viajes.', tone: 'warning',
       action: 'availability_available', actionLabel: 'Volver a estar disponible' };
-    case 'ASSIGNED': return { availability, variant: 'operational', title: 'Dirígete al pasajero',
+    case 'ASSIGNED':
+      if (state?.assignment && state.assignment.state !== 'ASSIGNED') return { availability, variant: 'operational', tone: 'positive',
+        title: state.assignment.state === 'ARRIVED_PICKUP' ? 'Esperando al pasajero' : state.assignment.state === 'IN_PROGRESS' ? 'Viaje en curso' : 'Pago pendiente',
+        copy: state.assignment.state === 'ARRIVED_PICKUP' ? 'Solicita el PIN al pasajero para iniciar.' : state.assignment.state === 'IN_PROGRESS'
+          ? 'Las operaciones se confirman con el servidor.' : 'Confirma el resultado del pago en efectivo.',
+        ...(state.assignment.state === 'ARRIVED_PICKUP' ? { action: 'assignment_cancel', actionLabel: 'Cancelar asignación' } : {}) };
+      return { availability, variant: 'operational', title: 'Dirígete al pasajero',
       copy: 'Revisa el punto de recogida antes de continuar.', tone: 'positive',
       action: 'assignment_cancel', actionLabel: 'Cancelar asignación' };
     case 'OFFLINE':

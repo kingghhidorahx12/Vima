@@ -10,6 +10,7 @@ import { resolveVimaThemeName } from '../src/design/themes/resolve.ts';
 import { driverConnectionLabel, driverGpsLabel, driverMapFallback, driverPresentation,
   driverSurfaceVariant } from '../src/features/driver/driverPresentation.ts';
 import type { DriverState } from '../src/services/matching/contracts.ts';
+import type { LifecycleCommand } from '../src/services/matching/lifecycle.ts';
 
 const require = createRequire(import.meta.url);
 const { createHarness } = require('./support/passenger-renderer.cjs');
@@ -20,12 +21,40 @@ const profile = { driver: { name: 'Conductor', rating: 4.9 }, vehicle: { name: '
 const state = (availability: DriverState['availability']): DriverState => ({ accountId: 'private', revision: 2,
   availability, expiryCount: 0, profile, ...(['LOCATING', 'AVAILABLE'].includes(availability) ? {
     location: { coordinate: place.coordinate, receivedAt: 1 },
-  } : {}), ...(availability === 'ASSIGNED' ? { assignment: { requestId: 'request', pickup: place,
-    value: { id: 'assignment', driver: profile.driver, vehicle: profile.vehicle, etaMinutes: 7, pin: '1234',
+  } : {}), ...(availability === 'ASSIGNED' ? { assignment: { requestId: 'request', pickup: place, state: 'ASSIGNED' as const, lifecycle: { completedStops: 0, incurredAdditionCodes: [] }, stops: [], additionCodes: [],
+    value: { id: 'assignment', driver: profile.driver, vehicle: profile.vehicle, etaMinutes: 7,
       sample: { coordinate: place.coordinate, heading: 0, sequence: 1 },
       routeToOrigin: { type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const,
         coordinates: [place.coordinate, [-99.87, 19.8]] },
     } } } } : {}) });
+
+test('lifecycle controls share themes, emit typed actions and never fabricate confirmation', async () => {
+  for (const themeName of ['light', 'dark'] as const) {
+    const h = createHarness({}, { themeName });
+    const { DriverLifecycleControls } = h.load('src/features/driver/DriverLifecycleControls.tsx');
+    const commands: LifecycleCommand[] = [];
+    let tree!: ReactTestRenderer;
+    const assignment = state('ASSIGNED').assignment!;
+    const props = { assignment, busy: false, queued: 0, onSync() {}, onCommand: (c: LifecycleCommand) => commands.push(c) };
+    await act(async () => { tree = create(React.createElement(DriverLifecycleControls, props)); });
+    const press = (label: string) => tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label)!;
+    await act(async () => press('Llegué').props.onPress()); assert.deepEqual(commands.at(-1), { name: 'arrive' });
+    assignment.state = 'ARRIVED_PICKUP'; assignment.lifecycle.arrivedAt = 1000;
+    await act(async () => tree.update(React.createElement(DriverLifecycleControls, props)));
+    const input = tree.root.findByType('TextInput' as never);
+    await act(async () => input.props.onChangeText('1234'));
+    await act(async () => press('Iniciar viaje').props.onPress()); assert.deepEqual(commands.at(-1), { name: 'start', pin: '1234' });
+    assert.equal(input.props.value, ''); // Driver entry is transient; assignment never supplies it.
+    assignment.state = 'IN_PROGRESS'; assignment.lifecycle.startedAt = 2000;
+    assignment.lifecycle.meter = { lastSequence: 1, distanceMeters: 0, durationSeconds: 0 };
+    await act(async () => tree.update(React.createElement(DriverLifecycleControls, props)));
+    await act(async () => press('Finalizar anticipadamente').props.onPress());
+    assert.deepEqual(commands.at(-1), { name: 'finish', kind: 'early', finalTelemetrySequence: 1 });
+    assert.equal(tree.root.findAllByType('TextInput' as never).length, 0);
+    assert.equal(assignment.state, 'IN_PROGRESS');
+    await act(async () => tree.unmount());
+  }
+});
 
 test('Driver presentation maps real states to compact and operational critical actions', () => {
   assert.deepEqual(['OFFLINE', 'LOCATING', 'AVAILABLE', 'PAUSED'].map(value => driverSurfaceVariant(value as DriverState['availability'])),

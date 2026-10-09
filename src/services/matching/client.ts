@@ -1,3 +1,4 @@
+import type { LifecycleCommand, TripTelemetry } from './lifecycle.ts';
 import { ApiError, type ApiClient, type ApiRequest } from '../api/client.ts';
 import type { PassengerGateway, Connection } from '../../features/passenger/model.ts';
 import type { TripCommand } from '../../features/trip/contracts.ts';
@@ -121,8 +122,14 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
       body: { coordinate, ...(heading !== undefined ? { heading } : {}), operationId }, decode: decodeDriver, signal }),
     offerAction: (id: string, action: 'accept' | 'reject', actionId: string) => request({ path: `/v1/driver/offers/${encodeURIComponent(id)}/${action}`,
       method: 'POST', body: { actionId }, decode: decodeDriver }),
-    cancelAssignment: (id: string, actionId: string) => request({ path: `/v1/driver/assignments/${encodeURIComponent(id)}/cancel`, method: 'POST',
-      body: { actionId }, decode: decodeDriver }),
+    cancelAssignment: (id: string, actionId: string, assignmentId: string) => request({ path: `/v1/driver/assignments/${encodeURIComponent(id)}/cancel`, method: 'POST',
+      body: { actionId, assignmentId }, decode: decodeDriver }),
+    lifecycleCommand: (id: string, assignmentId: string, commandId: string, command: LifecycleCommand) => request({
+      path: '/v1/driver/assignments/' + encodeURIComponent(id) + '/commands', method: 'POST',
+      body: { assignmentId, commandId, command }, decode: decodeDriver }),
+    telemetry: (id: string, assignmentId: string, sample: TripTelemetry) => request({
+      path: '/v1/driver/assignments/' + encodeURIComponent(id) + '/telemetry', method: 'POST',
+      body: { assignmentId, sample }, decode: decodeDriver }),
   };
 }
 export type MatchingClient = ReturnType<typeof createMatchingClient>;

@@ -13,6 +13,12 @@ import { matchingPolicy } from '../../src/features/passenger/matchingPolicy.ts';
 import type { DriverAvailability, DriverState, MatchingPassengerSnapshot, RequestState } from '../../src/services/matching/contracts.ts';
 import { isMatchingLocationFresh, matchingLocationPolicy } from '../../src/services/matching/policy.ts';
 import { matchingServerTrace, type MatchingServerTrace, type MatchingServerEvent, type AvailabilityReason } from './trace.ts';
+import type { PricingConfig } from '../pricing/contracts.ts';
+import { validatePricingConfig } from '../pricing/config.ts';
+import { activeRequestStates, assignedRequestStates, type LifecycleCommand, type TripTelemetry } from '../../src/services/matching/lifecycle.ts';
+import { distanceMeters } from '../../src/services/geospatial/placeIdentity.ts';
+import { emptyLifecycle, provenBasis, fingerprint, effectiveAdditions, earlyPrice, appendTelemetry, parseTelemetry,
+  parseLifecycleCommand, conflict, natural, canonical, type DurableLifecycle } from './lifecycle.ts';
 import type { DriverActionIntent } from '../../src/services/matching/driverActions.ts';
 
 export interface MatchingClock { now(): number; schedule(delay: number, callback: () => void): () => void }
@@ -25,10 +31,12 @@ interface RequestRecord {
   id: string; requestId: string; owner: string; revision: number; state: RequestState;
   quote: AuthoritativeRideQuote; createdAt: number; deadline: number; searchStartedAt: number; round: number;
   offered: string[]; excluded: string[]; assignment?: StoredAssignment;
+  pricingBasisId?: string; lifecycle?: DurableLifecycle;
 }
 type Location = { coordinate: Coordinate; heading?: number; receivedAt: number; revision: number };
 interface DriverRecord {
   id: string; availability: DriverAvailability; revision: number; expiryCount: number; locationRevision: number; location?: Location;
+  lastTerminalRequestId?: string;
 }
 interface OfferRecord {
   id: string; requestId: string; driverId: string; state: 'ACTIVE' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'REVOKED';
@@ -37,7 +45,7 @@ interface OfferRecord {
 type Receipt = { kind: 'request'; request: RequestRecord } |
   { kind: 'driver'; driver: DriverRecord; offer?: OfferRecord; request?: RequestRecord };
 interface Snapshot {
-  version: 3; requests: Record<string, RequestRecord>; drivers: Record<string, DriverRecord>; offers: Record<string, OfferRecord>;
+  version: 2 | 3 | 4; pricingBases?: Record<string, PricingConfig>; requests: Record<string, RequestRecord>; drivers: Record<string, DriverRecord>; offers: Record<string, OfferRecord>;
   activeRequestByOwner: Record<string, string>;
   requestIds: Record<string, string>; actions: Record<string, { fingerprint: string; result: Receipt }>;
 }
@@ -46,6 +54,9 @@ export interface MatchingOptions {
   quote: (id: string, owner: string) => AuthoritativeRideQuote | undefined;
   eta: (origin: Coordinate, pickup: Coordinate) => Promise<RouteResult>;
   trace?: MatchingServerTrace;
+  pricingConfig?: PricingConfig;
+  quotePricingConfig?: (id: string, owner: string) => PricingConfig | undefined;
+  pickupRadiusMeters?: number;
 }
 const invalid = () => { throw new MatchingError(400, 'invalid_matching_input'); };
 const identifier = (value: unknown): string => {
@@ -104,24 +115,26 @@ function migrateSnapshot(raw: unknown): unknown {
   value.version = 2; return value;
 }
 
-function validateSnapshot(raw: unknown, auth: AuthConfig): Snapshot {
+function validateSnapshot(raw: unknown, auth: AuthConfig, pricingConfig?: PricingConfig): Snapshot {
   const value = migrateSnapshot(raw) as Snapshot;
   const integer = (n: number) => Number.isSafeInteger(n) && n >= 0;
   const object = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v);
   const fields = (v: object, allowed: string[]) => { if (Object.keys(v).some(key => !allowed.includes(key))) throw new Error(); };
   const legacy = (value as { version: number })?.version === 2;
-  if (!object(value) || (!legacy && value.version !== 3) || !['requests', 'drivers', 'offers', 'requestIds', 'actions'].every(k => object(value[k as keyof Snapshot]))) throw new Error();
-  fields(value, ['version', 'requests', 'drivers', 'offers', 'requestIds', 'actions', ...(!legacy ? ['activeRequestByOwner'] : [])]);
+  if (!object(value) || (!legacy && value.version !== 3 && value.version !== 4) || !['requests', 'drivers', 'offers', 'requestIds', 'actions'].every(k => object(value[k as keyof Snapshot]))) throw new Error();
+  fields(value, ['version', 'requests', 'drivers', 'offers', 'requestIds', 'actions', ...(!legacy ? ['activeRequestByOwner'] : []), ...(value.version === 4 ? ['pricingBases'] : [])]);
   const request = (r: RequestRecord) => {
     if (!object(r) || !identifier(r.id) || !identifier(r.requestId) || auth.principal(r.owner)?.role !== 'passenger' || !integer(r.revision) ||
-      !['SEARCHING', 'ASSIGNED', 'CANCELLED', 'NO_DRIVER_FOUND'].includes(r.state) || !integer(r.createdAt) ||
+      ![...activeRequestStates, 'COMPLETED', 'CANCELLED', 'NO_DRIVER_FOUND'].includes(r.state) || !integer(r.createdAt) ||
       r.deadline !== r.createdAt + matchingPolicy.limitMs || !integer(r.searchStartedAt) || r.searchStartedAt < r.createdAt ||
       r.searchStartedAt > r.deadline || !integer(r.round) || !Array.isArray(r.offered) || !Array.isArray(r.excluded) ||
       [...r.offered, ...r.excluded].some(id => auth.principal(id)?.role !== 'driver') || new Set(r.offered).size !== r.offered.length) throw new Error();
-    fields(r, ['id', 'requestId', 'owner', 'revision', 'state', 'quote', 'createdAt', 'deadline', 'searchStartedAt', 'round', 'offered', 'excluded', 'assignment']);
+    fields(r, ['id', 'requestId', 'owner', 'revision', 'state', 'quote', 'createdAt', 'deadline', 'searchStartedAt', 'round', 'offered', 'excluded', 'assignment', 'pricingBasisId', 'lifecycle']);
     if (new Set(r.excluded).size !== r.excluded.length || r.excluded.some(id => !r.offered.includes(id))) throw new Error();
     decodeQuoteResponse({ status: 'priced', quote: r.quote });
-    if ((r.state === 'ASSIGNED') !== !!r.assignment) throw new Error();
+    if ((assignedRequestStates as readonly string[]).includes(r.state) && !r.assignment ||
+      r.assignment && ![...assignedRequestStates, 'COMPLETED', 'CANCELLED'].includes(r.state)) throw new Error();
+    if (value.version !== 4 && (r.lifecycle || r.pricingBasisId || !['SEARCHING', 'ASSIGNED', 'CANCELLED', 'NO_DRIVER_FOUND'].includes(r.state))) throw new Error();
     if (r.assignment) {
       const a = r.assignment;
       fields(a, ['id', 'driverId', 'etaMinutes', 'pin', 'sample', 'routeToOrigin']);
@@ -143,7 +156,11 @@ function validateSnapshot(raw: unknown, auth: AuthConfig): Snapshot {
     if (!object(d) || auth.principal(d.id)?.role !== 'driver' || !integer(d.revision) || !integer(d.locationRevision) || !integer(d.expiryCount) ||
       !['OFFLINE', 'LOCATING', 'AVAILABLE', 'PAUSED', 'ASSIGNED'].includes(d.availability) || (d.expiryCount >= 3 && d.availability === 'AVAILABLE') ||
       (d.availability === 'AVAILABLE' && !d.location)) throw new Error();
-    fields(d, ['id', 'availability', 'revision', 'expiryCount', 'locationRevision', 'location']);
+    fields(d, ['id', 'availability', 'revision', 'expiryCount', 'locationRevision', 'location', ...(value.version === 4 ? ['lastTerminalRequestId'] : [])]);
+    if (d.lastTerminalRequestId !== undefined) {
+      identifier(d.lastTerminalRequestId); const r = value.requests[d.lastTerminalRequestId];
+      if (!r || r.assignment?.driverId !== d.id || !['COMPLETED', 'CANCELLED'].includes(r.state)) throw new Error();
+    }
     if (d.location) { location(d.location); if (d.location.revision !== d.locationRevision) throw new Error(); }
   };
   const offer = (o: OfferRecord) => {
@@ -166,11 +183,11 @@ function validateSnapshot(raw: unknown, auth: AuthConfig): Snapshot {
     }
   }
   if ([...groups.values()].some(size => size > 2)) throw new Error();
-  for (const r of Object.values(value.requests)) if (r.assignment) {
+  for (const r of Object.values(value.requests)) if (r.assignment && (assignedRequestStates as readonly string[]).includes(r.state)) {
     if (busy.has(r.assignment.driverId) || value.drivers[r.assignment.driverId]?.availability !== 'ASSIGNED') throw new Error();
     busy.add(r.assignment.driverId);
   }
-  for (const d of Object.values(value.drivers)) if (d.availability === 'ASSIGNED' && !Object.values(value.requests).some(r => r.assignment?.driverId === d.id)) throw new Error();
+  for (const d of Object.values(value.drivers)) if (d.availability === 'ASSIGNED' && !Object.values(value.requests).some(r => r.assignment?.driverId === d.id && (assignedRequestStates as readonly string[]).includes(r.state))) throw new Error();
   for (const action of Object.values(value.actions)) {
     if (!object(action) || typeof action.fingerprint !== 'string' || !object(action.result)) throw new Error();
     if (action.result.kind === 'request') { fields(action.result, ['kind', 'request']); request(action.result.request); }
@@ -183,7 +200,7 @@ function validateSnapshot(raw: unknown, auth: AuthConfig): Snapshot {
     value.activeRequestByOwner = {};
     const owners = new Set(Object.values(value.requests).map(r => r.owner));
     for (const owner of owners) {
-      const active = Object.values(value.requests).filter(r => r.owner === owner && ['SEARCHING', 'ASSIGNED'].includes(r.state));
+      const active = Object.values(value.requests).filter(r => r.owner === owner && (activeRequestStates as readonly string[]).includes(r.state));
       const assigned = active.filter(r => r.state === 'ASSIGNED');
       if (assigned.length > 1) throw new Error();
       const keep = assigned[0] ?? active.sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
@@ -197,15 +214,77 @@ function validateSnapshot(raw: unknown, auth: AuthConfig): Snapshot {
       }
     }
     value.version = 3;
-    return validateSnapshot(value, auth);
+    return validateSnapshot(value, auth, pricingConfig);
   }
   if (!object(value.activeRequestByOwner)) throw new Error();
   for (const [owner, id] of Object.entries(value.activeRequestByOwner)) {
     if (typeof id !== 'string') throw new Error();
     const r = value.requests[id];
-    if (!r || r.owner !== owner || !['SEARCHING', 'ASSIGNED'].includes(r.state)) throw new Error();
+    if (!r || r.owner !== owner || !(activeRequestStates as readonly string[]).includes(r.state)) throw new Error();
   }
-  for (const r of Object.values(value.requests)) if (['SEARCHING', 'ASSIGNED'].includes(r.state) && value.activeRequestByOwner[r.owner] !== r.id) throw new Error();
+  for (const r of Object.values(value.requests)) if ((activeRequestStates as readonly string[]).includes(r.state) && value.activeRequestByOwner[r.owner] !== r.id) throw new Error();
+  if (value.version === 3) {
+    value.pricingBases = {};
+    for (const r of Object.values(value.requests)) if ((activeRequestStates as readonly string[]).includes(r.state)) {
+      const basis = provenBasis(pricingConfig, r.quote); const id = fingerprint(basis);
+      value.pricingBases[id] = basis; r.pricingBasisId = id; r.lifecycle = emptyLifecycle();
+    }
+    for (const a of Object.values(value.actions)) {
+      const r = a.result.request; const current = r && value.requests[r.id];
+      if (r && current?.pricingBasisId) { r.pricingBasisId = current.pricingBasisId; r.lifecycle = emptyLifecycle(); }
+    }
+    value.version = 4;
+  }
+  if (!object(value.pricingBases)) throw new Error();
+  for (const [id, basis] of Object.entries(value.pricingBases!)) {
+    const validated = validatePricingConfig(basis);
+    if (fingerprint(validated) !== id || canonical(validated) !== canonical(basis)) throw new Error();
+  }
+  const validateLife = (r: RequestRecord, historical = false) => {
+    if (!r.pricingBasisId) {
+      if (r.lifecycle || !['SEARCHING', 'ASSIGNED', 'CANCELLED', 'NO_DRIVER_FOUND'].includes(r.state) ||
+        (activeRequestStates as readonly string[]).includes(r.state) && !historical) throw new Error();
+      return;
+    }
+    const basis = value.pricingBases![r.pricingBasisId];
+    if (!basis) throw new Error(); provenBasis(basis, r.quote);
+    const life = r.lifecycle;
+    if (!life || !natural(life.completedStops) || life.completedStops > r.quote.stops.length ||
+      !Array.isArray(life.telemetry) || !Array.isArray(life.incurredAdditionCodes) ||
+      new Set(life.incurredAdditionCodes).size !== life.incurredAdditionCodes.length ||
+      life.incurredAdditionCodes.some(code => !effectiveAdditions(basis, r.quote).some(a => a.code === code))) throw new Error();
+    fields(life, ['arrivedAt', 'startedAt', 'completedStops', 'meter', 'incurredAdditionCodes', 'telemetry', 'settlement',
+      'completedAt', 'cancelledAt', 'paymentOutcome', 'disputeId']);
+    for (const n of [life.arrivedAt, life.startedAt, life.completedAt, life.cancelledAt]) if (n !== undefined && (!natural(n) || n < r.createdAt)) throw new Error();
+    if (['ARRIVED_PICKUP', 'IN_PROGRESS', 'PAYMENT_PENDING', 'COMPLETED'].includes(r.state) && !natural(life.arrivedAt)) throw new Error();
+    const started = ['IN_PROGRESS', 'PAYMENT_PENDING', 'COMPLETED'].includes(r.state);
+    if (started !== (life.startedAt !== undefined) || started && life.startedAt! < life.arrivedAt!) throw new Error();
+    if (!started && (life.meter || life.telemetry.length || life.completedStops || life.incurredAdditionCodes.length || life.settlement)) throw new Error();
+    if (started) {
+      const rebuilt = emptyLifecycle(); rebuilt.startedAt = life.startedAt;
+      rebuilt.meter = { lastSequence: 0, distanceMeters: 0, durationSeconds: 0 };
+      for (const sample of life.telemetry) if (!appendTelemetry(rebuilt, parseTelemetry(sample), Number.MAX_SAFE_INTEGER)) throw new Error();
+      if (canonical(rebuilt.meter) !== canonical(life.meter)) throw new Error();
+    }
+    if (['PAYMENT_PENDING', 'COMPLETED'].includes(r.state) !== !!life.settlement) throw new Error();
+    if (life.settlement) {
+      const settlement = life.settlement;
+      if (!life.telemetry.length || !['normal', 'early'].includes(settlement.kind) || !natural(settlement.createdAt) || settlement.createdAt < life.telemetry.at(-1)!.capturedAt ||
+        settlement.assignmentId !== r.assignment?.id || settlement.finalTelemetrySequence !== life.meter!.lastSequence || !life.meter!.lastSequence ||
+        canonical(settlement.metrics) !== canonical(life.meter) || canonical(settlement.incurredAdditionCodes) !== canonical(life.incurredAdditionCodes) ||
+        settlement.pricingBasisId !== r.pricingBasisId || settlement.configVersion !== r.quote.configVersion || settlement.profile !== r.quote.profile ||
+        settlement.overrideId !== r.quote.overrideId || settlement.kind === 'normal' && life.completedStops !== r.quote.stops.length ||
+        canonical(settlement.price) !== canonical(settlement.kind === 'normal' ? r.quote.price : earlyPrice(basis, r.quote, life))) throw new Error();
+      fields(settlement, ['kind', 'assignmentId', 'createdAt', 'finalTelemetrySequence', 'metrics', 'incurredAdditionCodes', 'price',
+        'pricingBasisId', 'configVersion', 'profile', 'overrideId']);
+    }
+    if (r.state === 'COMPLETED') {
+      if (!natural(life.completedAt) || life.completedAt < life.settlement!.createdAt || !['cash_received', 'cash_problem'].includes(life.paymentOutcome!)) throw new Error();
+      if (life.paymentOutcome === 'cash_problem' ? !identifier(life.disputeId) : life.disputeId !== undefined) throw new Error();
+    } else if (life.completedAt !== undefined || life.paymentOutcome || life.disputeId) throw new Error();
+  };
+  for (const r of Object.values(value.requests)) validateLife(r);
+  for (const a of Object.values(value.actions)) if (a.result.request) validateLife(a.result.request, true);
   return value;
 }
 
@@ -234,12 +313,13 @@ export class MatchingCoordinator {
   constructor(options: MatchingOptions) {
     this.options = options;
     this.clock = options.clock ?? systemMatchingClock;
+    if (!Number.isFinite(options.pickupRadiusMeters ?? 150) || (options.pickupRadiusMeters ?? 150) <= 0) throw new Error('invalid_pickup_radius');
     mkdirSync(options.directory, { recursive: true }); this.file = join(options.directory, 'matching-v1.json');
     let previous: Snapshot | undefined;
-    try { previous = JSON.parse(readFileSync(this.file, 'utf8')) as Snapshot; this.state = validateSnapshot(structuredClone(previous), options.auth); }
+    try { previous = JSON.parse(readFileSync(this.file, 'utf8')) as Snapshot; this.state = validateSnapshot(structuredClone(previous), options.auth, options.pricingConfig); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('invalid_matching_snapshot');
-      this.state = { version: 3, requests: {}, drivers: {}, offers: {}, requestIds: {}, actions: {}, activeRequestByOwner: {} };
+      this.state = { version: 4, pricingBases: {}, requests: {}, drivers: {}, offers: {}, requestIds: {}, actions: {}, activeRequestByOwner: {} };
     }
     for (const id of options.auth.drivers) this.state.drivers[id] ??= { id, availability: 'OFFLINE', revision: 0, expiryCount: 0, locationRevision: 0 };
     this.persist(this.state);
@@ -278,7 +358,7 @@ export class MatchingCoordinator {
     this.persist(next); this.state = next;
     for (const event of this.transitions.get(next) ?? []) this.trace(event);
     for (const r of Object.values(next.requests)) if (previous.requests[r.id]?.state !== r.state) {
-      this.trace({ event: ['SEARCHING', 'ASSIGNED'].includes(r.state) ? 'request_active' : 'request_terminal',
+      this.trace({ event: (activeRequestStates as readonly string[]).includes(r.state) ? 'request_active' : 'request_terminal',
         requestId: r.id, owner: r.owner, state: r.state, revision: r.revision });
     }
     for (const o of Object.values(next.offers)) if (o.state === 'ACTIVE' && !previous.offers[o.id]) {
@@ -335,15 +415,23 @@ export class MatchingCoordinator {
   private passenger(r: RequestRecord): MatchingPassengerSnapshot {
     const q = r.quote;
     return { id: r.id, revision: r.revision, requestState: r.state,
-      phase: r.state === 'ASSIGNED' ? 'assigned' : r.state === 'CANCELLED' ? 'cancelled' : r.state === 'NO_DRIVER_FOUND' ? 'expired' : r.round ? 'reassigning' : 'searching',
+      phase: (assignedRequestStates as readonly string[]).includes(r.state) ? 'assigned' : r.state === 'COMPLETED' ? 'completed' : r.state === 'CANCELLED' ? 'cancelled' : r.state === 'NO_DRIVER_FOUND' ? 'expired' : r.round ? 'reassigning' : 'searching',
       searchStartedAt: r.searchStartedAt, searchDeadlineAt: r.deadline,
+      lifecycle: this.lifecycleView(r),
       quote: { id: q.id, origin: q.origin, destination: q.destination, stops: q.stops, route: q.route.geometry,
         durationMinutes: Math.ceil((q.route.trafficDurationSeconds ?? q.route.durationSeconds) / 60), distanceKm: Math.round(q.route.distanceMeters / 100) / 10,
         paymentMethod: 'Efectivo', pricing: { status: 'priced', quote: q } },
       ...(r.assignment ? { assignment: this.assignment(r.assignment) } : {}) };
   }
+  private lifecycleView(r: RequestRecord) {
+    const { telemetry: _telemetry, ...life } = r.lifecycle ?? emptyLifecycle(); return structuredClone(life);
+  }
+  private driverAssignment(value: StoredAssignment) {
+    const { pin: _pin, ...assignment } = this.assignment(value); return assignment;
+  }
   private driverReceipt(s: Snapshot, id: string): Receipt {
-    const offer = this.active(s, id); const request = Object.values(s.requests).find(r => r.assignment?.driverId === id) ?? (offer ? s.requests[offer.requestId] : undefined);
+    const offer = this.active(s, id); const request = Object.values(s.requests).find(r => r.assignment?.driverId === id && (assignedRequestStates as readonly string[]).includes(r.state))
+      ?? (offer ? s.requests[offer.requestId] : undefined) ?? s.requests[s.drivers[id]!.lastTerminalRequestId ?? ''];
     return { kind: 'driver', driver: s.drivers[id]!, ...(offer ? { offer } : {}), ...(request ? { request } : {}) };
   }
   private view(receipt: Receipt): MatchingPassengerSnapshot | DriverState {
@@ -354,7 +442,11 @@ export class MatchingCoordinator {
         ...(d.location.heading !== undefined ? { heading: d.location.heading } : {}), receivedAt: d.location.receivedAt } } : {}),
       ...(o && r ? { offer: { id: o.id, requestId: r.id, expiresAt: o.expiresAt,
         etaMinutes: Math.ceil((o.route.trafficDurationSeconds ?? o.route.durationSeconds) / 60), pickup: r.quote.origin } } : {}),
-      ...(r?.assignment ? { assignment: { requestId: r.id, pickup: r.quote.origin, value: this.assignment(r.assignment) } } : {}) };
+      ...(r?.assignment && ['COMPLETED', 'CANCELLED'].includes(r.state) ? { lastTrip: { requestId: r.id, assignmentId: r.assignment.id,
+        state: r.state as 'COMPLETED' | 'CANCELLED', lifecycle: this.lifecycleView(r) } } : {}),
+      ...(r?.assignment && (assignedRequestStates as readonly string[]).includes(r.state) ? { assignment: { requestId: r.id, pickup: r.quote.origin, value: this.driverAssignment(r.assignment), state: r.state,
+        lifecycle: this.lifecycleView(r), stops: r.quote.stops,
+        additionCodes: r.pricingBasisId ? effectiveAdditions(this.state.pricingBases![r.pricingBasisId]!, r.quote).map(a => a.code) : [] } } : {}) };
   }
   private async mutation(p: Principal, id: string, fingerprint: unknown, change: (next: Snapshot) => Receipt, afterCommit?: (receipt: Receipt) => void) {
     const result = await this.lock(() => {
@@ -380,7 +472,10 @@ export class MatchingCoordinator {
       decodeQuoteResponse({ status: 'priced', quote });
       const r: RequestRecord = { id: randomUUID(), requestId, owner: p.accountId, revision: 1, state: 'SEARCHING',
         quote: structuredClone(quote), createdAt: now, deadline: now + matchingPolicy.limitMs, searchStartedAt: now, round: 0, offered: [], excluded: [] };
-      const next = structuredClone(this.state); next.requests[r.id] = r; next.requestIds[key] = r.id;
+      const next = structuredClone(this.state);
+      const basis = provenBasis(this.options.quotePricingConfig ? this.options.quotePricingConfig(quoteId, p.accountId) : this.options.pricingConfig, quote);
+      r.pricingBasisId = fingerprint(basis); r.lifecycle = emptyLifecycle(); next.pricingBases![r.pricingBasisId] = basis;
+      next.requests[r.id] = r; next.requestIds[key] = r.id;
       next.activeRequestByOwner[p.accountId] = r.id; this.commit(next); this.arm();
       return this.passenger(r);
     }).finally(() => this.kick()); return structuredClone(result);
@@ -397,13 +492,14 @@ export class MatchingCoordinator {
     });
     this.kick(); return value;
   }
-  async cancel(p: Principal, tripId: string, commandId: string, reason: string) {
+  async cancel(p: Principal, tripId: string, commandId: string, reason: string, assignmentId?: string) {
     this.requireRole(p, 'passenger');
     if (!['user', 'edit', 'schedule'].includes(reason)) return invalid();
-    return this.mutation(p, commandId, ['cancel', tripId, reason], s => {
+    return this.mutation(p, commandId, ['cancel', tripId, reason, ...(assignmentId === undefined ? [] : [assignmentId])], s => {
       const r = this.owned(s, p, tripId);
-      if (r.state !== 'SEARCHING') throw new MatchingError(409, 'request_not_searching');
-      r.state = 'CANCELLED'; r.revision++; delete s.activeRequestByOwner[r.owner]; this.revoke(s, r); return { kind: 'request', request: r };
+      if (!['SEARCHING', 'ASSIGNED', 'ARRIVED_PICKUP'].includes(r.state)) conflict('request_not_cancellable');
+      if (r.assignment) { if (r.assignment.id !== identifier(assignmentId)) conflict('stale_assignment'); this.releaseDriver(s, r); }
+      (r.lifecycle ??= emptyLifecycle()).cancelledAt = this.clock.now(); r.state = 'CANCELLED'; r.revision++; delete s.activeRequestByOwner[r.owner]; this.revoke(s, r); return { kind: 'request', request: r };
     }) as Promise<MatchingPassengerSnapshot>;
   }
   async driver(p: Principal): Promise<DriverState> {
@@ -429,10 +525,10 @@ export class MatchingCoordinator {
     if (bearing !== undefined && (!Number.isFinite(bearing) || bearing < 0 || bearing >= 360)) return invalid();
     return this.mutation(p, operationId, ['location', coordinate, bearing ?? null], s => {
       const d = s.drivers[p.accountId]!;
-      if (!['LOCATING', 'AVAILABLE'].includes(d.availability)) throw new MatchingError(409, 'driver_unavailable');
+      if (!['LOCATING', 'AVAILABLE', 'ASSIGNED'].includes(d.availability)) throw new MatchingError(409, 'driver_unavailable');
       d.locationRevision++; d.revision++; d.location = { coordinate, ...(bearing !== undefined ? { heading: bearing } : {}),
         receivedAt: this.clock.now(), revision: d.locationRevision };
-      this.availabilityTransition(s, d, 'AVAILABLE', 'location_fix'); return this.driverReceipt(s, d.id);
+      if (d.availability !== 'ASSIGNED') this.availabilityTransition(s, d, 'AVAILABLE', 'location_fix'); return this.driverReceipt(s, d.id);
     }) as Promise<DriverState>;
   }
   async offerAction(p: Principal, offerId: string, action: 'accept' | 'reject', actionId: string) {
@@ -453,18 +549,97 @@ export class MatchingCoordinator {
     }, () => this.traceDriverAction('driver_action_commit', p, actionId,
       { kind: action === 'accept' ? 'offer_accept' : 'offer_reject', offerId })) as Promise<DriverState>;
   }
-  async cancelAssignment(p: Principal, requestId: string, actionId: string) {
+  async cancelAssignment(p: Principal, requestId: string, actionId: string, assignmentId: string) {
     this.requireRole(p, 'driver'); identifier(requestId);
-    return this.mutation(p, actionId, ['cancel-assignment', requestId], s => {
+    return this.mutation(p, actionId, ['cancel-assignment', requestId, identifier(assignmentId)], s => {
       const r = s.requests[requestId]; if (!r) throw new MatchingError(404, 'request_not_found');
-      if (r.assignment?.driverId !== p.accountId) throw new MatchingError(403, 'forbidden');
+      this.currentAssignment(r, p, assignmentId);
+      if (!['ASSIGNED', 'ARRIVED_PICKUP'].includes(r.state)) conflict('request_not_cancellable');
       const d = s.drivers[p.accountId]!;
-      delete r.assignment; r.excluded.push(d.id); r.round++; r.searchStartedAt = Math.min(this.clock.now(), r.deadline);
+      delete (r as RequestRecord).assignment; r.lifecycle = emptyLifecycle(); r.excluded.push(d.id); r.round++; r.searchStartedAt = Math.min(this.clock.now(), r.deadline);
       r.state = this.clock.now() >= r.deadline ? 'NO_DRIVER_FOUND' : 'SEARCHING'; r.revision++;
       if (r.state === 'NO_DRIVER_FOUND') delete s.activeRequestByOwner[r.owner];
       d.revision++; this.availabilityTransition(s, d, d.expiryCount >= 3 ? 'PAUSED' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING', 'assignment_cancel');
       return this.driverReceipt(s, d.id);
     }, () => this.traceDriverAction('driver_action_commit', p, actionId, { kind: 'assignment_cancel', requestId })) as Promise<DriverState>;
+  }
+  private currentAssignment(r: RequestRecord | undefined, p: Principal, assignmentId: string): asserts r is RequestRecord & { assignment: StoredAssignment } {
+    if (!r) throw new MatchingError(404, 'request_not_found');
+    if (r.assignment?.driverId !== p.accountId) throw new MatchingError(403, 'forbidden');
+    if (r.assignment.id !== identifier(assignmentId)) conflict('stale_assignment');
+  }
+  private releaseDriver(s: Snapshot, r: RequestRecord) {
+    const d = s.drivers[r.assignment!.driverId]!; d.revision++;
+    d.lastTerminalRequestId = r.id;
+    this.availabilityTransition(s, d, d.expiryCount >= 3 ? 'PAUSED' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING', 'assignment_terminal');
+  }
+  async lifecycleCommand(p: Principal, requestId: string, assignmentId: string, commandId: string, raw: LifecycleCommand): Promise<DriverState> {
+    this.requireRole(p, 'driver'); identifier(requestId); identifier(assignmentId);
+    const command = parseLifecycleCommand(raw);
+    // The receipt fingerprint is opaque: command payloads, especially PINs, never enter logs or response metadata.
+    return this.mutation(p, commandId, ['lifecycle', requestId, assignmentId, fingerprint(command)], s => {
+      const r = s.requests[requestId]; this.currentAssignment(r, p, assignmentId);
+      const life = r.lifecycle!; const now = this.clock.now(); const basis = s.pricingBases![r.pricingBasisId!]!;
+      switch (command.name) {
+        case 'arrive': {
+          if (r.state !== 'ASSIGNED') conflict('invalid_trip_state');
+          const location = s.drivers[p.accountId]!.location;
+          if (!this.fresh(location) || distanceMeters(location!.coordinate, r.quote.origin.coordinate) > (this.options.pickupRadiusMeters ?? 150))
+            conflict('pickup_location_required');
+          life.arrivedAt = now; r.state = 'ARRIVED_PICKUP'; break;
+        }
+        case 'start':
+          if (r.state !== 'ARRIVED_PICKUP') conflict('invalid_trip_state');
+          if (command.pin !== r.assignment.pin) conflict('incorrect_pin');
+          life.startedAt = now; life.meter = { lastSequence: 0, distanceMeters: 0, durationSeconds: 0 }; r.state = 'IN_PROGRESS'; break;
+        case 'no_show':
+          if (r.state !== 'ARRIVED_PICKUP' || now < life.arrivedAt! + 300_000) conflict('no_show_not_available');
+          life.cancelledAt = now; r.state = 'CANCELLED'; break;
+        case 'complete_stop':
+          if (r.state !== 'IN_PROGRESS' || command.stopIndex !== life.completedStops || command.stopIndex >= r.quote.stops.length) conflict('stop_out_of_order');
+          life.completedStops++; break;
+        case 'incur_addition':
+          if (r.state !== 'IN_PROGRESS') conflict('invalid_trip_state');
+          if (!effectiveAdditions(basis, r.quote).some(a => a.code === command.code)) conflict('unknown_addition');
+          if (life.incurredAdditionCodes.includes(command.code)) conflict('addition_already_incurred');
+          life.incurredAdditionCodes.push(command.code); break;
+        case 'finish': {
+          if (r.state !== 'IN_PROGRESS') conflict('invalid_trip_state');
+          if (!life.telemetry.length || command.finalTelemetrySequence !== life.meter!.lastSequence) conflict('final_telemetry_not_confirmed');
+          if (command.kind === 'normal' && life.completedStops !== r.quote.stops.length) conflict('stops_pending');
+          life.settlement = { kind: command.kind, assignmentId, createdAt: now, finalTelemetrySequence: command.finalTelemetrySequence,
+            metrics: structuredClone(life.meter!), incurredAdditionCodes: [...life.incurredAdditionCodes],
+            price: structuredClone(command.kind === 'normal' ? r.quote.price : earlyPrice(basis, r.quote, life)),
+            pricingBasisId: r.pricingBasisId!, configVersion: r.quote.configVersion, profile: r.quote.profile,
+            ...(r.quote.overrideId ? { overrideId: r.quote.overrideId } : {}) };
+          r.state = 'PAYMENT_PENDING'; break;
+        }
+        case 'cash_received': case 'cash_problem':
+          if (r.state !== 'PAYMENT_PENDING') conflict('invalid_trip_state');
+          life.completedAt = now; life.paymentOutcome = command.name;
+          if (command.name === 'cash_problem') life.disputeId = randomUUID();
+          r.state = 'COMPLETED'; break;
+      }
+      r.revision++;
+      if (r.state === 'COMPLETED' || r.state === 'CANCELLED') {
+        delete s.activeRequestByOwner[r.owner]; this.releaseDriver(s, r);
+        // Preserve terminal evidence in the request; DriverState no longer holds an active assignment.
+      } else s.drivers[p.accountId]!.revision++;
+      return this.driverReceipt(s, p.accountId);
+    }) as Promise<DriverState>;
+  }
+  async telemetry(p: Principal, requestId: string, assignmentId: string, raw: TripTelemetry): Promise<DriverState> {
+    this.requireRole(p, 'driver'); identifier(requestId); identifier(assignmentId); const sample = parseTelemetry(raw);
+    return this.lock(() => {
+      const next = structuredClone(this.state); const r = next.requests[requestId]; this.currentAssignment(r, p, assignmentId);
+      if (r.state !== 'IN_PROGRESS') conflict('invalid_trip_state');
+      if (appendTelemetry(r.lifecycle!, sample, this.clock.now())) {
+        r.revision++; const d = next.drivers[p.accountId]!; d.revision++;
+        d.locationRevision++; d.location = { coordinate: sample.coordinate, receivedAt: sample.capturedAt, revision: d.locationRevision };
+        this.commit(next);
+      }
+      return this.view(this.driverReceipt(this.state, p.accountId)) as DriverState;
+    });
   }
   /** HTTP calls this only after parsing the existing route/body; offer request identity comes from authority. */
   traceDriverAction(event: 'driver_action_http_received' | 'driver_action_commit', p: Principal, operationId: string,

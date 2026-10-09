@@ -1,3 +1,5 @@
+import type { TripLifecycle } from '../../services/matching/lifecycle.ts';
+import type { RequestState } from '../../services/matching/contracts.ts';
 import type { Coordinate, VehicleSample } from '../../map/vehicleMotion.ts';
 import type { RouteFeature } from '../../map/routeGeometry.ts';
 import type { RealtimeTransport } from '../../services/realtime/index';
@@ -40,11 +42,12 @@ export interface Assignment {
 export type MatchingPhase = 'searching' | 'expanding' | 'prolonged' | 'reassigning';
 export type OriginStatus = 'loading' | 'automatic' | 'manual' | 'unavailable';
 export interface PassengerTrip extends AuthoritativeTrip {
-  readonly phase: MatchingPhase | 'assigned' | 'cancelled' | 'expired';
+  readonly phase: MatchingPhase | 'assigned' | 'cancelled' | 'expired' | 'completed';
   /** Authoritative search window; adapters must enforce the configured deadline. */
   readonly searchStartedAt?: number;
   readonly searchDeadlineAt?: number;
   readonly quote: RideQuote;
+  readonly requestState?: RequestState; readonly lifecycle?: TripLifecycle;
   readonly assignment?: Assignment;
 }
 export type PassengerPhase = 'home' | 'confirm' | 'requesting' | PassengerTrip['phase'];
@@ -97,7 +100,7 @@ export function validDraft(origin: Place | null | undefined, destination: Place 
 }
 export function passengerTrip(trip: AuthoritativeTrip): PassengerTrip {
   const value = trip as PassengerTrip;
-  if (!['searching', 'expanding', 'prolonged', 'reassigning', 'assigned', 'cancelled', 'expired'].includes(value.phase) || !value.quote ||
+  if (!['searching', 'expanding', 'prolonged', 'reassigning', 'assigned', 'cancelled', 'expired', 'completed'].includes(value.phase) || !value.quote ||
     (value.phase === 'assigned' && !value.assignment)) throw new Error('Unsupported passenger snapshot');
   return value;
 }

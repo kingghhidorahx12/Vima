@@ -2,7 +2,7 @@ import type { DriverAvailability, RequestState } from '../../src/services/matchi
 import type { DriverActionIntent } from '../../src/services/matching/driverActions.ts';
 
 export type AvailabilityReason = 'explicit_available' | 'explicit_offline' | 'location_fix' | 'location_ttl' |
-  'offer_accept' | 'offer_expiry_pause' | 'assignment_cancel' | 'snapshot_migration';
+  'offer_accept' | 'offer_expiry_pause' | 'assignment_cancel' | 'assignment_terminal' | 'snapshot_migration';
 export type MatchingServerEvent =
   | { event: 'driver_action_http_received' | 'driver_action_commit'; driverId: string; intent: DriverActionIntent['kind']; operationId: string; requestId?: string; offerId?: string }
   | { event: 'request_active' | 'request_terminal'; requestId: string; owner: string; state: RequestState; revision: number }
