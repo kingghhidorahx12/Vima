@@ -10,16 +10,18 @@ export interface RideShellProps {
   readonly trip?: AuthoritativeTrip;
   readonly map?: VimaMapProps;
   readonly mapContent?: ReactNode;
+  readonly mapOverlay?: ReactNode;
   readonly mapViewportStyle?: StyleProp<ViewStyle>;
   readonly sheet?: Omit<VimaRideSheetProps, 'children' | 'enabled'>;
   readonly renderPhase: (trip: AuthoritativeTrip | undefined) => ReactNode;
 }
 
-export function RideShell({ trip, map, mapContent, mapViewportStyle, sheet, renderPhase }: RideShellProps) {
+export function RideShell({ trip, map, mapContent, mapOverlay, mapViewportStyle, sheet, renderPhase }: RideShellProps) {
   const interactionEnabled = useTripUiStore((state) => state.sheetInteractionEnabled);
   return (
     <View style={styles.fill}>
       <MapViewportClip style={mapViewportStyle}><VimaMap {...map}>{mapContent}</VimaMap></MapViewportClip>
+      {mapOverlay ? <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>{mapOverlay}</View> : null}
       <VimaRideSheet {...sheet} enabled={interactionEnabled}>
         {renderPhase(trip)}
       </VimaRideSheet>

@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { transformFileSync } = require('@babel/core');
 
-for (const filename of ['src/motion/ElementEntrance.tsx', 'src/motion/PassengerScenePresence.tsx', 'src/motion/mapPersonality.ts', 'src/features/passenger/MapControls.tsx', 'src/features/passenger/MapCompass.tsx', 'src/motion/helpers.ts', 'src/motion/timing.ts', 'src/motion/usePressFeedback.ts', 'src/motion/ScreenTransition.tsx', 'src/motion/SearchPulse.tsx', 'src/motion/VimaLaunchSurface.tsx', 'src/map/vehicleMotion.ts', 'src/map/useVehicleMotion.ts', 'src/map/VehicleLayer.tsx', 'src/map/routeGeometry.ts', 'src/map/RouteLayer.tsx', 'src/design/components/rideSheetGeometry.ts', 'src/design/components/VimaRideSheet.tsx', 'src/features/passenger/PassengerMapPin.tsx']) {
+for (const filename of ['src/motion/ElementEntrance.tsx', 'src/motion/PassengerScenePresence.tsx', 'src/motion/mapPersonality.ts', 'src/features/passenger/MapControls.tsx', 'src/features/passenger/MapCompass.tsx', 'src/motion/helpers.ts', 'src/motion/timing.ts', 'src/motion/usePressFeedback.ts', 'src/motion/ScreenTransition.tsx', 'src/motion/SearchPulse.tsx', 'src/motion/VimaLaunchSurface.tsx', 'src/map/MapPlacePin.tsx', 'src/map/DriverVehicleMarker.tsx', 'src/design/components/VimaThemeToggle.tsx', 'src/map/vehicleMotion.ts', 'src/map/useVehicleMotion.ts', 'src/map/VehicleLayer.tsx', 'src/map/routeGeometry.ts', 'src/map/RouteLayer.tsx', 'src/design/components/rideSheetGeometry.ts', 'src/design/components/VimaRideSheet.tsx', 'src/features/passenger/PassengerMapPin.tsx']) {
   const result = transformFileSync(filename, {
     caller: { name: 'metro', platform: 'android', engine: 'hermes', isDev: true },
   });

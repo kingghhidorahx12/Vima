@@ -14,17 +14,21 @@ import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph
 import { VimaText } from '../../design/primitives';
 import { visualTokens as t } from '../../design/tokens';
 import { semanticHaptics } from '../../motion/haptics';
-import type { TrafficLayerPreferences } from '../../map/traffic';
+import type { TrafficLayerPreferences, MapLayerCapabilities } from '../../map/traffic';
 import { ElementEntrance } from '../../motion/ElementEntrance';
 import { locationCtaHeight, mapControlSize, mapLayersMenuWidth } from './mapCameraFootprint';
 
 const menuGap = t.spacing.scalePx[1]!;
 
-export function MapControls({ available, layers, open, onOpen, onToggle, compass }: {
+export function MapControls({ available, capabilities, layers, open: requestedOpen, onOpen, onToggle, compass }: {
   available: boolean; layers: TrafficLayerPreferences; open: boolean;
+  capabilities?: MapLayerCapabilities;
   compass?: ReactNode;
   onOpen: () => void; onToggle: (layer: keyof TrafficLayerPreferences) => void;
 }) {
+  const supported = capabilities ?? { traffic: available, incidents: available };
+  const anyAvailable = supported.traffic || supported.incidents;
+  const open = requestedOpen && anyAvailable;
   const tap = (action: () => void) => { void semanticHaptics('toggle'); action(); };
   const { reducedMotion } = useMotionPolicy();
   const theme = useVimaTheme();
@@ -66,12 +70,12 @@ export function MapControls({ available, layers, open, onOpen, onToggle, compass
       <Animated.View testID="passenger-layers-menu" pointerEvents={open ? 'auto' : 'none'}
         accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
         onLayout={(event) => setMenuHeight(event.nativeEvent.layout.height)} style={[styles.menu, presentation.floating, menuMotion]}>
-        {!available ? <VimaText variant="caption" style={{ color: theme.roles.disabledText }}>Capas no disponibles</VimaText> : null}
+        {!anyAvailable ? <VimaText variant="caption" style={{ color: theme.roles.disabledText }}>Capas no disponibles</VimaText> : null}
         {(['traffic', 'incidents'] as const).map((layer) => <LayerMenuRow key={layer} layer={layer}
-          available={available} checked={layers[layer]} onPress={() => tap(() => onToggle(layer))} />)}
+          available={supported[layer]} checked={layers[layer]} onPress={() => tap(() => onToggle(layer))} />)}
       </Animated.View>
     </Animated.View>
-    <MapControl label="Capas del mapa" icon="layers" active={open || !closed || available && (layers.traffic || layers.incidents)}
+    <MapControl label="Capas del mapa" icon="layers" disabled={!anyAvailable} active={open || !closed || supported.traffic && layers.traffic || supported.incidents && layers.incidents}
       expanded={open || !closed} onPress={() => { revision.current += 1; setClosed(false); tap(onOpen); }} />
   </ElementEntrance>;
 }

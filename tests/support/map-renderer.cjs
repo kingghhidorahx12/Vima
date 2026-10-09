@@ -5,9 +5,9 @@ const React = require('react');
 const renderer = require('react-test-renderer');
 const { transformSync } = require('@babel/core');
 
-function createMapHarness({ reduced = false } = {}) {
+function createMapHarness({ reduced = false, realMotion = false, realTheme = false, fileOverrides = {}, externalOverrides = {} } = {}) {
   const root = path.resolve(__dirname, '../..');
-  const modules = new Map(); const calls = []; const reactions = []; const frames = [];
+  const modules = new Map(); const calls = []; const reactions = []; const frames = []; const frameCallbacks = new Set();
   const policy = { allowDecorativeLoops: !reduced, reducedMotion: reduced, allowCameraAnimation: !reduced };
   const sample = { current: null, get() { return this.current; }, set(v) { this.current = v; } };
   const poses = { current: null, get() { return this.current; }, set(v) { this.current = v; } };
@@ -27,6 +27,7 @@ function createMapHarness({ reduced = false } = {}) {
   }
   const appListeners = new Set();
   const native = { AppState: { currentState: 'active', addEventListener: (_event, fn) => { appListeners.add(fn); return { remove: () => appListeners.delete(fn) }; } }, View: 'View', Image: 'Image', Platform: { OS: 'android' },
+    Pressable: 'Pressable', Text: 'Text', ActivityIndicator: 'ActivityIndicator',
     StyleSheet: { create: s => s, absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } } };
   const animated = {
     __esModule: true, default: { View: 'View', createAnimatedComponent: Component => function Animated(props) {
@@ -35,6 +36,9 @@ function createMapHarness({ reduced = false } = {}) {
     useSharedValue: initial => { const value = React.useRef(initial); return React.useMemo(() =>
       ({ get: () => value.current, set: v => { value.current = v; } }), []); },
     useAnimatedProps: fn => fn(), useAnimatedStyle: fn => fn(),
+    runOnJS: fn => fn,
+    useFrameCallback: fn => { const latest = React.useRef(fn); latest.current = fn;
+      React.useEffect(() => { frameCallbacks.add(latest); return () => frameCallbacks.delete(latest); }, []); },
     useAnimatedReaction: (prepare, react) => {
       const latest = React.useRef({ prepare, react }); latest.current = { prepare, react };
       React.useEffect(() => { const entry = { latest, previous: undefined }; reactions.push(entry);
@@ -44,20 +48,24 @@ function createMapHarness({ reduced = false } = {}) {
     withRepeat: value => { calls.push(['repeat']); return value; }, ReduceMotion: { Never: 0, System: 1 },
   };
   const overrides = {
-    react: React, 'react-native': native,
+    react: React, 'react-native': native, 'expo-haptics': { selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} },
     'react-native-reanimated': animated, 'react-native-worklets': { scheduleOnRN: (fn, ...args) => fn(...args) },
     '@maplibre/maplibre-react-native': { Map: component('MapLibreMap'), Marker: component('MapLibreMarker'),
       Camera: component('MapLibreCamera'), GeoJSONSource: component('MapLibreSource'),
-      VectorSource: component('MapLibreVectorSource'), Layer: component('MapLibreLayer') },
+      VectorSource: component('MapLibreVectorSource'), Layer: component('MapLibreLayer'), Images: component('MapLibreImages'),
+      TransformRequestManager: { addHeader: () => 1, removeHeader: () => {} } },
+    ...externalOverrides,
   };
   function load(file) {
     const absolute = path.resolve(root, file);
-    if (absolute.endsWith('ReducedMotion.tsx')) return { useMotionPolicy: () => policy };
-    if (absolute.endsWith(path.join('design', 'themes', 'index.tsx'))) return {
+    const relative = path.relative(root, absolute).replaceAll('\\', '/');
+    if (fileOverrides[relative]) return fileOverrides[relative];
+    if (absolute.endsWith('ReducedMotion.tsx')) return { useMotionPolicy: () => policy, ReducedMotionProvider: ({ children }) => children };
+    if (!realTheme && absolute.endsWith(path.join('design', 'themes', 'index.tsx'))) return {
       useVimaTheme: () => load('src/design/themes/light.ts').lightTheme,
     };
     // Existing vehicle interpolation is tested separately; this boundary checks native pose dispatch.
-    if (absolute.endsWith('useVehicleMotion.ts')) return { useVehicleMotion: () => poses };
+    if (!realMotion && absolute.endsWith('useVehicleMotion.ts')) return { useVehicleMotion: () => poses };
     if (modules.has(absolute)) return modules.get(absolute).exports;
     if (absolute.endsWith('.json')) return JSON.parse(fs.readFileSync(absolute, 'utf8'));
     const module = { exports: {} }; modules.set(absolute, module);
@@ -80,7 +88,8 @@ function createMapHarness({ reduced = false } = {}) {
       id => { frames[id - 1] = null; });
     return module.exports;
   }
-  return { load, calls, sample, poses, policy, appState: state => appListeners.forEach(fn => fn(state)), act: renderer.act,
+  return { load, calls, sample, poses, policy, frame: timestamp => frameCallbacks.forEach(ref => ref.current({ timestamp })),
+    appState: state => appListeners.forEach(fn => fn(state)), act: renderer.act,
     async render(element) { let tree; await renderer.act(async () => { tree = renderer.create(element); }); return tree; },
     async flush() { await renderer.act(async () => {
       for (const entry of [...reactions]) {

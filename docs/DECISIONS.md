@@ -252,3 +252,20 @@ Snapshot v4 deduplica bases por contenido y migra activos sólo con equivalencia
 comprobada; no hay fallback comercial. Offline Driver sólo post-PIN mediante
 journal de intenciones y GET antes de replay. PIN nunca se expone en DriverState.
 Detalles y QA pendiente en TRIP_LIFECYCLE_P0.md.
+
+## Theme persistente y Driver Map v1 — aprobado 2026-10-09
+
+- Theme global con prioridad `stored > env default > light`; sólo light/dark.
+  Fonts y lectura de preferencias bloquean el primer montaje productivo. Toggle
+  runtime comparte autoridad en Passenger/Driver, sin keys/remount; escrituras
+  serializadas en LocalPreferences conservan reducedMotion. Environment es sólo
+  default, no override de la preferencia una vez montada.
+- Driver representa exclusivamente DriverState: vehículo real, pickup en
+  OFFER/ASSIGNED/ARRIVED_PICKUP y routeToOrigin sólo ASSIGNED. Nada de rutas
+  post-PIN ni nuevos campos Offer. Artwork local 52×64/visual 38×50, halos 56/72
+  one-shot y paletas light/dark con igual geometría. Heading desconocido conserva
+  null; válido posterior o último válido son la autoridad. Essential motion Driver
+  es opt-in y conserva fences, sin cambiar el default Reduced Motion Passenger.
+- Cámara sólo primera adquisición y entradas OFFER/ASSIGNED/IN_PROGRESS;
+  chrome Sol/Luna→brújula→Capas en overlay sin layout. Capacidades por capa,
+  disabled cuando faltan; custom map styles permanecen autoritativos.

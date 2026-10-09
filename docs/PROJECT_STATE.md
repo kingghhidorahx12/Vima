@@ -1,13 +1,61 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-09 en `codex/trip-lifecycle-settlement-p0`,
-desde `codex/qa-launcher-optional-adb-cloudflared-local-p0` @ `16e2f292`.
+Actualizado 2026-10-09 en `codex/driver-map-theme-toggle-p0`,
+desde `codex/passenger-structural-sharing-cross-id-fix-p0` @ `974c539bec39d68741357efbf48deae0bbc4a003`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Driver Map v1 y preferencia global Sol/Luna — 2026-10-09
+
+- `DriverVehicleMarker` sustituye el puck Passenger. Artwork propio local SVG +
+  PNG 1x/3x light/dark: footprint 52×64, automóvil 38×50, halo base 56 y adquisición
+  one-shot hasta 72; misma geometría en ambos themes, sin loops ni recursos remotos.
+  La fuente animada mantiene la cadencia existente de 12 Hz y el vehículo queda
+  sobre ruta/Traffic/basemap. Sin location real no hay feature; Atlacomulco sólo
+  sirve de cámara fallback.
+- Matriz autoritativa: OFFLINE/LOCATING/AVAILABLE/PAUSED sólo vehículo con location;
+  OFFER vehículo + pickup sin ruta; ASSIGNED añade `routeToOrigin` existente;
+  ARRIVED_PICKUP conserva pickup sin ruta; IN_PROGRESS/PAYMENT_PENDING/terminal
+  no agregan geometría ni navegación. Primitive pickup compartido conserva el
+  artwork/motion Passenger. Offer, CTAs, contratos y lifecycle no cambian.
+- Heading Driver opcional: conserva último válido [0,360), arco corto 359→0;
+  sin histórico permanece null y usa símbolo alineado al viewport sin rotación
+  geográfica inventada. Scope de sesión conserva el boundary por cuenta existente.
+  Opción explícita essential en `useVehicleMotion` mantiene smoothing funcional
+  con Reduced Motion; Passenger default, validación estricta y fences permanecen.
+- Cámara por intención: primera location real, entrada a OFFER, ASSIGNED e
+  IN_PROGRESS. GPS/revisions/countdown/ARRIVED/PAYMENT no generan nuevos fits.
+  Brújula sólo solicita bearing=0. Chrome derecho Sol/Luna 40×40, brújula y Capas
+  usa `RideShell.mapOverlay` absoluto/box-none antes del sheet, sin cambiar sus
+  mediciones ni geometría. No se remonta mapa/shell durante cambio de fase/theme.
+- Capabilities separadas traffic/incidents derivadas de display key y endpoints
+  reales configurados; no se renderiza capa unavailable aunque la preferencia
+  esté activa. Row individual disabled; ambas ausentes deshabilitan Capas.
+  Se reutilizan layers, preferencias y cierre sincronizado del menú.
+- Preferencia global: `stored > env default > light`, únicamente light/dark.
+  Root espera fonts + preferencias; storage inválido/fallido usa default sin flash
+  productivo. Toggle actualiza inmediatamente context/StatusBar/mapVariant y
+  serializa escrituras en el registro existente preservando reducedMotion.
+  Sun/light_mode U+E518 y moon/dark_mode U+E51C verificados en cmap bundled.
+  Crossfade/rotación discreta usa timing focus; Reduced Motion sólo crossfade.
+  URLs custom de mapa siguen autoritativas.
+- **VERIFICADO automatizado:** suite completa **321/321** (12 nuevos focales),
+  gateway/matching/lifecycle/pricing **87/87**, TypeScript, lint, worklets (22),
+  splash, schema MapLibre, exports Hermes release Android/iOS y bundles DEV.
+  Fixture isolation DEV/release y checks release pricing/server/paths/credenciales
+  pasan. Expo Doctor **20/21** sólo por los cinco patches SDK 57 ya conocidos;
+  no se actualizaron dependencias. Warning Node MODULE_TYPELESS_PACKAGE_JSON
+  preexistente, no bloqueante. Sin cambios nativos ni nuevo Development Build.
+- **Android físico PENDIENTE:** verificar assets/densidad/halo en ambos themes,
+  heading ausente→válido y 359→0, smoothing/RM/reconnect, pan sin seguimiento GPS,
+  OFFER→ASSIGNED→ARRIVED→IN_PROGRESS→PAYMENT, norte sin mover centro/zoom, capas
+  y safe-area/CTAs. Probar toggle rápido, reinicio con tema guardado y continuidad
+  global Passenger↔Driver sin flash/remount. Lifecycle/pricing/backend/identidad
+  Passenger permanecen fuera del diff.
 
 ### Structural sharing Passenger aislado por identidad — 2026-10-09
 

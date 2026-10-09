@@ -1,20 +1,26 @@
 import { useAnimatedReaction, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { useMotionPolicy } from '../motion/ReducedMotion';
-import { canInterpolateVehicle, interpolateVehiclePose, validateVehicleSample, vehicleUpdatesPerSecond,
-  type VehiclePose, type VehicleMotionConfig, type VehicleSample } from './vehicleMotion';
+import { canInterpolateVehicle, interpolateDriverVehiclePose, validateVehicleSample, validateDriverVehicleSample, validHeading, vehicleUpdatesPerSecond,
+  type DriverVehiclePose, type DriverVehicleSample, type VehiclePose, type VehicleMotionConfig, type VehicleSample } from './vehicleMotion';
 
 /** Incoming telemetry writes sample.value; React is not part of the visual loop. */
-export function useVehicleMotion(sample: SharedValue<VehicleSample | null>, config?: VehicleMotionConfig) {
+export function useVehicleMotion(sample: SharedValue<VehicleSample | null>, config?: VehicleMotionConfig): SharedValue<VehiclePose | null>;
+export function useVehicleMotion(sample: SharedValue<DriverVehicleSample | null>, config: VehicleMotionConfig,
+  options: { driver: true; essential: true }): SharedValue<DriverVehiclePose | null>;
+export function useVehicleMotion(sample: SharedValue<VehicleSample | null> | SharedValue<DriverVehicleSample | null>, config?: VehicleMotionConfig,
+  options?: { driver: true; essential: true }): SharedValue<VehiclePose | null> | SharedValue<DriverVehiclePose | null> {
   const { reducedMotion } = useMotionPolicy();
-  const pose = useSharedValue<VehiclePose | null>(null);
-  const target = useSharedValue<VehiclePose | null>(null);
-  const origin = useSharedValue<VehiclePose | null>(null);
+  const reducePosition = reducedMotion && !options?.essential;
+  const pose = useSharedValue<DriverVehiclePose | null>(null);
+  const target = useSharedValue<DriverVehiclePose | null>(null);
+  const origin = useSharedValue<DriverVehiclePose | null>(null);
+  const heading = useSharedValue<number | null>(null);
   const sequence = useSharedValue<number | null>(null);
   const started = useSharedValue<number | null>(null);
   const lastUpdate = useSharedValue<number | null>(null);
   const active = useSharedValue(false);
 
-  useAnimatedReaction(() => ({ sample: sample.get(), reducedMotion }), (next, previous) => {
+  useAnimatedReaction(() => ({ sample: sample.get(), reducedMotion: reducePosition }), (next, previous) => {
     if (next.sample === null) {
       active.set(false);
       pose.set(null);
@@ -28,12 +34,14 @@ export function useVehicleMotion(sample: SharedValue<VehicleSample | null>, conf
       pose.set(target.get());
     }
     const incoming = next.sample;
-    if (!incoming || !validateVehicleSample(incoming) || incoming === previous?.sample) return;
+    if (!incoming || !(options?.driver ? validateDriverVehicleSample(incoming) : validateVehicleSample(incoming as VehicleSample)) || incoming === previous?.sample) return;
     const lastSequence = sequence.get();
     if (!incoming.reconnected && lastSequence !== null && incoming.sequence <= lastSequence) return;
     sequence.set(incoming.sequence);
-    target.set({ coordinate: incoming.coordinate, heading: incoming.heading });
-    active.set(canInterpolateVehicle(pose.get()?.coordinate ?? null, incoming, next.reducedMotion, config));
+    if (validHeading(incoming.heading)) heading.set(incoming.heading);
+    target.set({ coordinate: incoming.coordinate, heading: heading.get() });
+    // Interpolation gates only read coordinate/reconnect; authority validation happened above.
+    active.set(canInterpolateVehicle(pose.get()?.coordinate ?? null, incoming as VehicleSample, next.reducedMotion, config));
     origin.set(pose.get());
     started.set(null);
     lastUpdate.set(null);
@@ -56,7 +64,7 @@ export function useVehicleMotion(sample: SharedValue<VehicleSample | null>, conf
       active.set(false);
       return;
     }
-    pose.set(interpolateVehiclePose(from, to, Math.min(1, Math.max(0, eased))));
+    pose.set(interpolateDriverVehiclePose(from, to, Math.min(1, Math.max(0, eased))));
   });
   return pose;
 }

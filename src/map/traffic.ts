@@ -10,6 +10,12 @@ export function parseTrafficLayers(value: unknown): TrafficLayerPreferences {
 
 export function displayKeyAvailable(value: string | undefined): boolean { return !!value?.trim(); }
 
+export type MapLayerCapabilities = Readonly<{ traffic: boolean; incidents: boolean }>;
+export function mapLayerCapabilities(displayKey: string | undefined, sources: { flow?: string; incidents?: string } = trafficTileUrls): MapLayerCapabilities {
+  return { traffic: displayKeyAvailable(displayKey) && !!sources.flow,
+    incidents: displayKeyAvailable(displayKey) && !!sources.incidents };
+}
+
 /** TomTom Orbis Traffic API v2. The key is sent as a scoped native request header. */
 export const trafficTileUrls = {
   flow: 'https://api.tomtom.com/maps/orbis/traffic/flow/vector/tile/{z}/{x}/{y}?apiVersion=2',

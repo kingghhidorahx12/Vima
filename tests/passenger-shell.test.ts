@@ -754,7 +754,11 @@ async function measure(tree: ReactTestRenderer, content = 250, header = 28) {
   return visible;
 }
 
-test('global status chrome leaves Passenger edge-to-edge geometry and safe chrome intact', async () => {
+test('global status chrome leaves Passenger edge-to-edge geometry and safe chrome intact', async context => {
+  const previous = process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY;
+  process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY = 'display-test-only';
+  context.after(() => { if (previous === undefined) delete process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY;
+    else process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY = previous; });
   for (const [top, bottom] of [[0, 0], [24, 16], [48, 34]]) {
     const h = createHarness({}, { insets: { top, bottom, left: 0, right: 0 } });
     const fixture = createPassengerFixtureGateway(clock); const tree: ReactTestRenderer = await h.render(fixture.gateway);

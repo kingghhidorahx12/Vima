@@ -13,10 +13,9 @@ import { createDriverActions } from '../../services/matching/driverActions';
 import { DriverRideShell } from '../../features/driver/DriverRideShell';
 import { DriverStatePanel } from '../../features/driver/DriverStatePanel';
 import { DriverOffer } from '../../features/driver/DriverOffer';
-import { driverMapFallback, type DriverConnection } from '../../features/driver/driverPresentation';
+import { type DriverConnection } from '../../features/driver/driverPresentation';
 import { useVimaTheme } from '../../design/themes';
-import { Camera } from '../../map/Camera';
-import { PassengerUserLocation } from '../../features/passenger/PassengerMapPin';
+import { useDriverMap } from '../../features/driver/useDriverMap';
 import { createDriverLocationSession, type DriverLocationStopReason } from './locationSession';
 import { driverOperationId } from '../../services/matching/operationId';
 
@@ -116,15 +115,8 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     return () => { clearTimeout(initial); clearInterval(timer); };
   }, [expiresAt]);
   const data = state.data; const offer = data?.offer;
-  const location = data?.location;
-  const target = location?.coordinate ?? driverMapFallback;
-  return <SafeAreaView style={[styles.fill, { backgroundColor: theme.roles.background }]}><DriverRideShell mapContent={<>
-    <Camera target={{ center: target, zoom: 14 }} />
-    {location ?
-    <PassengerUserLocation active={availability === 'LOCATING' && foreground && focused}
-      place={{ id: 'driver-current', name: '', address: '', coordinate: location.coordinate }} />
-      : null}
-  </>} renderPhase={() => offer ?
+  const driverMap = useDriverMap(data, connection === 'online');
+  return <SafeAreaView style={[styles.fill, { backgroundColor: theme.roles.background }]}><DriverRideShell {...driverMap} renderPhase={() => offer ?
     <DriverOffer offer={offer} revision={data!.revision} now={now} disabled={busy || !!pending.current}
       error={error} retryAvailable={!!pending.current} retryDisabled={busy}
       onAccept={() => { void actions.startDriverAction({ kind: 'offer_accept', offerId: offer.id, requestId: offer.requestId }); }}

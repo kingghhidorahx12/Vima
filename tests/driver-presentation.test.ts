@@ -200,10 +200,10 @@ test('Driver controller stays functional and presentation contains no debug iden
   assert.doesNotMatch(offer, /destino|distancia|tarifa|ganancia/i);
 });
 
-test('Driver uses one Atlacomulco fallback and location pulse is exclusive to LOCATING', () => {
+test('Driver uses the shared real vehicle map; fallback never fabricates a location', () => {
   assert.deepEqual(driverMapFallback, [-99.88795, 19.79021]);
   const screen = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
-  assert.match(screen, /const target = location\?\.coordinate \?\? driverMapFallback/);
-  assert.match(screen, /active=\{availability === 'LOCATING' && foreground && focused\}/);
+  assert.match(screen, /useDriverMap\(data, connection === 'online'\)/);
+  assert.doesNotMatch(screen, /PassengerUserLocation/);
   assert.doesNotMatch(screen, /zoom:\s*[0123]\b/);
 });

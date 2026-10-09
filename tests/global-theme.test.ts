@@ -19,7 +19,7 @@ const clock = { after: () => () => {}, delay: async () => {} };
 const flatten = (style: unknown) => Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
 
-test('one root provider selects the global DEV theme and Driver cannot override it', () => {
+test('one root provider owns the global theme and Driver cannot override it', () => {
   const root = readFileSync('src/providers/RootProviders.tsx', 'utf8');
   const driver = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
   const map = readFileSync('src/map/VimaMap.tsx', 'utf8');
@@ -30,7 +30,7 @@ test('one root provider selects the global DEV theme and Driver cannot override 
   assert.match(map, /theme\.roles\.mapVariant/);
   assert.match(map, /EXPO_PUBLIC_MAP_STYLE_DARK_URL/);
   assert.equal(resolveVimaThemeName(true, 'dark'), 'dark');
-  assert.equal(resolveVimaThemeName(false, 'dark'), 'light');
+  assert.equal(resolveVimaThemeName(false, 'dark'), 'dark');
 });
 
 test('light and dark implement the same closed semantic contract', () => {

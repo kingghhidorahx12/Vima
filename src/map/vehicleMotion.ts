@@ -20,6 +20,25 @@ export interface VehicleMotionConfig {
   readonly shouldSnap: (from: Coordinate, to: Coordinate) => boolean;
 }
 
+/** Driver GPS may not yet have a direction. This does not weaken VehicleSample. */
+export interface DriverVehiclePose { readonly coordinate: Coordinate; readonly heading: number | null }
+export interface DriverVehicleSample extends DriverVehiclePose { readonly sequence: number; readonly reconnected?: boolean }
+export function validHeading(value: unknown): value is number {
+  'worklet';
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 360;
+}
+export function validateDriverVehicleSample(sample: DriverVehicleSample): boolean {
+  'worklet';
+  const [lng, lat] = sample.coordinate;
+  return Number.isSafeInteger(sample.sequence) && Number.isFinite(lng) && Number.isFinite(lat) &&
+    lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90;
+}
+export function interpolateDriverVehiclePose(from: DriverVehiclePose, to: DriverVehiclePose, progress: number): DriverVehiclePose {
+  'worklet';
+  return { coordinate: interpolateCoordinate(from.coordinate, to.coordinate, progress),
+    heading: from.heading === null || to.heading === null ? to.heading : interpolateHeading(from.heading, to.heading, progress) };
+}
+
 /** Technical update budget requested in P0, not a Motion System duration. */
 export const vehicleUpdatesPerSecond = 12;
 

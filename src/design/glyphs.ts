@@ -8,4 +8,5 @@ export const glyphCodepoints = {
   health: 0xf109, transport: 0xe530, close: 0xe5cd, check: 0xe5ca,
   traffic: 0xe565, info: 0xe88e, warning: 0xe002,
   phone: 0xe0cd, shield: 0xe9e0, star: 0xe838, refresh: 0xe5d5,
+  sun: 0xe518, moon: 0xe51c,
 } as const;

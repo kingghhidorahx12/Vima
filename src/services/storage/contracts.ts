@@ -1,3 +1,4 @@
+import type { VimaThemeName } from '../../design/themes/index';
 /** Only recovery metadata. No coordinates, identity, phase, secrets or payment data. */
 export interface TripRecoverySnapshot {
   readonly version: 1;
@@ -9,7 +10,7 @@ export interface TripRecoverySnapshot {
 export interface LocalPreferences {
   readonly version: 1;
   readonly reducedMotion: 'system' | 'reduce';
-  readonly themeName?: string;
+  readonly themeName?: VimaThemeName;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -26,11 +27,10 @@ export function sanitizeSnapshot(value: unknown): TripRecoverySnapshot | null {
 
 export function sanitizePreferences(value: unknown): LocalPreferences | null {
   if (!isRecord(value) || value.version !== 1 ||
-      (value.reducedMotion !== 'system' && value.reducedMotion !== 'reduce') ||
-      (value.themeName !== undefined && typeof value.themeName !== 'string')) return null;
+      (value.reducedMotion !== 'system' && value.reducedMotion !== 'reduce')) return null;
   return {
     version: 1,
     reducedMotion: value.reducedMotion,
-    ...(value.themeName === undefined ? {} : { themeName: value.themeName as string }),
+    ...(value.themeName === 'light' || value.themeName === 'dark' ? { themeName: value.themeName } : {}),
   };
 }

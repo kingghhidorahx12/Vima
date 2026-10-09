@@ -786,7 +786,11 @@ test('live quote UI keeps valid snapshots across reconnect and requires a new re
   } finally { await h.act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('map control press feedback and layer switches use approved timing and obey Reduced Motion', async () => {
+test('map control press feedback and layer switches use approved timing and obey Reduced Motion', async context => {
+  const previous = process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY;
+  process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY = 'display-test-only';
+  context.after(() => { if (previous === undefined) delete process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY;
+    else process.env.EXPO_PUBLIC_TOMTOM_DISPLAY_KEY = previous; });
   for (const reduced of [false, true]) {
     const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { reduced });
     const tree: ReactTestRenderer = await h.render(fixture.gateway);

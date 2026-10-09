@@ -46,6 +46,13 @@ export interface VimaTheme {
 }
 
 const ThemeContext = createContext<VimaTheme | null>(null);
+export interface VimaThemeControl { name: VimaThemeName; setTheme(name: VimaThemeName): void; toggleTheme(): void }
+export const VimaThemeControlContext = createContext<VimaThemeControl | null>(null);
+export function useVimaThemeControl() {
+  const control = useContext(VimaThemeControlContext);
+  if (!control) throw new Error('Theme control requires RootProviders');
+  return control;
+}
 
 /** Only approved themes may be mounted. */
 export function VimaThemeProvider({ theme, children }: PropsWithChildren<{ theme: VimaTheme }>) {
