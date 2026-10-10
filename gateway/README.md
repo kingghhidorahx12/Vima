@@ -1,7 +1,8 @@
 # Gateway geoespacial Vima P0
 
-Node >=22.13 y TypeScript con el toolchain existente; sin framework, base de datos, auth,
-matching ni pagos. Es un servidor local de validación P0, **no un backend productivo**.
+Node >=22.13 y TypeScript con el toolchain existente, sin framework ni base de datos adicional.
+Incluye AuthConfig, matching y lifecycle con almacenamiento durable. Admite validación local
+y QA interno persistente; el producto público todavía no está habilitado.
 
 ## Ejecutar
 
@@ -95,3 +96,10 @@ Contratos públicos permanecen en `src/services/geospatial/` y no importan el se
 Basemap sigue independiente mediante `EXPO_PUBLIC_MAP_STYLE_URL`. No reutilices la key servidor
 para tiles cliente. Orbis visual/política de credencial cliente sigue pendiente, sin proxy improvisado.
 Ver [contrato](../docs/TOMTOM_GEOSPATIAL.md) y [ground truth](../docs/ATLACOMULCO_GROUND_TRUTH.md).
+
+## QA persistente
+
+El gateway actual incorpora AuthConfig, matching y lifecycle. El modo local permanece compatible.
+Para QA Railway ver [guía QA release](../docs/QA_RELEASE.md): `PORT` tiene prioridad sobre
+`VIMA_GEO_PORT`; `VIMA_BACKEND_MODE=qa` exige Bearer y HTTPS en todo `/v1/**`.
+`/health` es liveness; `/ready` verifica configuración y recuperación durable, sin llamadas TomTom.

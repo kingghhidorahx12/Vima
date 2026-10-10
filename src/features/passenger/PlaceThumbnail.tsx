@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph';
@@ -21,6 +21,15 @@ function fallback(place: PlaceSuggestion): { icon: VimaGlyphName; tone: 'positiv
 /** Media never participates in Search; the fixed container remains while the photo loads or fails. */
 export function PlaceThumbnail({ place, resolveMedia, size = 48 }: { place: PlaceSuggestion; resolveMedia?: PlaceMediaResolver; size?: number }) {
   const theme = useVimaTheme();
+  const [credential, setCredential] = useState<string | null>(null);
+  useEffect(() => {
+    if (process.env.EXPO_PUBLIC_VIMA_VARIANT !== 'qa') return;
+    let active = true;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- QA-only authenticated image transport.
+    const { credentials } = require('../../services/storage/credentials') as typeof import('../../services/storage/credentials');
+    void credentials.read().then(value => { if (active) setCredential(value); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   const canonicalPlaceId = place.canonicalId ?? place.id;
   const media = place.image && resolveMedia?.(canonicalPlaceId, place.image);
   const [failedKey, setFailedKey] = useState<string>();
@@ -29,8 +38,10 @@ export function PlaceThumbnail({ place, resolveMedia, size = 48 }: { place: Plac
     ? theme.roles.location : category.tone === 'danger' ? theme.roles.danger : theme.roles.control;
   return <View accessible={false} style={[styles.container, { width: size, height: size, backgroundColor: theme.roles.subtleSurface }]}>
     <VimaGlyph name={category.icon} color={color} />
-    {media && failedKey !== media.cacheKey ? <Image key={media.cacheKey}
-      source={{ uri: media.uri, cacheKey: media.cacheKey }} cachePolicy="memory-disk"
+    {media && (process.env.EXPO_PUBLIC_VIMA_VARIANT !== 'qa' || credential) && failedKey !== media.cacheKey ? <Image key={media.cacheKey}
+      source={{ uri: media.uri, cacheKey: media.cacheKey,
+        ...(credential && new URL(media.uri).origin === new URL(process.env.EXPO_PUBLIC_VIMA_API_BASE_URL!).origin
+          ? { headers: { Authorization: 'Bearer ' + credential } } : {}) }} cachePolicy={process.env.EXPO_PUBLIC_VIMA_VARIANT === 'qa' ? 'none' : 'memory-disk'}
       recyclingKey={canonicalPlaceId} contentFit="cover" transition={180}
       onError={() => setFailedKey(media.cacheKey)} style={styles.image} /> : null}
   </View>;

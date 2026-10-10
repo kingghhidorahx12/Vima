@@ -50,7 +50,6 @@ function createMapHarness({ reduced = false, realMotion = false, realTheme = fal
   const overrides = {
     react: React, 'react-native': native, 'expo-haptics': { selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} },
     'react-native-reanimated': animated, 'react-native-worklets': { scheduleOnRN: (fn, ...args) => fn(...args) },
-    'expo-blur': { BlurView: 'BlurView', BlurTargetView: component('BlurTargetView') },
     '@maplibre/maplibre-react-native': { Map: component('MapLibreMap'), Marker: component('MapLibreMarker'),
       Camera: component('MapLibreCamera'), GeoJSONSource: component('MapLibreSource'),
       VectorSource: component('MapLibreVectorSource'), Layer: component('MapLibreLayer'), Images: component('MapLibreImages'),

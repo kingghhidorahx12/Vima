@@ -269,3 +269,19 @@ Detalles y QA pendiente en TRIP_LIFECYCLE_P0.md.
 - Cámara sólo primera adquisición y entradas OFFER/ASSIGNED/IN_PROGRESS;
   chrome Sol/Luna→brújula→Capas en overlay sin layout. Capacidades por capa,
   disabled cuando faltan; custom map styles permanecen autoritativos.
+
+## QA release y backend persistente — 2026-10-09
+
+Decisión ratificada: variantes development/qa/production independientes; QA release interno
+usa EAS preview, channel qa → branch qa, runtime appVersion. Cambios nativos requieren
+nueva app.version y binario; OTA sólo compatible. Producción permanece bloqueada. Railway
+usa una réplica/coordinador, volumen /data y /ready; Bearer + HTTPS en todo /v1/** en QA.
+Secrets/config servidor externos; SecureStore para credenciales del tester. Launcher local
+y Quick Tunnel siguen disponibles. Sin CI/CD ni nueva autoridad de matching.
+
+## Vima Glass descartado — 2026-10-09
+
+El usuario prefiere la interfaz anterior y descarta Glass. Se integra la reversión
+6ed4ebf26d06d2bfcd2636abc65d618b6405c355 del worktree independiente, conservando
+los cambios QA/EAS/Railway pendientes. Se retiran primitive/tokens y expo-blur.
+Sol/Luna, marcador Driver y lifecycle permanecen. No es una nueva ronda de diseño.

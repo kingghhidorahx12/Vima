@@ -45,16 +45,6 @@ export const lightTheme = {
   name: 'light',
   tokens: visualTokens,
   roles: lightThemeRoles,
-  glass: {
-    base: 'rgba(229, 235, 238, 0.66)',
-    border: 'rgba(255, 255, 255, 0.68)',
-    highlight: 'rgba(255, 255, 255, 0.44)',
-    pressed: 'rgba(218, 225, 229, 0.78)',
-    disabled: 'rgba(229, 235, 238, 0.48)',
-    shadow: visualTokens.colors.carbon,
-    tint: 'light',
-    intensity: 46,
-  },
   surfaces: {
     screen: { backgroundColor: lightThemeRoles.background },
     contrast: { backgroundColor: semanticColors.contrastSurface },

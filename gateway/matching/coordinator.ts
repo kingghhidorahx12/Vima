@@ -334,6 +334,7 @@ export class MatchingCoordinator {
       }
     }
   }
+  get ready() { return !this.failed && !this.closed; }
   async start() { await this.lock(() => { this.sweep(); }); this.kick(); }
   close() { this.closed = true; this.cancelTimer?.(); for (const listener of [...this.listeners]) listener(); }
   private lock<T>(work: () => T | Promise<T>): Promise<T> {

@@ -1,7 +1,7 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-09 en `codex/vima-glass-light-dark-p0`,
-desde `codex/driver-vehicle-worklet-interpolation-fix-p0` @ `c625d2a85562b9e8cb972646933e5f5b3215f90c`.
+Actualizado 2026-10-09 en `codex/qa-eas-update-railway-p0`,
+desde `codex/vima-glass-light-dark-p0` @ `811f8c6ce0aa870e148d8107ed9ce02deb89cbd5`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
@@ -9,30 +9,34 @@ sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
 
-### Vima Glass Light/Dark — 2026-10-09
+### QA EAS Update / Railway y descarte Glass — 2026-10-09
 
-- Un contrato visual compartido aplica vidrio gris frío translúcido en Light y
-  carbón translúcido en Dark a chrome flotante, controles de mapa, Home/Search,
-  títulos/micro-superficies sobre mapa y al input técnico del acceso DEV. Mantiene
-  sólida la superficie principal de `VimaRideSheet`, listas/cards de contenido,
-  navegación inferior, CTAs, Offer Driver, settlement/payment y errores críticos.
-- `VimaGlassSurface` recibe la geometría del caller y sólo añade blur, tint,
-  borde, highlight y elevación. `RideShell` expone un único `BlurTargetView`
-  compartido para Passenger y Driver; Android 12+ usa
-  `dimezisBlurViewSdk31Plus`. Fuera del target o en Android anterior queda el
-  fallback translúcido con el mismo borde/highlight, sin targets redundantes ni
-  cambios de MapLibre, Camera, route-fit, lifecycle, matching o Motion.
-- Se añadió `expo-blur ~57.0.3`, compatible con Expo SDK 57. Requiere reconstruir
-  el Development Build. Login productivo sigue pendiente; `LiveAccountGate`
-  conserva exactamente su condición DEV, flujo y copy.
-- Validación automatizada: TypeScript, lint, worklets, 326/326 tests, gateway
-  87/87, MapLibre/style, aislamiento fixture/release, boundary de credenciales,
-  splash y export Hermes Android/iOS pasan. Expo Doctor conserva el estado
-  conocido 20/21 exclusivamente por cinco parches pendientes de SDK 57.
-- Android físico **PENDIENTE**: confirmar blur real y humo gris visible en Light,
-  contraste sin glow en Dark, fallback en Android <12, interacción, rendimiento
-  y geometría idéntica en Passenger Home/Search/review/confirm y Driver
-  AVAILABLE/OFFER.
+- Integrada la reversión aprobada `6ed4ebf`: Glass descartado; se recuperan
+  superficies anteriores y se elimina expo-blur. Sol/Luna, marker Driver,
+  Motion y lifecycle preservados. Capas Passenger conserva comportamiento
+  anterior: requiere EXPO_PUBLIC_TOMTOM_DISPLAY_KEY pública; provisionamiento
+  EAS preview pendiente. Ninguna clave se incorpora al repo.
+- Variantes development (.dev), qa (.qa), production (base), nombres/schemes
+  independientes. QA internal release APK, channel qa, environment preview;
+  expo-updates SDK57, runtime appVersion y versión 0.0.2. Requiere nuevo binario.
+- QA habilita pantallas live Passenger/Driver y acceso SecureStore con cambio
+  de cuenta/rol; fixtures/DevMenu/bootstrap siguen DEV. Producción bloqueada.
+  Media QA usa Bearer en headers y no caché de disco; sin tokens en referencias.
+- Railway: configuración repo para una réplica, PORT prioritario, 0.0.0.0,
+  volumen /data requerido en modo QA. Todo /v1/** exige AuthConfig/Bearer y
+  HTTPS proxy; /health público, /ready sólo tras recuperación durable y
+  configuración TomTom/pricing/auth. No se altera la autoridad de matching.
+- VERIFICADO: suite completa 325/325; focales presentación/acceso QA 7/7
+  (incluye regresión adicional SecureStore/rol/release); gateway 87/87; QA backend
+  3/3 con restart v4. TypeScript/lint/worklets/splash y exports Hermes Android/iOS
+  QA y production con cachés limpias. Aislamiento fixture/release/credenciales
+  y entry QA/prod pasan en ambos bundles. Expo Doctor 20/21 sólo cinco patches
+  SDK57 conocidos. Display key local ausente; no se verificó configuración EAS remota.
+- PENDIENTE: provisionar Railway/volumen/config privada/dominio HTTPS, variables
+  EAS preview/production, vínculo qa→qa; ejecutar EAS Build, instalar APK,
+  verificar PC/Metro apagado, OTA compatible y QA físico ambos roles/themes.
+  Ningún deploy, build remoto ni OTA se ejecutó. Ver docs/QA_RELEASE.md.
+
 
 ### Interpolación Driver autosuficiente en UI Runtime — 2026-10-09
 

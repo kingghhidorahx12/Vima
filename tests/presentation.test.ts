@@ -123,13 +123,11 @@ test('map controls use approved size, elevation, pressed surface and semantic ac
       const control = tree.root.findByProps({ accessibilityLabel: 'Capas del mapa' });
       const flat = (pressed: boolean) => Object.assign({}, ...control.props.style({ pressed }).filter(Boolean));
       assert.equal(flat(false).width, 44); assert.equal(flat(false).height, 44);
-      assert.equal(flat(false).backgroundColor, undefined);
+      assert.equal(flat(false).backgroundColor, '#FFFFFF');
       assert.equal(flat(false).borderColor, '#00D68F');
       assert.deepEqual(flat(false).boxShadow, [{ offsetX: 0, offsetY: 8, blurRadius: 24,
         spreadDistance: 0, color: 'rgba(11, 15, 14, 0.1)' }]);
-      const glassTint = control.findByProps({ testID: 'vima-glass-tint' });
-      assert.equal(Object.assign({}, ...[glassTint.props.style].flat(Infinity).filter(Boolean)).backgroundColor,
-        lightTheme.glass.base);
+      assert.equal(flat(true).backgroundColor, '#F7F8F7');
       const glyph = control.findByType('Text' as never);
       assert.equal(glyph.props.style[0].fontSize, 24);
       assert.equal(glyph.props.style[1].color, '#00D68F');
@@ -199,4 +197,36 @@ test('Home logo, internal surfaces, sheet, primary action and navigation follow 
       assert.deepEqual(colorLayers.map(n => n.props.style.at(-1).opacity), index === 0 ? [0, 1] : [1, 0]);
     }
   } finally { await h.act(async () => nav.unmount()); }
+});
+
+
+test('QA release gate restores SecureStore and validates role without DevMenu; production stays blocked', async () => {
+ const previous = process.env.EXPO_PUBLIC_VIMA_VARIANT;
+ Reflect.set(globalThis, '__DEV__', false);
+ process.env.EXPO_PUBLIC_VIMA_VARIANT = 'qa';
+ const h = createHarness();
+ const storage = h.load('src/services/storage/credentials.ts').credentials;
+ storage.read = async () => 'synthetic-test-token';
+ const api = h.load('src/services/api/client.ts'); api.createApiClient = () => ({});
+ const matching = h.load('src/services/matching/client.ts');
+ matching.createMatchingClient = () => ({ identity: async () => ({accountId:'qa-passenger',role:'passenger',matchingAvailable:true}) });
+ const { LiveAccountGate } = h.load('src/dev/LiveAccountGate.tsx');
+ let tree!: renderer.ReactTestRenderer;
+ const mount = (role: string) => React.createElement(h.QueryClientProvider,{client:h.client},
+  // eslint-disable-next-line react/no-children-prop
+  React.createElement(LiveAccountGate,{role,children:()=>React.createElement('Text',null,'live restored')}));
+ try {
+  await h.act(async()=>{tree=renderer.create(mount('passenger'));});
+  assert.ok(JSON.stringify(tree.toJSON()).includes('live restored'));
+  await h.act(async()=>{tree.unmount();});
+  await h.act(async()=>{tree=renderer.create(mount('driver'));});
+  assert.ok(JSON.stringify(tree.toJSON()).includes('Esta cuenta es Passenger'));
+  await h.act(async()=>{tree.unmount();});
+  process.env.EXPO_PUBLIC_VIMA_VARIANT = 'production';
+  await h.act(async()=>{tree=renderer.create(mount('passenger'));});
+  assert.equal(tree.toJSON(),null);
+ } finally {
+  await h.act(async()=>tree.unmount());h.client.clear();Reflect.set(globalThis,'__DEV__',true);
+  if(previous === undefined) delete process.env.EXPO_PUBLIC_VIMA_VARIANT; else process.env.EXPO_PUBLIC_VIMA_VARIANT=previous;
+ }
 });

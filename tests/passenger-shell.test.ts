@@ -1163,9 +1163,7 @@ test('confirmation title floats over the persistent map with approved geometry a
       assert.equal(pillStyle.paddingHorizontal, 16);
       assert.equal(pillStyle.width, undefined);
       assert.equal(pillStyle.borderRadius, 999);
-      assert.equal(pillStyle.backgroundColor, undefined);
-      assert.equal(style(pill.findByProps({ testID: 'vima-glass-tint' })).backgroundColor,
-        'rgba(229, 235, 238, 0.66)');
+      assert.equal(pillStyle.backgroundColor, '#FFFFFF');
       assert.equal(pillStyle.borderWidth, undefined);
       assert.deepEqual(pillStyle.boxShadow, [{ offsetX: 0, offsetY: 2, blurRadius: 8,
         spreadDistance: 0, color: 'rgba(11, 15, 14, 0.06)' }]);

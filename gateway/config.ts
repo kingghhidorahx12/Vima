@@ -6,6 +6,7 @@ export const devGatewayDefaults = {
   maxRateClients: 1000, maxResults: 10, maxUpstreamBytes: 4_000_000,
 } as const;
 export interface GatewayConfig {
+  qa?: boolean;
   host: string; port: number; sessionTtlMs: number; cleanupMs: number;
   upstreamTimeoutMs: number; rateWindowMs: number; rateLimit: number;
   maxBodyBytes: number; maxQueryLength: number; maxStops: number; maxSessions: number;
@@ -14,18 +15,19 @@ export interface GatewayConfig {
   runtimeDir?: string;
 }
 export function gatewayConfig(env: Readonly<Record<string, string | undefined>> = process.env): GatewayConfig {
-  const result: GatewayConfig = { ...devGatewayDefaults, logging: env.VIMA_GEO_LOGGING !== '0' };
+  if (env.VIMA_BACKEND_MODE && !['qa', 'local'].includes(env.VIMA_BACKEND_MODE)) throw new Error('invalid_backend_mode');
+  const result: GatewayConfig = { ...devGatewayDefaults, qa: env.VIMA_BACKEND_MODE === 'qa', logging: env.VIMA_GEO_LOGGING !== '0' };
   const names = { port: 'PORT', sessionTtlMs: 'SESSION_TTL_MS', cleanupMs: 'CLEANUP_MS',
     upstreamTimeoutMs: 'UPSTREAM_TIMEOUT_MS', rateWindowMs: 'RATE_WINDOW_MS', rateLimit: 'RATE_LIMIT' } as const;
   for (const [field, suffix] of Object.entries(names)) {
-    const value = env[`VIMA_GEO_${suffix}`];
+    const value = field === 'port' ? env.PORT ?? env.VIMA_GEO_PORT : env[`VIMA_GEO_${suffix}`];
     if (value !== undefined) {
       const number = Number(value);
       if (!Number.isSafeInteger(number) || number <= 0 || (field === 'port' && number > 65535)) throw new Error('invalid_gateway_config');
       result[field as keyof typeof names] = number;
     }
   }
-  result.host = env.VIMA_GEO_HOST?.trim() || result.host;
+  result.host = env.VIMA_GEO_HOST?.trim() || (env.PORT || result.qa ? '0.0.0.0' : result.host);
   if (env.VIMA_GEO_SERVICE_AREA_BOUNDS?.trim()) {
     const bounds = env.VIMA_GEO_SERVICE_AREA_BOUNDS.split(',').map(Number);
     if (bounds.length !== 4 || bounds.some(value => !Number.isFinite(value)) ||
@@ -33,6 +35,7 @@ export function gatewayConfig(env: Readonly<Record<string, string | undefined>> 
       bounds[0]! >= bounds[2]! || bounds[1]! >= bounds[3]!) throw new Error('invalid_gateway_config');
     result.serviceAreaBounds = bounds as [number, number, number, number];
   }
+  if (result.qa && !env.VIMA_GEO_RUNTIME_DIR?.startsWith('/')) throw new Error('qa_requires_durable_runtime_dir');
   result.runtimeDir = env.VIMA_GEO_RUNTIME_DIR?.trim() || '.runtime';
   return result;
 }

@@ -47,7 +47,8 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
     quote: (id, owner) => { const value = quotes.store.lookupOwned(id, owner); return value?.status === 'priced' ? value.quote : undefined; },
     eta: (origin, destination) => adapter.route({ origin, destination, stops: [] }, { signal: AbortSignal.timeout(config.upstreamTimeoutMs) }),
   }) : undefined;
-  const matchingReady = matching?.start();
+  let recovered = false;
+  const matchingReady = matching?.start().then(() => { recovered = true; }).catch(() => { recovered = false; });
   const media = options.media ?? emptyPlaceMediaCatalog();
   const attachImage = <T extends { id: string; canonicalId?: string; provenance?: string }>(place: T): T => {
     const image = place.provenance === 'vima-local' ? media.imageFor(place.canonicalId ?? place.id) : undefined;
@@ -75,6 +76,15 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       if (request.method === 'GET' && path === '/health') {
         endpoint = 'health'; reply(200, { status: 'ok', configured: options.configured === true }); return;
       }
+      if (request.method === 'GET' && path === '/ready') {
+        const ready = Boolean(options.configured && options.auth && options.pricing?.status === 'ready' && recovered && matching?.ready);
+        reply(ready ? 200 : 503, { status: ready ? 'ready' : 'unavailable' }); return;
+      }
+      if (config.qa && path.startsWith('/v1/')) {
+        if (!options.auth) throw new MatchingError(401, 'unauthorized');
+        options.auth.authenticate(request.headers.authorization);
+        if (request.headers['x-forwarded-proto'] !== 'https') throw new MatchingError(403, 'https_required');
+      }
       await matchingReady;
       if (await matchingHttp(request, path, options.auth, matching, () => readBody(request, config.maxBodyBytes), controller.signal, reply)) {
         endpoint = 'matching'; count = 1; return;
@@ -96,7 +106,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
         if (!bytes) { category = 'no_result'; reply(404, { error: { code: category } }); return; }
         count = 1;
         response.writeHead(200, { 'Content-Type': 'image/webp', 'Content-Length': bytes.length,
-          'Cache-Control': mediaMatch[2] ? 'public, max-age=86400, immutable' : 'public, max-age=60',
+          'Cache-Control': config.qa ? 'private, no-store' : mediaMatch[2] ? 'public, max-age=86400, immutable' : 'public, max-age=60',
           'X-Request-Id': requestId, 'X-Content-Type-Options': 'nosniff' });
         response.end(bytes); return;
       }

@@ -1,6 +1,5 @@
 import { createContext, useContext, type PropsWithChildren } from 'react';
 import type { TextStyle, ViewStyle } from 'react-native';
-import type { BlurTint } from 'expo-blur';
 import type { VisualTokens } from '../tokens';
 
 export type VimaThemeName = 'light' | 'dark';
@@ -38,22 +37,10 @@ export interface VimaThemeRoles {
   readonly mapVariant: VimaThemeName;
 }
 
-export interface VimaGlassTokens {
-  readonly base: string;
-  readonly border: string;
-  readonly highlight: string;
-  readonly pressed: string;
-  readonly disabled: string;
-  readonly shadow: string;
-  readonly tint: BlurTint;
-  readonly intensity: number;
-}
-
 export interface VimaTheme {
   readonly name: VimaThemeName;
   readonly tokens: VisualTokens;
   readonly roles: VimaThemeRoles;
-  readonly glass: VimaGlassTokens;
   readonly surfaces: Readonly<Record<VimaSurfaceVariant, ViewStyle>>;
   readonly text: Readonly<Record<VimaTextVariant, TextStyle>>;
 }

@@ -5,7 +5,6 @@ import type { VimaMapRef } from '../../map/VimaMap';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated from 'react-native-reanimated';
 import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph';
-import { VimaGlassSurface } from '../../design/components/VimaGlassSurface';
 import { VimaButton } from '../../design/components/VimaButton';
 import { createRideSheetInteraction } from '../../design/components/VimaRideSheet';
 import { rideSheetGeometry, type SheetSnap } from '../../design/components/rideSheetGeometry';
@@ -257,10 +256,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       : homePanel === 'favorites' ? 'Favoritos' : homePanel === 'recents' ? 'Viajes recientes' : '';
   const blocked = flow.pending || flow.connection !== 'online';
   const searchField = <View style={styles.searchFieldFrame}><SearchInputGlow cycle={searchCycle} focused={searchFocused} />
-    <Animated.View testID="passenger-search-field" style={[styles.searchField,
-      { borderColor: theme.roles.positive }, searchBorder]}>
-      <VimaGlassSurface style={[StyleSheet.absoluteFill, styles.searchFieldGlass]} />
-      <SmallPin color={theme.roles.danger} />
+    <Animated.View testID="passenger-search-field" style={[styles.searchField, presentation.card,
+      { borderColor: theme.roles.positive }, searchBorder]}><SmallPin color={theme.roles.danger} />
       <TextInput ref={input} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} autoFocus
         onTouchStart={(event) => event.stopPropagation()} accessibilityLabel={sheetTitle} placeholder="Buscar un lugar o dirección"
         value={flow.search} onChangeText={flow.setSearch} onSubmitEditing={() => { dismissKeyboard(); void flow.submitSearch(); }}
@@ -298,9 +295,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <SearchInputGlow cycle={searchCycle} home /><Pressable testID="passenger-home-search"
         onPressIn={homeSearchPress.onPressIn} onPressOut={homeSearchPress.onPressOut}
         onPress={() => openSearch()} accessibilityRole="button" accessibilityLabel="¿A dónde vamos?"
-        style={({ pressed }) => [styles.homeSearch, pressed && styles.pressedElevation,
-          { borderColor: pressed ? theme.roles.positiveStrong : theme.roles.positive }]}>
-        <VimaGlassSurface style={[StyleSheet.absoluteFill, styles.homeSearchGlass]} />
+        style={({ pressed }) => [styles.homeSearch, presentation.card, pressed && presentation.pressed,
+          pressed && styles.pressedElevation, { borderColor: pressed ? theme.roles.positiveStrong : theme.roles.positive }]}>
         <View testID="passenger-home-search-icon-frame" style={styles.homeSearchIconFrame}>
           <VimaGlyph name="search" color={theme.roles.control} size={21} />
         </View>
@@ -639,17 +635,14 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             resizeMode="contain" accessibilityLabel="Vima" />
           <Pressable accessibilityRole="button" accessibilityLabel="Notificaciones" accessibilityHint="Módulo no disponible"
             accessibilityState={{ disabled: true }} disabled hitSlop={4}
-            style={styles.notification}>
-            <VimaGlassSurface disabled style={[StyleSheet.absoluteFill, styles.pillGlass]} />
+            style={[styles.notification, { backgroundColor: theme.roles.elevatedSurface }]}>
             <VimaGlyph name="notifications" color={theme.roles.control} />
           </Pressable>
         </> : <>
           {!matching && !assignment && flow.phase !== 'requesting' ? <Animated.View style={backPress.style}><Pressable accessibilityRole="button" accessibilityLabel="Volver"
             onPressIn={backPress.onPressIn} onPressOut={backPress.onPressOut} onPress={goBack}
-            style={({ pressed }) => [styles.headerSide, pressed && styles.pressedElevation]}>
-            <VimaGlassSurface level="level1" style={[StyleSheet.absoluteFill, styles.pillGlass]} />
-            <VimaGlyph name="back" color={theme.roles.control} />
-          </Pressable></Animated.View> : null}
+            style={({ pressed }) => [styles.headerSide, { backgroundColor: theme.roles.elevatedSurface },
+              pressed && presentation.pressed]}><VimaGlyph name="back" color={theme.roles.control} /></Pressable></Animated.View> : null}
           {!confirmationPillVisible ? <VimaText variant={assignment || matching ? 'bodyMedium' : 'h3'}
             style={[styles.headerTitle, { color: theme.roles.textPrimary }]} accessibilityRole="header">
             {assignment ? lifecycleTitle : matching ? 'Buscando un conductor' : ''}
@@ -698,8 +691,7 @@ function SmallPin({ color }: { color: string }) {
 function FloatingScreenTitle({ title, top }: { title: 'Confirma tu viaje'; top: number }) {
   const theme = useVimaTheme();
   return <ElementEntrance key={title} testID="passenger-confirmation-pill" pointerEvents="none" exit
-    timing={motionTimings.state} style={[styles.floatingTitle, { top }]}>
-    <VimaGlassSurface style={[StyleSheet.absoluteFill, styles.pillGlass]} />
+    timing={motionTimings.state} style={[styles.floatingTitle, { top, backgroundColor: theme.roles.elevatedSurface }]}>
     <VimaText variant="bodyMedium" numberOfLines={1} accessibilityRole="header"
       style={[styles.floatingTitleText, { color: theme.roles.textPrimary }]}>{title}</VimaText>
   </ElementEntrance>;
@@ -842,7 +834,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderRadius: t.radii.pillPx,
     ...elevationStyle('level2', t.colors.carbon) },
-  pillGlass: { borderRadius: t.radii.pillPx },
   headerTitle: { flex: 1, textAlign: 'center' },
   floatingTitle: { position: 'absolute', alignSelf: 'center', height: confirmationPillHeight,
     paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center', borderRadius: t.radii.pillPx,
@@ -870,7 +861,6 @@ const styles = StyleSheet.create({
   homeSearch: { ...surfaces.card, width: '100%', height: homeSearchHeight, borderRadius: 24,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 10, paddingHorizontal: 24,
     ...elevationStyle('level1', t.colors.carbon) },
-  homeSearchGlass: { borderRadius: 24 },
   homeSearchIconFrame: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   pressedElevation: { boxShadow: [] },
   quickRow: { ...surfaces.card, height: 44, flexDirection: 'row', alignItems: 'center',
@@ -920,7 +910,6 @@ const styles = StyleSheet.create({
   searchFieldFrame: { position: 'relative', alignSelf: 'stretch' },
   searchField: { ...surfaces.card, height: t.components.inputPrimary.heightPx, borderRadius: t.radii.pillPx,
     paddingHorizontal: md, flexDirection: 'row', alignItems: 'center', gap: sm, ...elevationStyle('level1', t.colors.carbon) },
-  searchFieldGlass: { borderRadius: t.radii.pillPx },
   searchInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, height: t.components.inputPrimary.heightPx },
   contributionInput: { ...surfaces.field, ...textStyle({ variant: 'body', weight: 400 }), height: t.components.inputPrimary.heightPx,
     paddingHorizontal: md },

@@ -1,22 +1,26 @@
 import type { ExpoConfig } from 'expo/config';
 
+import { appVariant } from './config/appVariant.cjs';
+const { variant, suffix } = appVariant(process.env);
 const config: ExpoConfig = {
-  name: 'Vima',
+  name: variant === 'production' ? 'Vima' : `Vima ${variant === 'qa' ? 'QA' : 'Dev'}`,
   slug: 'vima',
   owner: 'kingghidorahx12',
   extra: {
     eas: { projectId: '30422aec-d22b-40f0-8008-c6a316633fd8' },
   },
-  version: '0.0.1',
-  scheme: 'vima',
+  version: '0.0.2',
+  runtimeVersion: { policy: 'appVersion' },
+  updates: { url: 'https://u.expo.dev/30422aec-d22b-40f0-8008-c6a316633fd8' },
+  scheme: `vima${suffix.replace('.', '-')}`,
   platforms: ['ios', 'android'],
   icon: './assets/brand/vima_app_icon_final_1024.png',
   ios: {
-    bundleIdentifier: 'com.kingghhidorahx12.vima',
+    bundleIdentifier: `com.kingghhidorahx12.vima${suffix}`,
     icon: './assets/brand/vima_app_icon_final_1024.png',
   },
   android: {
-    package: 'com.kingghhidorahx12.vima',
+    package: `com.kingghhidorahx12.vima${suffix}`,
     icon: './assets/brand/vima_app_icon_final_1024.png',
     adaptiveIcon: {
       foregroundImage: './assets/brand/vima_app_icon_final_1024.png',
@@ -25,7 +29,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     'expo-router',
-    'expo-dev-client',
+    ['expo-dev-client', { addGeneratedScheme: variant === 'development' }],
     '@maplibre/maplibre-react-native',
     'expo-secure-store',
     'expo-sqlite',
