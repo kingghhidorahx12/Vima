@@ -1,12 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="52" height="64" viewBox="0 0 52 64">
-  <g stroke="#D9DDDC" stroke-width="1.2" stroke-linejoin="round">
-    <rect x="7" y="7" width="38" height="50" rx="13" fill="#2A2E2D"/>
-    <path d="M15 10Q26 7 37 10L39 19Q26 16 13 19Z" fill="#BFDDF9"/>
-    <path d="M13 22L10 28V41L13 44ZM39 22L42 28V41L39 44Z" fill="#0B0F0E"/>
-    <rect x="16" y="23" width="20" height="24" rx="6" fill="#0B0F0E"/>
-    <path d="M14 49Q26 52 38 49L36 54H16Z" fill="#0B0F0E"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="54" viewBox="0 0 36 54">
+  <!-- Sedan A: north at top; visual 30 x 46; centered pivot (18,27). Same geometry in both themes. -->
+  <g fill="#2A2E2D">
+    <rect x="3" y="14" width="3" height="8" rx="1"/>
+    <rect x="30" y="14" width="3" height="8" rx="1"/>
+    <rect x="3" y="34" width="3" height="8" rx="1"/>
+    <rect x="30" y="34" width="3" height="8" rx="1"/>
   </g>
-  <path d="M21 31L26 39L32 28" fill="none" stroke="#00D68F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M12 14L17 12M35 12L40 14" stroke="#00D68F" stroke-width="2" stroke-linecap="round"/>
-  <path d="M12 52L16 54M36 54L40 52" stroke="#FF3830" stroke-width="2" stroke-linecap="round"/>
+  <path d="M12 4H24Q30 4 31 11L32 41Q32 49 26 50H10Q4 49 4 41L5 11Q6 4 12 4Z"
+    fill="#F7F8F7" stroke="#D9DDDC" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M10 8Q18 6 26 8L27 13Q18 11 9 13Z" fill="#FFFFFF"/>
+  <path d="M9 16Q18 12 27 16L25 23H11Z" fill="#2A2E2D"/>
+  <path d="M11 24H25L26 35H10Z" fill="#2A2E2D"/>
+  <path d="M10 37H26L28 43Q18 46 8 43Z" fill="#2A2E2D"/>
+  <path d="M7 21L9 24V34L7 37ZM29 21L27 24V34L29 37Z" fill="#2A2E2D"/>
+  <path d="M12 17Q18 15 24 17" fill="none" stroke="#94A3A8" stroke-width="1"/>
+  <path d="M10 46Q18 48 26 46" fill="none" stroke="#D9DDDC" stroke-width="1"/>
+  <path d="M8 10L12 9M24 9L28 10" fill="none" stroke="#D9DDDC" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M16 10H20" stroke="#00826F" stroke-width="1" stroke-linecap="round"/>
+  <path d="M7 45L10 47M26 47L29 45" fill="none" stroke="#FF3830" stroke-width="1.5" stroke-linecap="round"/>
 </svg>

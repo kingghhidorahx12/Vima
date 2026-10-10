@@ -83,10 +83,13 @@ test('default Passenger Reduced Motion still snaps; Driver essential keeps smoot
 test('local car artwork has identical geometry and PNG dimensions in both palettes', () => {
   const variants = ['light', 'dark'].map(name => {
     const svg = readFileSync(`assets/driver/vehicle-${name}.svg`, 'utf8');
-    assert.doesNotMatch(svg, /(?:href|src)=|<image/); assert.match(svg, /width="38" height="50"/);
+    assert.doesNotMatch(svg, /(?:href|src)=|<image|<circle|M21 31L26 39/);
+    assert.match(svg, /viewBox="0 0 36 54"/);
+    assert.match(svg, /visual 30 x 46/);
+    assert.match(svg, /fill="#F7F8F7"/); // Both variants keep a light body, no dark badge.
     for (const [suffix, scale] of [['', 1], ['@3x', 3]] as const) {
       const png = readFileSync(`assets/driver/vehicle-${name}${suffix}.png`);
-      assert.equal(png.readUInt32BE(16), 52 * scale); assert.equal(png.readUInt32BE(20), 64 * scale);
+      assert.equal(png.readUInt32BE(16), 36 * scale); assert.equal(png.readUInt32BE(20), 54 * scale);
     }
     return svg.replace(/#[0-9a-f]{3,8}/gi, '#palette');
   });

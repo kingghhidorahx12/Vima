@@ -157,8 +157,9 @@ test('fonts gate productive UI independently; native Driver layers follow phases
       const vehicleLayers = tree.root.findAllByType('MapLibreLayer' as never).filter(n => n.props.id.startsWith('driver-vehicle'));
       assert.ok(vehicleLayers.every(n => n.props.animatedProps === undefined));
       const acquisition = vehicleLayers.find(n => n.props.id === 'driver-vehicle-acquisition')!;
-      assert.deepEqual(acquisition.props.paint['circle-radius'], ['interpolate', ['linear'], ['get', 'acquisition'], 0, 28, 1, 36]);
-      assert.deepEqual(acquisition.props.paint['circle-opacity'], ['interpolate', ['linear'], ['get', 'acquisition'], 0, 0.18, 1, 0]);
+      assert.deepEqual(acquisition.props.paint['circle-radius'], ['interpolate', ['linear'], ['get', 'acquisition'], 0, 29, 1, 32]);
+      assert.deepEqual(acquisition.props.paint['circle-opacity'], ['interpolate', ['linear'], ['get', 'acquisition'], 0, 0.05, 1, 0]);
+      assert.equal(vehicleLayers.find(n => n.props.id === 'driver-vehicle')!.props.layout['icon-anchor'], 'center');
       assert.equal(vehicleLayers.find(n => n.props.id === 'driver-vehicle-unoriented')!.props.layout['icon-rotate'], undefined);
       const { validateStyleMin } = require('@maplibre/maplibre-gl-style-spec');
       assert.deepEqual(validateStyleMin({ version: 8, sources: { vehicle: { type: 'geojson', data } },
@@ -210,4 +211,47 @@ test('Reduced Motion toggle crossfades without rotation; vehicle halo contains n
   const marker = readFileSync('src/map/DriverVehicleMarker.tsx', 'utf8');
   assert.doesNotMatch(marker, /withRepeat|setInterval|PassengerUserLocation|AnimatedLayer|createAnimatedComponent\(Layer\)/);
   assert.equal((marker.match(/createAnimatedComponent\(/g) ?? []).length, 1);
+});
+
+test('Passenger theme control updates Driver immediately and persists through RootProviders restart', async () => {
+  for (const reduced of [false, true]) {
+    let stored: LocalPreferences = { version: 1, reducedMotion: reduced ? 'reduce' : 'system', themeName: 'light' };
+    const h = createMapHarness({ realTheme: true, realMotion: true, reduced, fileOverrides: {
+      'src/design/fonts.ts': { appFonts: {} },
+      'src/services/api/queryClient.ts': { createQueryClient: () => new QueryClient() },
+      'src/services/storage/local.ts': { localStorage: { readPreferences: async () => stored,
+        writePreferences: async (value: LocalPreferences) => { stored = value; } } },
+    }, externalOverrides: { 'expo-font': { useFonts: () => [true, null] }, 'expo-status-bar': { StatusBar: 'StatusBar' },
+      'expo-splash-screen': { hideAsync: async () => {} }, 'react-native-gesture-handler': { GestureHandlerRootView: 'GestureRoot' } } });
+    const { RootProviders } = h.load('src/providers/RootProviders.tsx');
+    const { MapControls } = h.load('src/features/passenger/MapControls.tsx');
+    const { MapCompass } = h.load('src/features/passenger/MapCompass.tsx');
+    const { VimaThemeToggle } = h.load('src/design/components/VimaThemeToggle.tsx');
+    const { DriverVehicleMarker } = h.load('src/map/DriverVehicleMarker.tsx');
+    const element = () => React.createElement(RootProviders, null,
+      React.createElement(MapControls, { available: true, open: false, layers: { traffic: false, incidents: false },
+        onOpen() {}, onToggle() {}, themeControl: React.createElement(VimaThemeToggle),
+        compass: React.createElement(MapCompass, { size: 40, bearing: 35, ready: true, onPress() {} }) }),
+      React.createElement('View', { testID: 'driver-toggle' }, React.createElement(VimaThemeToggle)),
+      React.createElement(DriverVehicleMarker, { location: { coordinate: [0, 0], heading: 90, receivedAt: Date.now() }, sequence: 1 }));
+    let tree: ReactTestRenderer = await h.render(element());
+    const button = (id: string) => tree.root.findAllByType('View' as never).find(n => n.props.testID === id)!.findByType('Pressable' as never);
+    try {
+      await h.flush();
+      const mounted = h.calls.filter((c: unknown[]) => c[0] === 'mount' && c[1] === 'MapLibreSource').length;
+      assert.equal(button('passenger-theme-control').props.accessibilityLabel, 'Cambiar a modo oscuro');
+      await h.act(async () => button('passenger-theme-control').props.onPress());
+      assert.equal(button('driver-toggle').props.accessibilityLabel, 'Cambiar a modo claro');
+      assert.equal(tree.root.findByProps({ id: 'driver-vehicle' }).props.layout['icon-image'], 'vima-driver-dark');
+      assert.equal(stored.themeName, 'dark'); assert.equal(stored.reducedMotion, reduced ? 'reduce' : 'system');
+      await h.act(async () => button('driver-toggle').props.onPress());
+      assert.equal(button('passenger-theme-control').props.accessibilityLabel, 'Cambiar a modo oscuro');
+      assert.equal(h.calls.filter((c: unknown[]) => c[0] === 'mount' && c[1] === 'MapLibreSource').length, mounted);
+      await h.act(async () => button('passenger-theme-control').props.onPress());
+      await h.act(async () => tree.unmount());
+      tree = await h.render(element());
+      assert.equal(button('passenger-theme-control').props.accessibilityLabel, 'Cambiar a modo claro');
+      assert.equal(tree.root.findByProps({ id: 'driver-vehicle' }).props.layout['icon-image'], 'vima-driver-dark');
+    } finally { await h.act(async () => tree.unmount()); }
+  }
 });

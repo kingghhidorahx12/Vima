@@ -20,10 +20,11 @@ import { locationCtaHeight, mapControlSize, mapLayersMenuWidth } from './mapCame
 
 const menuGap = t.spacing.scalePx[1]!;
 
-export function MapControls({ available, capabilities, layers, open: requestedOpen, onOpen, onToggle, compass }: {
+export function MapControls({ available, capabilities, layers, open: requestedOpen, onOpen, onToggle, compass, themeControl }: {
   available: boolean; layers: TrafficLayerPreferences; open: boolean;
   capabilities?: MapLayerCapabilities;
   compass?: ReactNode;
+  themeControl?: ReactNode;
   onOpen: () => void; onToggle: (layer: keyof TrafficLayerPreferences) => void;
 }) {
   const supported = capabilities ?? { traffic: available, incidents: available };
@@ -65,6 +66,7 @@ export function MapControls({ available, capabilities, layers, open: requestedOp
   const menuMotion = useAnimatedStyle(() => ({ opacity: progress.get(),
     transform: [{ translateY: reducedMotion ? 0 : travel.get() }] }));
   return <ElementEntrance testID="map-controls-hit-area" pointerEvents="box-none" style={styles.stack}>
+    {themeControl ? <View testID="passenger-theme-control" pointerEvents="box-none" style={{ marginBottom: menuGap }}>{themeControl}</View> : null}
     {compass}
     <Animated.View testID="passenger-layers-slot" pointerEvents="box-none" style={[styles.menuSlot, slotMotion]}>
       <Animated.View testID="passenger-layers-menu" pointerEvents={open ? 'auto' : 'none'}

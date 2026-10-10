@@ -85,7 +85,8 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     if (resolved.endsWith('ReducedMotion.tsx')) return { useMotionPolicy: () => ({ reducedMotion: reduced, allowDecorativeLoops: !reduced }) };
     if (resolved.endsWith(path.join('themes', 'index.tsx'))) return { useVimaTheme: () => themeName === 'dark'
       ? load(path.join(root, 'src/design/themes/dark.ts')).darkTheme
-      : load(path.join(root, 'src/design/themes/light.ts')).lightTheme };
+      : load(path.join(root, 'src/design/themes/light.ts')).lightTheme,
+      useVimaThemeControl: () => ({ name: themeName, toggleTheme() {} }) };
     if (resolved.endsWith('.json')) return JSON.parse(fs.readFileSync(resolved, 'utf8'));
     if (resolved.endsWith('.png')) return resolved;
     const module = { exports: {} };

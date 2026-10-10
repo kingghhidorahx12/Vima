@@ -856,7 +856,14 @@ test('global status chrome leaves Passenger edge-to-edge geometry and safe chrom
       const controls = id(tree, 'passenger-map-controls');
       assert.deepEqual(controls.findAll(n => n.props.testID === 'passenger-compass' || n.props.accessibilityLabel === 'Capas del mapa')
         .map(n => n.props.testID ?? n.props.accessibilityLabel), ['passenger-compass', 'Capas del mapa']);
-      assert.equal(style(compass).width, 44); assert.equal(style(compass).height, 44);
+      assert.equal(style(compass).width, 40); assert.equal(style(compass).height, 40);
+      const themeControl = id(tree, 'passenger-theme-control');
+      assert.equal(style(themeControl).marginBottom, 8);
+      const themeButton = themeControl.findByType('Pressable' as never);
+      assert.equal(themeButton.props.accessibilityLabel, 'Cambiar a modo oscuro');
+      assert.equal(restingStyle(themeButton).width, 40); assert.equal(restingStyle(themeButton).height, 40);
+      assert.deepEqual(controls.findAll(n => n.props.testID === 'passenger-theme-control' || n.props.testID === 'passenger-compass')
+        .map(n => n.props.testID), ['passenger-theme-control', 'passenger-compass']);
       assert.equal(style(compass).position, undefined);
       await press(tree, 'Capas del mapa');
       assert.ok(controls.findAll(n => style(n).minWidth === 192).length > 0);
@@ -1055,7 +1062,7 @@ test('rotating reveals the compass above Layers with only a 160 ms fade under ei
       assert.ok(h.animations.slice(before).some((a: { value: number; duration: number }) => a.value === 1 && a.duration === 160));
       const button = compass.findByType('Pressable' as never);
       const resting = Object.assign({}, ...button.props.style({ pressed: false }).filter(Boolean));
-      assert.equal(resting.width, 44); assert.equal(resting.height, 44);
+      assert.equal(resting.width, 40); assert.equal(resting.height, 40);
       assert.deepEqual(resting.boxShadow, [{ offsetX: 0, offsetY: 2, blurRadius: 8,
         spreadDistance: 0, color: 'rgba(11, 15, 14, 0.06)' }]);
       await act(async () => button.props.onPress());

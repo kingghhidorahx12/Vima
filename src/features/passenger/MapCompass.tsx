@@ -9,8 +9,8 @@ import { usePressFeedback } from '../../motion/usePressFeedback';
 import { useVimaTheme } from '../../design/themes';
 
 /** Mirrors map bearing; only visibility is animated. Fade is permitted by Reduced Motion. */
-export function MapCompass({ bearing, ready, onPress }: {
-  bearing: number; ready: boolean; onPress: () => void;
+export function MapCompass({ bearing, ready, onPress, size = 44 }: {
+  bearing: number; ready: boolean; onPress: () => void; size?: 40 | 44;
 }) {
   const angle = Number.isFinite(bearing) ? ((bearing % 360) + 540) % 360 - 180 : 0;
   const visible = ready && angle !== 0;
@@ -24,11 +24,11 @@ export function MapCompass({ bearing, ready, onPress }: {
   const fade = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   return <Animated.View testID="passenger-compass" pointerEvents={visible ? 'auto' : 'none'}
     accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
-    style={[styles.position, fade]}>
+    style={[styles.position, { width: size, height: size }, fade]}>
     <Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel="Orientar mapa al norte" disabled={!visible}
       onPressIn={visible ? feedback.onPressIn : undefined} onPressOut={visible ? feedback.onPressOut : undefined}
-      onPress={onPress} style={({ pressed }) => [styles.button, { backgroundColor: theme.roles.elevatedSurface },
+      onPress={onPress} style={({ pressed }) => [styles.button, { width: size, height: size, backgroundColor: theme.roles.elevatedSurface },
         pressed && { backgroundColor: theme.roles.pressedSurface, boxShadow: [] }]}>
       <View testID="passenger-compass-needle" style={[styles.needle, { transform: [{ rotate: `${-angle}deg` }] }]}>
         <View testID="passenger-compass-north-outline" style={[styles.northOutline, { borderBottomColor: theme.roles.control }]} />

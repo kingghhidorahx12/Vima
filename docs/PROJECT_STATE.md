@@ -1,13 +1,56 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-10 en `codex/shared-vehicle-live-heading-p0`,
-desde `codex/qa-android-stability-p0` @ `3a927c480367b76b9202302245106281d492e7ad`.
+Actualizado 2026-10-10 en `codex/sedan-fino-passenger-theme-p0`,
+desde `codex/shared-vehicle-live-heading-p0` @ `8c1d70b62a11934b4b093c57d4d19c84d46dc412`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Sedán fino A y Sol/Luna Passenger — 2026-10-10
+
+- El usuario reporta posición/heading reales funcionando en Android. Esta ronda
+  conserva ese comportamiento y cambia únicamente artwork/escala visual y chrome
+  de tema Passenger. Sin cambios backend, contratos, lifecycle, matching, login,
+  Camera, route-fit, mapa, sheet, bottom nav ni cálculos de movimiento/rumbo.
+- Los SVG existentes y sus PNG 1x/@3x ahora representan el sedán fino aprobado:
+  canvas 36×54 dp, silueta aproximada 30×46 dp, carrocería blanca/gris clara,
+  cristales graphite, acento verde mínimo y pilotos rojos pequeños. Sin V en techo,
+  badge ni base opaca. Light/dark tienen exactamente la misma geometría; dark sólo
+  refuerza el contorno. Frente norte y anchor central explícito, sin cambiar heading.
+  Driver y Passenger asignado conservan el mismo renderer y assets compartidos.
+- Halo separado de adquisición: diámetro 58→64 dp, opacity 0.05→0; conserva el
+  one-shot existente y desaparece con Reduced Motion. AnimatedSource sigue siendo
+  la única frontera animada MapLibre; ningún Layer animado ni React por frame.
+- Passenger reutiliza `VimaThemeToggle` y la preferencia persistente global que ya
+  usa Driver: Luna en light, Sol en dark. Columna: Notificaciones (posición intacta),
+  Sol/Luna 40×40, brújula 40×40 cuando corresponde, Capas 44×44; gap interno 8 dp.
+  Capas mantiene su ancla inferior, superficie, acciones y cierre sincronizado.
+  Sólo se amplía el chequeo de espacio libre para admitir el control adicional;
+  no se cambian mediciones del mapa/sheet ni padding de Camera. Driver conserva
+  su brújula de 44 dp. No se duplica la preferencia ni se modifica su persistencia.
+- Regresiones: geometría/paridad de assets, schema de las capas y halo; orden y
+  medidas del chrome Passenger; toggle compartido con RootProviders real, cambio
+  inmediato entre roles, persistencia tras reapertura, source sin remount y ambas
+  políticas de Reduced Motion. Las pruebas de GPS/heading/interpolación existentes
+  permanecen intactas.
+- Entrega compatible con OTA del runtime vigente: sin dependencias, configuración
+  nativa, APK/Development Build nuevo ni despliegue Railway por esta ronda.
+  No se publica OTA ni se despliega backend automáticamente.
+- Validaciones: TypeScript, lint, focales **43/43**, suite completa **343/343**,
+  worklets, splash, schema MapLibre incluido en focales, export Hermes Android/iOS
+  y aislamiento fixture/server/pricing/paths/credenciales/QA PASS.
+  Expo Doctor **20/21** únicamente por los cinco patches SDK 57 conocidos;
+  no se actualizan dependencias ni se relajan checks.
+- QA Android físico del nuevo acabado **PENDIENTE**: en ambos temas comprobar coche
+  pequeño y legible a zoom normal, contorno sin efecto insignia y halo muy tenue;
+  validar posición/heading en movimiento, reposo y giro de mapa. En Passenger,
+  alternar Sol/Luna, cambiar a Driver y reabrir para confirmar persistencia; rotar
+  mapa y abrir/cerrar Capas para comprobar la columna sin solapamientos. Repetir
+  con Reduced Motion. Sin USB ni Metro, usando la OTA QA de este commit cuando
+  se publique sobre el mismo runtime instalado.
 
 ### Vehículo compartido Driver/Passenger y telemetría de asignación — 2026-10-10
 

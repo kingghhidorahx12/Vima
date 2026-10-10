@@ -31,6 +31,7 @@ import { defaultTrafficLayers, displayKeyAvailable, type TrafficLayerPreferences
 import { mapLayerStorage } from '../../services/storage/mapLayers';
 import { MapControls, LocationCTA, CenteredToast } from './MapControls';
 import { MapCompass } from './MapCompass';
+import { VimaThemeToggle } from '../../design/components/VimaThemeToggle';
 import { locationCtaHeight, mapControlSize } from './mapCameraFootprint';
 import { useLocationVisibility } from '../../map/useLocationVisibility';
 import { ElementEntrance } from '../../motion/ElementEntrance';
@@ -224,7 +225,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     ? Math.max(0, height - (interaction ? (interaction.height ?? sheetFrameHeight) - interaction.targetOffset : 0))
     : Math.max(0, height - visibleSheetHeight);
   const bottomFootprint = Math.max(0, height - usefulHeight);
-  const controlClearance = mapControlSize * 2 + t.spacing.scalePx[1]! + t.spacing.scalePx[1]!;
+  const controlClearance = 40 * 2 + mapControlSize + t.spacing.scalePx[1]! * 3;
   const controlsFit = homeFloatingSearch ? usefulHeight - topOcclusion >= controlClearance
     : (interaction?.targetOffset ?? sheetFrameHeight) > 130;
   const locationFits = homeFloatingSearch ? usefulHeight - topOcclusion >= locationCtaHeight + t.spacing.scalePx[1]!
@@ -658,7 +659,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           ? bottomFootprint + t.spacing.scalePx[1]!
           : (interaction ? sheetFrameHeight - interaction.targetOffset : 0) + t.spacing.scalePx[2]! }]}>
         <MapControls available={hasDisplayKey} layers={mapLayers}
-          compass={<MapCompass bearing={mapBearing} ready={mapReady && !mapFailed}
+          themeControl={<VimaThemeToggle />}
+          compass={<MapCompass size={40} bearing={mapBearing} ready={mapReady && !mapFailed}
             onPress={() => setNorthRequest(value => (value ?? 0) + 1)} />}
           open={layersOpen} onOpen={() => setLayersOpen((value) => !value)} onToggle={toggleMapLayer} />
       </View> : null}

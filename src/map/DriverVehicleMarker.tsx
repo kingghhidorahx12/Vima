@@ -23,7 +23,7 @@ export function DriverVehicleMarker({ location, sequence, online = true }: {
   return <VehicleMarker location={location} sequence={sequence} online={online} essential />;
 }
 
-/** Shared, north-facing Vima artwork (52×64, Metro @2x/@3x); no permanent badge underneath. */
+/** North-facing Sedan A: 36×54 canvas, ~30×46 silhouette, centered pivot; Metro @3x. */
 export function VehicleMarker({ location: incoming, sequence, online = true, essential = false, id = 'driver-vehicle' }: {
   location?: DriverState['location']; sequence: number; online?: boolean; essential?: boolean; id?: string;
 }) {
@@ -57,15 +57,15 @@ export function VehicleMarker({ location: incoming, sequence, online = true, ess
     geometry: { type: 'Point', coordinates: pose.get()!.coordinate } }) : empty }));
   return <><Images images={images} /><AnimatedSource id={`${id}-source`} data={empty} animatedProps={animatedProps}>
     <Layer id={`${id}-acquisition`} type="circle" paint={{
-      'circle-radius': ['interpolate', ['linear'], ['get', 'acquisition'], 0, 28, 1, 36],
+      'circle-radius': ['interpolate', ['linear'], ['get', 'acquisition'], 0, 29, 1, 32],
       'circle-color': theme.roles.positive,
-      'circle-opacity': ['interpolate', ['linear'], ['get', 'acquisition'], 0, 0.18, 1, 0],
+      'circle-opacity': ['interpolate', ['linear'], ['get', 'acquisition'], 0, 0.05, 1, 0],
     }} />
     <Layer id={id} type="symbol" filter={['!=', ['get', 'heading'], null]} layout={{ 'icon-image': `vima-driver-${theme.name}`, 'icon-size': 1,
-      'icon-allow-overlap': true, 'icon-ignore-placement': true,
+      'icon-anchor': 'center', 'icon-allow-overlap': true, 'icon-ignore-placement': true,
       'icon-rotation-alignment': 'map', 'icon-rotate': ['get', 'heading'] }} />
     <Layer id={`${id}-unoriented`} type="symbol" filter={['==', ['get', 'heading'], null]}
-      layout={{ 'icon-image': `vima-driver-${theme.name}`, 'icon-size': 1, 'icon-allow-overlap': true,
+      layout={{ 'icon-image': `vima-driver-${theme.name}`, 'icon-size': 1, 'icon-anchor': 'center', 'icon-allow-overlap': true,
         'icon-ignore-placement': true, 'icon-rotation-alignment': 'viewport' }} />
   </AnimatedSource></>;
 }
