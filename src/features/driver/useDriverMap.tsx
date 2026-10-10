@@ -35,7 +35,7 @@ export function useDriverMap(state: DriverState | undefined, online: boolean) {
   }), []);
   const content = driverMapContent(state);
   return { map, mapContent: <>
-    <Camera target={target} northRequest={north} />
+    <Camera target={target} initialTarget={target} ready={ready} northRequest={north} />
     {capabilities.traffic ? <TrafficFlowLayer enabled={layers.traffic} /> : null}
     {capabilities.incidents ? <IncidentLayer enabled={layers.incidents} /> : null}
     {content.route ? <RouteLayer id="driver-pickup-route" data={content.route} state="active" activeTone="accentBlue"

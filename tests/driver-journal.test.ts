@@ -47,6 +47,26 @@ test('offline prohibited pre-PIN; durable post-PIN replay GET first, stable IDs/
   } finally { h.f.close(); }
 });
 
+test('stationary trip: no sample blocks finish, confirmed zero meters does not', async () => {
+  const h = await fixture(); try {
+    await h.start(); const journal = h.journal();
+    await assert.rejects(journal.enqueueCommand(h.state, 'finish-no-sample', {
+      name: 'finish', kind: 'normal', finalTelemetrySequence: 0,
+    }), /journal_telemetry_pending/);
+    assert.equal(await journal.pending(), 0);
+    await journal.enqueueTelemetry(h.state, [0.2, 0.2], h.f.clock.now());
+    await journal.sync();
+    assert.equal(h.state.assignment?.lifecycle.meter?.distanceMeters, 0);
+    assert.equal(h.state.assignment?.lifecycle.meter?.lastSequence, 1);
+    await journal.enqueueCommand(h.state, 'finish-stationary', {
+      name: 'finish', kind: 'normal', finalTelemetrySequence: 1,
+    });
+    await journal.sync();
+    assert.equal(h.state.assignment?.state, 'PAYMENT_PENDING');
+    assert.equal(await journal.pending(), 0);
+  } finally { h.f.close(); }
+});
+
 for (const at of ['telemetry', 'finish', 'cash'] as const) test(`lost ${at} receipt retries identity, GET precedes replay, ack crash safe`, async () => {
   const h = await fixture(); try {
     await h.start(); let j = h.journal();

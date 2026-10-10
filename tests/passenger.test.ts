@@ -211,7 +211,8 @@ test('clearing or whitespace-only search cancels Suggest, removes loading and ig
     suggestPlaces: async (query) => { calls.push(query); return query === 'old' ? old.promise : []; },
     closePlaces() { closes++; } };
   const harness = createHarness(); const tree: ReactTestRenderer = await harness.render(gateway);
-  const searchSpinners = () => nativeNodes(tree, 'ActivityIndicator').filter(node => node.props.accessibilityLabel !== 'Mapa');
+  // The independent launch-progress indicator is not a Suggest loading state.
+  const searchSpinners = () => tree.root.findByProps({ testID: 'passenger-sheet-header' }).findAllByType('ActivityIndicator' as never);
   try {
     await settle(harness);
     await harness.act(async () => press(tree, '¿A dónde vamos?'));
@@ -219,7 +220,7 @@ test('clearing or whitespace-only search cancels Suggest, removes loading and ig
     assert.deepEqual(calls, []); assert.equal(searchSpinners().length, 0);
     await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('old'));
     await settle(harness);
-    assert.deepEqual(calls, ['old']);
+    assert.deepEqual(calls, ['old']); assert.equal(searchSpinners().length, 1);
     await harness.act(async () => nativeNode(tree, 'TextInput').props.onChangeText(''));
     await settle(harness);
     assert.equal(searchSpinners().length, 0);

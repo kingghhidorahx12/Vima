@@ -1,13 +1,59 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-09 en `codex/qa-eas-update-railway-p0`,
-desde `codex/vima-glass-light-dark-p0` @ `811f8c6ce0aa870e148d8107ed9ce02deb89cbd5`.
+Actualizado 2026-10-10 en `codex/qa-android-stability-p0`,
+desde `codex/qa-eas-update-railway-p0` @ `47bd3abe636dd6d704bd0de82e62239349944043`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Estabilización QA Android: arranque, cuenta y mapa — 2026-10-10
+
+- Base inspeccionada, origin actualizado y worktree independiente conservado.
+  No aparecieron commits posteriores al HEAD citado ni otro checkout con código
+  reciente de Astra. Los dos logs locales de QA ajenos siguen sin versionar.
+  No se modifican configuración remota, credenciales ni despliegue Railway.
+- **Reporte físico del usuario (anterior a este fix):** Railway HTTPS funciona;
+  Driver recuperó el viaje tras modo avión + cierre/reapertura de la aplicación.
+  Ese resultado sustituye los pendientes históricos de provisionamiento para
+  esta instalación QA; no representa una nueva verificación realizada aquí.
+- Root ya no devuelve una pantalla vacía mientras espera fonts/preferences:
+  muestra progreso con fuente del sistema, oculta splash tras layout y permite
+  reintentar fuentes si fallan o superan 10 s. Preferencias tienen límite de 8 s,
+  con el fallback conservador existente, sin escrituras ni adopción de lectura tardía.
+  Passenger espera mapa y primera medición estable antes de retirar launch;
+  si la espera supera 10 s ofrece continuar mientras carga. Una vez retirado,
+  launch no vuelve a tapar cambios de escena ni remonta mapa/sheet.
+- LiveAccountGate valida una vez por intento con cancelación al perder foco/cambiar
+  rol, fence de respuesta y límite de 12 s. Muestra progreso, separa timeout,
+  conectividad, credencial inválida y error de servicio; permite reintentar la
+  credencial guardada. Una candidata inválida no sustituye la guardada. El mismo
+  rol/credencial ya validado reutiliza su sesión al recuperar foco. Se conserva
+  el lector SecureStore de los clientes live y del journal después de validar.
+- Hit testing: el stack de Capas retenía 192 dp de ancho incluso cerrado y su
+  wrapper capturaba toques sobre mapa transparente. Sólo ese wrapper pasa a
+  `box-none`; botones, menú abierto, clipping y gestos del sheet no cambian.
+- Driver entrega `initialViewState` local al Camera nativo y aplica el target
+  más reciente al recibir map-ready. No aparece un marcador sin location ni se
+  agregan intents por GPS/revisión. Passenger mantiene el default previo de Camera.
+- «Acción sin confirmar»: se distinguen falta de primera muestra GPS, operación
+  ya guardada y necesidad de reconciliar. No se atribuye el error físico a una
+  causa sin telemetría del incidente. La regresión confirma que 0 m con una muestra
+  confirmada permite finalizar; sin primera muestra se conserva el guard vigente.
+  Journal, IDs, replay GET-first, lifecycle/settlement, backend y reglas comerciales
+  permanecen intactos.
+- Validaciones automatizadas: suite completa 335/335; gateway/matching/pricing
+  87/87; focal de estabilidad 8/8 y journal 10/10 (incluye reinicio/offline y
+  viaje estacionario). TypeScript, lint, worklets, splash, schema MapLibre en
+  suite y export Hermes QA Android/iOS pasan. Aislamiento de fixtures, servidor,
+  pricing, paths, credenciales y entry QA pasa en ambos bundles con configuración
+  ficticia. Expo Doctor 20/21: únicamente los cinco patches SDK57 conocidos;
+  no se actualizan dependencias.
+- Sin dependencias ni cambios nativos; compatible con OTA del runtime QA instalado.
+  No se ejecuta EAS Build, publicación OTA ni redeploy Railway en esta ronda.
+  **Android físico PENDIENTE** para estos cambios. Guía: `docs/QA_RELEASE.md`.
 
 ### QA EAS Update / Railway y descarte Glass — 2026-10-09
 

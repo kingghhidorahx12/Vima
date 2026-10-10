@@ -64,7 +64,7 @@ export function MapControls({ available, capabilities, layers, open: requestedOp
   const slotMotion = useAnimatedStyle(() => ({ height: menuGap + progress.get() * (menuHeight + menuGap) }));
   const menuMotion = useAnimatedStyle(() => ({ opacity: progress.get(),
     transform: [{ translateY: reducedMotion ? 0 : travel.get() }] }));
-  return <ElementEntrance style={styles.stack}>
+  return <ElementEntrance testID="map-controls-hit-area" pointerEvents="box-none" style={styles.stack}>
     {compass}
     <Animated.View testID="passenger-layers-slot" pointerEvents="box-none" style={[styles.menuSlot, slotMotion]}>
       <Animated.View testID="passenger-layers-menu" pointerEvents={open ? 'auto' : 'none'}

@@ -7,6 +7,7 @@ import { createDriverJournal } from '../../services/matching/driverJournal';
 import { driverOperationId } from '../../services/matching/operationId';
 import { ApiError } from '../../services/api/client';
 import type { Coordinate } from '../../map/models';
+import { lifecycleCommandMessage } from './lifecycleFeedback';
 
 export function useDriverLifecycle(client: MatchingClient, accountId: string, received: (snapshot: DriverState) => void) {
   const [journal] = useState(() => createDriverJournal(Storage, accountId, client, received));
@@ -36,7 +37,7 @@ export function useDriverLifecycle(client: MatchingClient, accountId: string, re
       }
     } catch (e) {
       if (e instanceof ApiError) pending.current = undefined;
-      setError(e instanceof ApiError && e.code === 'incorrect_pin' ? 'PIN incorrecto.' : 'Acción sin confirmar. Actualiza el estado y reintenta.');
+      setError(lifecycleCommandMessage(e));
     } finally { busyRef.current = false; setBusy(false); }
   };
   const telemetry = async (snapshot: DriverState, coordinate: Coordinate, capturedAt: number) => {

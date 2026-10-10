@@ -73,6 +73,43 @@ npm run qa:light / npm run qa:dark mantienen Gateway → health → Quick Tunnel
 ADB opcional. No configurar VIMA_BACKEND_MODE=qa para ese launcher local. No volcar secretos
 en logs. .runtime y logs privados no se versionan.
 
+## Regresión Android con dos teléfonos — 2026-10-10
+
+El usuario confirmó Railway HTTPS y recuperación Driver tras modo avión + cierre.
+Las instrucciones de provisionamiento anteriores se conservan como procedimiento;
+no implican que haya que reconstruir o reprovisionar esa instalación que ya funciona.
+La rama `codex/qa-android-stability-p0` sólo modifica JS y pruebas. Esta ronda no
+publica OTA: probar cuando su commit esté publicado en el canal QA compatible, y
+registrar el update/commit instalado. No validar estos cambios con un update anterior.
+
+Con PC/Metro apagado y sin USB, usar la app QA instalada y las cuentas existentes:
+
+1. Teléfono Passenger y teléfono Driver: cerrar completamente y abrir 5 veces,
+   alternando claro/oscuro. Debe aparecer progreso si el inicio tarda, nunca blanco
+   indefinido; el primer Home debe quedar compuesto sin un segundo reinicio. Si el
+   mapa tarda, «Continuar mientras carga» debe liberar la interfaz sin remount.
+2. Sin borrar cuentas, repetir reapertura en modo avión: la validación debe mostrar
+   conectividad/timeout recuperable, no credencial inválida. Quitar modo avión y
+   usar «Reintentar cuenta guardada». Cambiar modo durante una validación no debe
+   permitir que una respuesta vieja abra el rol anterior. Un token de prueba inválido
+   no debe reemplazar la credencial válida guardada.
+3. Passenger: arrastrar en todas direcciones desde la etiqueta Atlacomulco de Fabela,
+   también a la izquierda de Brújula/Capas, con Capas cerrado. Abrir/cerrar Capas
+   y verificar switches y gesto del sheet; el mapa sólo debe ceder a controles visibles.
+4. Driver: abrir sin location y después OFFLINE → LOCATING → AVAILABLE. Debe iniciar
+   con encuadre local, sin vista mundial; automóvil únicamente con location real.
+5. Completar Passenger↔Driver hasta IN_PROGRESS. Sin desplazarse, 0 m confirmados
+   es válido: con muestra GPS confirmada debe poder finalizar según las reglas
+   vigentes. Si aún falta la primera muestra, el mensaje debe indicarlo; sincronizar
+   y reintentar, sin crear otro viaje ni borrar datos.
+6. Durante IN_PROGRESS activar modo avión en Driver, cerrar la app, desactivarlo y
+   reabrir. Confirmar mismo viaje/assignment, operaciones pendientes reconciliadas,
+   sin duplicar finalización/cobro. Completar settlement en ambos teléfonos.
+
+Registrar por teléfono/theme: PASS/PENDIENTE, update instalado, estado y mensaje exacto;
+no incluir tokens ni direcciones personales en evidencias compartidas. Todo este QA
+físico permanece **PENDIENTE** hasta repetirlo con el nuevo update.
+
 Referencias oficiales: https://docs.expo.dev/build-reference/variants/,
 https://docs.expo.dev/eas/environment-variables/usage/,
 https://docs.expo.dev/eas-update/runtime-versions/,

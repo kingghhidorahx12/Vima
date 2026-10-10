@@ -27,7 +27,7 @@ function createMapHarness({ reduced = false, realMotion = false, realTheme = fal
   }
   const appListeners = new Set();
   const native = { AppState: { currentState: 'active', addEventListener: (_event, fn) => { appListeners.add(fn); return { remove: () => appListeners.delete(fn) }; } }, View: 'View', Image: 'Image', Platform: { OS: 'android' },
-    Pressable: 'Pressable', Text: 'Text', ActivityIndicator: 'ActivityIndicator',
+    Pressable: 'Pressable', Text: 'Text', TextInput: 'TextInput', ActivityIndicator: 'ActivityIndicator',
     StyleSheet: { create: s => s, absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } } };
   const animated = {
     __esModule: true, default: { View: 'View', createAnimatedComponent: Component => function Animated(props) {

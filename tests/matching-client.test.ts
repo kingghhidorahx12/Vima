@@ -126,7 +126,7 @@ test('activeRequest reads the authenticated endpoint, accepts null and rejects m
 
 test('DEV identity gate uses SecureStore and the mobile HTTPS bearer guard is preserved', () => {
   const gate = readFileSync('src/dev/LiveAccountGate.tsx', 'utf8');
-  assert.match(gate, /credentials\.write\(value\)/); assert.match(gate, /credentials\.clear\(\)/);
+  assert.match(gate, /credentials\.write\(replacement\)/); assert.match(gate, /credentials\.clear\(\)/);
   assert.match(gate, /credentials\.read/); assert.match(gate, /secureTextEntry/);
   assert.doesNotMatch(readFileSync('src/dev/passenger/PassengerLiveScreen.tsx', 'utf8'), /async \(\) => null/);
   assert.match(readFileSync('src/services/api/client.ts', 'utf8'), /localHttp && credential/);

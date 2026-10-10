@@ -679,7 +679,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <VimaText variant="caption">No se pudo cargar el mapa</VimaText></View> : null}
     </View>
     <PassengerBottomNavigation visible={navVisible} bottomInset={bottomInset} onHome={goHome} />
-    <VimaLaunchSurface active={focused} ready={mapReady || mapFailed} />
+    <VimaLaunchSurface active={focused} ready={(mapReady || mapFailed) && settledSheetHeight !== undefined && mapWidth > 0} />
   </View>;
 }
 

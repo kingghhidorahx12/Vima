@@ -1,5 +1,5 @@
 import { Camera as NativeCamera, type CameraRef } from '@maplibre/maplibre-react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMotionPolicy } from '../motion/ReducedMotion';
 import { motionTimings } from '../motion/timing';
 import { fitBounds, type CameraTarget, type ApprovedCameraMotion, type MapPadding } from './models';
@@ -8,9 +8,12 @@ export type CameraMode = 'automatic' | 'search-locked' | 'user-controlled';
 export interface RecenterIntent { readonly coordinate: readonly [number, number]; readonly sequence: number }
 export interface RouteFitIntent { readonly coordinates: readonly (readonly [number, number])[]; readonly sequence: number; readonly padding?: MapPadding }
 
-export function Camera({ target, motion, mode = 'automatic', recenter, recenterPadding, fitRoute, northRequest }: {
+export function Camera({ target, motion, mode = 'automatic', recenter, recenterPadding, fitRoute, northRequest,
+  ready = true, initialTarget }: {
   target?: CameraTarget; motion?: ApprovedCameraMotion; mode?: CameraMode; recenter?: RecenterIntent;
   recenterPadding?: MapPadding; fitRoute?: RouteFitIntent; northRequest?: number;
+  /** Driver bootstrap only; Passenger intents retain their existing lifecycle. */
+  ready?: boolean; initialTarget?: CameraTarget;
 }) {
   const ref = useRef<CameraRef>(null);
   const { allowCameraAnimation } = useMotionPolicy();
@@ -18,14 +21,14 @@ export function Camera({ target, motion, mode = 'automatic', recenter, recenterP
   const currentPadding = useRef(recenterPadding ?? target?.padding);
   useEffect(() => { currentPadding.current = recenterPadding ?? target?.padding; }, [target, recenterPadding]);
   useEffect(() => {
-    if (!target || mode !== 'automatic') return;
+    if (!ready || !target || mode !== 'automatic') return;
     const { padding, zoom, pitch, bearing } = target;
     const options = { padding, zoom, pitch, bearing };
     const stop = target.center
       ? { ...options, center: [...target.center] as [number, number] }
       : { ...options, bounds: fitBounds(target.bounds ? [target.bounds.southwest, target.bounds.northeast] : target.coordinates!) };
     void ref.current?.setStop({ ...stop, ...(allowCameraAnimation && motion ? motion : { duration: 0 }) });
-  }, [target, motion, allowCameraAnimation, mode]);
+  }, [target, motion, allowCameraAnimation, mode, ready]);
   useEffect(() => {
     if (!recenter) return;
     void ref.current?.setStop({ center: [...recenter.coordinate] as [number, number],
@@ -47,5 +50,9 @@ export function Camera({ target, motion, mode = 'automatic', recenter, recenterP
     void ref.current?.setStop({ bearing: 0,
       ...(allowCameraAnimation ? { duration: motionTimings.map.duration, easing: 'ease' as const } : { duration: 0 }) });
   }, [northRequest, allowCameraAnimation]);
-  return <NativeCamera ref={ref} />;
+  const [initial] = useState(() => initialTarget ? { padding: initialTarget.padding, zoom: initialTarget.zoom,
+    pitch: initialTarget.pitch, bearing: initialTarget.bearing,
+    ...(initialTarget.center ? { center: [...initialTarget.center] as [number, number] }
+      : { bounds: fitBounds(initialTarget.bounds ? [initialTarget.bounds.southwest, initialTarget.bounds.northeast] : initialTarget.coordinates!) }) } : undefined);
+  return <NativeCamera ref={ref} initialViewState={initial} />;
 }

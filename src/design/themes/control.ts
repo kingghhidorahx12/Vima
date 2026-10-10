@@ -1,5 +1,6 @@
 import type { VimaThemeName } from './index';
 import { sanitizePreferences, type LocalPreferences } from '../../services/storage/contracts.ts';
+import { withDeadline } from '../../services/api/deadline.ts';
 
 interface PreferenceStorage {
   readPreferences(): Promise<LocalPreferences | null>;
@@ -25,7 +26,7 @@ export function createThemeControl(storage: PreferenceStorage, env: string | und
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     getSnapshot: () => state,
     load: () => loading ??= (async () => {
-      try { preferences = sanitizePreferences(await storage.readPreferences()) ?? preferences; }
+      try { preferences = sanitizePreferences(await withDeadline(storage.readPreferences(), 8000)) ?? preferences; }
       catch { preferences = { version: 1, reducedMotion: 'reduce' }; }
       state = { ready: true, name: preferences.themeName ?? fallback, reducedMotion: preferences.reducedMotion }; publish();
     })(),

@@ -59,7 +59,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     } }, GestureDetector: ({ children }) => React.createElement('GestureDetector', null, children) },
     'expo-image': { Image: 'ExpoImage' },
     'expo-status-bar': { StatusBar: 'StatusBar' },
-    'expo-router': { useFocusEffect: React.useEffect, Link: 'Link' },
+      'expo-router': { useFocusEffect: callback => React.useEffect(callback, [callback]), Link: 'Link' },
     'expo-dev-client': { registerDevMenuItems: async () => {} },
     'expo-secure-store': { WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'device-only', getItemAsync: async () => null,
       setItemAsync: async () => {}, deleteItemAsync: async () => {} },

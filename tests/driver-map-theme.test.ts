@@ -97,6 +97,7 @@ function integratedHarness(reduced = false, preferences?: Promise<LocalPreferenc
     'src/services/storage/mapLayers.ts': { mapLayerStorage: { read: async () => ({ traffic: true, incidents: true }), write: async () => {} } },
     'src/design/components/VimaRideSheet.tsx': { VimaRideSheet: Sheet },
   }, externalOverrides: { 'expo-font': { useFonts: () => [fonts.ready, null] }, 'expo-status-bar': { StatusBar: 'StatusBar' },
+    'expo-splash-screen': { hideAsync: async () => {} },
     'react-native-gesture-handler': { GestureHandlerRootView: 'GestureRoot' } } });
   const { RootProviders } = h.load('src/providers/RootProviders.tsx');
   const { useDriverMap } = h.load('src/features/driver/useDriverMap.tsx');
@@ -114,7 +115,7 @@ test('real RootProviders gates bootstrap; runtime theme/OFFER→ASSIGNED reuse m
   const prefs = new Promise<LocalPreferences>(resolve => { release = resolve; });
   const h = integratedHarness(false, prefs); const tree: ReactTestRenderer = await h.render(h.element(snapshot('OFFER')));
   try {
-    assert.equal(h.counters.scenes, 0); assert.equal(tree.toJSON(), null);
+    assert.equal(h.counters.scenes, 0); assert.ok(tree.root.findByProps({ testID: 'app-startup-progress' }));
     await h.act(async () => release({ version: 1, reducedMotion: 'system', themeName: 'dark' }));
     assert.equal(tree.root.findByType('StatusBar' as never).props.style, 'light');
     const map = tree.root.findByType('MapLibreMap' as never); const darkStyle = map.props.mapStyle;
