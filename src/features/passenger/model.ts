@@ -36,7 +36,8 @@ export interface Assignment {
   readonly vehicle: { readonly name: string; readonly plate: string; readonly color: string };
   readonly etaMinutes: number;
   readonly pin: string;
-  readonly sample: VehicleSample;
+  /** Optional metadata is backward compatible; legacy offer-only samples must not be presented as live. */
+  readonly sample: VehicleSample & { readonly capturedAt?: number; readonly headingKnown?: boolean };
   readonly routeToOrigin: RouteFeature;
 }
 export type MatchingPhase = 'searching' | 'expanding' | 'prolonged' | 'reassigning';

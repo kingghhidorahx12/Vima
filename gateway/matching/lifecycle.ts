@@ -44,9 +44,11 @@ export function earlyPrice(config: PricingConfig, quote: AuthoritativeRideQuote,
 }
 export function parseTelemetry(raw: unknown): TripTelemetry {
   const v = raw as TripTelemetry;
-  if (!v || Object.keys(v).some(k => !['sequence', 'coordinate', 'capturedAt'].includes(k)) || !natural(v.sequence) || v.sequence < 1 || !natural(v.capturedAt))
+  if (!v || Object.keys(v).some(k => !['sequence', 'coordinate', 'capturedAt', 'heading'].includes(k)) || !natural(v.sequence) || v.sequence < 1 || !natural(v.capturedAt) ||
+    v.heading !== undefined && (!Number.isFinite(v.heading) || v.heading < 0 || v.heading >= 360))
     throw new MatchingError(400, 'invalid_telemetry');
-  try { return { sequence: v.sequence, coordinate: normalizeCoordinate(v.coordinate), capturedAt: v.capturedAt }; }
+  try { return { sequence: v.sequence, coordinate: normalizeCoordinate(v.coordinate), capturedAt: v.capturedAt,
+    ...(v.heading !== undefined ? { heading: v.heading } : {}) }; }
   catch { throw new MatchingError(400, 'invalid_telemetry'); }
 }
 export function appendTelemetry(life: DurableLifecycle, sample: TripTelemetry, now: number) {

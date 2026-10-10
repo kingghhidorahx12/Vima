@@ -19,6 +19,7 @@ import { activeRequestStates, assignedRequestStates, type LifecycleCommand, type
 import { distanceMeters } from '../../src/services/geospatial/placeIdentity.ts';
 import { emptyLifecycle, provenBasis, fingerprint, effectiveAdditions, earlyPrice, appendTelemetry, parseTelemetry,
   parseLifecycleCommand, conflict, natural, canonical, type DurableLifecycle } from './lifecycle.ts';
+import { resolveVehicleBearing } from '../../src/map/vehicleBearing.ts';
 import type { DriverActionIntent } from '../../src/services/matching/driverActions.ts';
 
 export interface MatchingClock { now(): number; schedule(delay: number, callback: () => void): () => void }
@@ -63,17 +64,6 @@ const identifier = (value: unknown): string => {
   if (typeof value !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(value)) return invalid();
   return value;
 };
-function heading(route: RouteResult): number {
-  const lines = route.geometry.geometry.type === 'LineString' ? [route.geometry.geometry.coordinates] : route.geometry.geometry.coordinates;
-  for (const line of lines) for (let i = 1; i < line.length; i++) {
-    const a = line[i - 1]!; const b = line[i]!;
-    if (a[0] === b[0] && a[1] === b[1]) continue;
-    const lat1 = a[1]! * Math.PI / 180; const lat2 = b[1]! * Math.PI / 180; const delta = (b[0]! - a[0]!) * Math.PI / 180;
-    return (Math.atan2(Math.sin(delta) * Math.cos(lat2), Math.cos(lat1) * Math.sin(lat2) -
-      Math.sin(lat1) * Math.cos(lat2) * Math.cos(delta)) * 180 / Math.PI + 360) % 360;
-  }
-  throw new MatchingError(503, 'pickup_route_unavailable');
-}
 function migrateSnapshot(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw) || (raw as { version?: unknown }).version !== 1) return raw;
   const value = structuredClone(raw) as Record<string, unknown>;
@@ -142,6 +132,8 @@ function validateSnapshot(raw: unknown, auth: AuthConfig, pricingConfig?: Pricin
         !Number.isFinite(a.etaMinutes) || a.etaMinutes < 0 || !Number.isFinite(a.sample.heading) ||
         a.sample.heading < 0 || a.sample.heading >= 360 || !integer(a.sample.sequence)) throw new Error();
       normalizeCoordinate(a.sample.coordinate);
+      if (a.sample.capturedAt !== undefined && !integer(a.sample.capturedAt) ||
+        a.sample.headingKnown !== undefined && typeof a.sample.headingKnown !== 'boolean') throw new Error();
       const lines = a.routeToOrigin.geometry.type === 'LineString' ? [a.routeToOrigin.geometry.coordinates] : a.routeToOrigin.geometry.coordinates;
       if (a.routeToOrigin.type !== 'Feature' || !lines.length) throw new Error();
       for (const line of lines) { if (line.length < 2) throw new Error(); line.forEach(normalizeCoordinate); }
@@ -520,6 +512,19 @@ export class MatchingCoordinator {
       return this.driverReceipt(s, d.id);
     }, () => this.traceDriverAction('driver_action_commit', p, operationId, { kind: value === 'AVAILABLE' ? 'availability_available' : 'availability_offline' })) as Promise<DriverState>;
   }
+  private vehicleSample(location: Location): Assignment['sample'] {
+    return { coordinate: location.coordinate, heading: location.heading ?? 0, headingKnown: location.heading !== undefined,
+      sequence: location.revision, capturedAt: location.receivedAt };
+  }
+  /** Only the owning active assignment receives location; the request revision wakes its existing long-poll. */
+  private publishVehicle(s: Snapshot, driver: DriverRecord, advanceRevision = true) {
+    if (!driver.location) return;
+    const request = Object.values(s.requests).find(r => r.assignment?.driverId === driver.id &&
+      ['ASSIGNED', 'ARRIVED_PICKUP', 'IN_PROGRESS'].includes(r.state));
+    if (!request?.assignment) return;
+    request.assignment = { ...request.assignment, sample: this.vehicleSample(driver.location) };
+    if (advanceRevision) request.revision++;
+  }
   async location(p: Principal, point: Coordinate, bearing: number | undefined, operationId: string) {
     this.requireRole(p, 'driver'); let coordinate: Coordinate;
     try { coordinate = normalizeCoordinate(point); } catch { return invalid(); }
@@ -527,8 +532,10 @@ export class MatchingCoordinator {
     return this.mutation(p, operationId, ['location', coordinate, bearing ?? null], s => {
       const d = s.drivers[p.accountId]!;
       if (!['LOCATING', 'AVAILABLE', 'ASSIGNED'].includes(d.availability)) throw new MatchingError(409, 'driver_unavailable');
-      d.locationRevision++; d.revision++; d.location = { coordinate, ...(bearing !== undefined ? { heading: bearing } : {}),
+      const resolvedHeading = resolveVehicleBearing(d.location, { coordinate, heading: bearing, receivedAt: this.clock.now() });
+      d.locationRevision++; d.revision++; d.location = { coordinate, ...(resolvedHeading !== undefined ? { heading: resolvedHeading } : {}),
         receivedAt: this.clock.now(), revision: d.locationRevision };
+      this.publishVehicle(s, d);
       if (d.availability !== 'ASSIGNED') this.availabilityTransition(s, d, 'AVAILABLE', 'location_fix'); return this.driverReceipt(s, d.id);
     }) as Promise<DriverState>;
   }
@@ -543,7 +550,7 @@ export class MatchingCoordinator {
       if (action === 'accept') {
         r.state = 'ASSIGNED'; this.availabilityTransition(s, d, 'ASSIGNED', 'offer_accept');
         r.assignment = { id: randomUUID(), driverId: d.id, etaMinutes: Math.ceil((o.route.trafficDurationSeconds ?? o.route.durationSeconds) / 60),
-          pin: String(randomInt(1000, 10000)), sample: o.sample, routeToOrigin: o.route.geometry };
+          pin: String(randomInt(1000, 10000)), sample: this.vehicleSample(d.location!), routeToOrigin: o.route.geometry };
         this.revoke(s, r);
       }
       return this.driverReceipt(s, d.id);
@@ -636,7 +643,13 @@ export class MatchingCoordinator {
       if (r.state !== 'IN_PROGRESS') conflict('invalid_trip_state');
       if (appendTelemetry(r.lifecycle!, sample, this.clock.now())) {
         r.revision++; const d = next.drivers[p.accountId]!; d.revision++;
-        d.locationRevision++; d.location = { coordinate: sample.coordinate, receivedAt: sample.capturedAt, revision: d.locationRevision };
+        // Offline replay still meters every accepted sample, but may not rewind live position.
+        if (!d.location || sample.capturedAt >= d.location.receivedAt) {
+          const resolvedHeading = resolveVehicleBearing(d.location, { coordinate: sample.coordinate, heading: sample.heading, receivedAt: sample.capturedAt });
+          d.locationRevision++; d.location = { coordinate: sample.coordinate, receivedAt: sample.capturedAt, revision: d.locationRevision,
+            ...(resolvedHeading !== undefined ? { heading: resolvedHeading } : {}) };
+          this.publishVehicle(next, d, false); // lifecycle already advanced the request revision
+        }
         this.commit(next);
       }
       return this.view(this.driverReceipt(this.state, p.accountId)) as DriverState;
@@ -694,7 +707,7 @@ export class MatchingCoordinator {
     const results = await Promise.all(candidates.map(async candidate => {
       try {
         const route = decodeRoute(await this.options.eta(candidate.location.coordinate, request.quote.origin.coordinate));
-        const sample = { coordinate: candidate.location.coordinate, heading: candidate.location.heading ?? heading(route), sequence: candidate.location.revision };
+        const sample = this.vehicleSample(candidate.location);
         return { ...candidate, route, sample };
       } catch { return undefined; }
     }));

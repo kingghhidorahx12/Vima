@@ -11,7 +11,7 @@ export type LifecycleCommand =
   | { name: 'finish'; kind: 'normal' | 'early'; finalTelemetrySequence: number };
 export type PostPinCommand = Exclude<LifecycleCommand, { name: 'start' } | { name: 'arrive' | 'no_show' | 'cash_received' | 'cash_problem' }>
   | { name: 'cash_received' | 'cash_problem' };
-export interface TripTelemetry { sequence: number; coordinate: Coordinate; capturedAt: number }
+export interface TripTelemetry { sequence: number; coordinate: Coordinate; capturedAt: number; heading?: number }
 export interface TripMeter {
   lastSequence: number; distanceMeters: number; durationSeconds: number;
 }

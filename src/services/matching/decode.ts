@@ -36,6 +36,8 @@ function assignment(a: Omit<Assignment, 'pin'> & { pin?: string }, driver = fals
     (driver ? 'pin' in a : !/^\d{4}$/.test(a.pin ?? '')) || !a.sample || !revision(a.sample.sequence) || !Number.isFinite(a.sample.heading) ||
     a.sample.heading < 0 || a.sample.heading >= 360 || a.routeToOrigin?.type !== 'Feature') return fail();
   normalizeCoordinate(a.sample.coordinate);
+  if (a.sample.capturedAt !== undefined && !revision(a.sample.capturedAt) ||
+    a.sample.headingKnown !== undefined && typeof a.sample.headingKnown !== 'boolean') return fail();
   const geometry = a.routeToOrigin.geometry;
   if (!['LineString', 'MultiLineString'].includes(geometry.type)) return fail();
   const lines = geometry.type === 'LineString' ? [geometry.coordinates] : geometry.coordinates;
