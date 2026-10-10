@@ -90,7 +90,7 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
         balancedAccuracy: Location.Accuracy.Balanced }, operationId: () => driverOperationId('location'),
       send: async (coordinate, heading, id, signal, capturedAt) => {
         if (latest.current?.assignment?.state === 'IN_PROGRESS') {
-          await tripOps.current.telemetry(latest.current, coordinate, capturedAt ?? Date.now());
+          await tripOps.current.telemetry(latest.current, coordinate, capturedAt ?? Date.now(), heading);
           return { availability: latest.current.availability, revision: latest.current.revision };
         }
         const snapshot = await client.location(coordinate, heading, id, signal);

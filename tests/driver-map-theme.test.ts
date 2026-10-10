@@ -19,7 +19,7 @@ const profile = { driver: { name: 'Conductor', rating: 4.9 }, vehicle: { name: '
 function snapshot(phase: string, revision = 1, location = true): DriverState {
   return { accountId: 'driver', revision, availability: ['OFFLINE', 'LOCATING', 'AVAILABLE', 'PAUSED'].includes(phase)
     ? phase as DriverState['availability'] : phase === 'OFFER' ? 'AVAILABLE' : 'ASSIGNED', expiryCount: 0, profile,
-    ...(location ? { location: { coordinate: [-99.89 + revision / 10000, 19.8], receivedAt: revision } } : {}),
+    ...(location ? { location: { coordinate: [-99.89 + revision / 10000, 19.8], receivedAt: Date.now() } } : {}),
     ...(phase === 'OFFER' ? { offer: { id: 'offer', requestId: 'request', expiresAt: 10000, etaMinutes: 7, pickup } } : {}),
     ...(['ASSIGNED', 'ARRIVED_PICKUP', 'IN_PROGRESS', 'PAYMENT_PENDING', 'COMPLETED'].includes(phase) ? {
       assignment: { requestId: 'request', pickup, state: phase as NonNullable<DriverState['assignment']>['state'],

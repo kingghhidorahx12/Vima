@@ -6,9 +6,9 @@ import { canInterpolateVehicle, interpolateDriverVehiclePose, validateVehicleSam
 /** Incoming telemetry writes sample.value; React is not part of the visual loop. */
 export function useVehicleMotion(sample: SharedValue<VehicleSample | null>, config?: VehicleMotionConfig): SharedValue<VehiclePose | null>;
 export function useVehicleMotion(sample: SharedValue<DriverVehicleSample | null>, config: VehicleMotionConfig,
-  options: { driver: true; essential: true }): SharedValue<DriverVehiclePose | null>;
+  options: { driver: true; essential: boolean }): SharedValue<DriverVehiclePose | null>;
 export function useVehicleMotion(sample: SharedValue<VehicleSample | null> | SharedValue<DriverVehicleSample | null>, config?: VehicleMotionConfig,
-  options?: { driver: true; essential: true }): SharedValue<VehiclePose | null> | SharedValue<DriverVehiclePose | null> {
+  options?: { driver: true; essential: boolean }): SharedValue<VehiclePose | null> | SharedValue<DriverVehiclePose | null> {
   const { reducedMotion } = useMotionPolicy();
   const reducePosition = reducedMotion && !options?.essential;
   const pose = useSharedValue<DriverVehiclePose | null>(null);
@@ -27,6 +27,7 @@ export function useVehicleMotion(sample: SharedValue<VehicleSample | null> | Sha
       target.set(null);
       origin.set(null);
       sequence.set(null);
+      heading.set(null);
       return;
     }
     if ((next.reducedMotion || !config) && target.get()) {

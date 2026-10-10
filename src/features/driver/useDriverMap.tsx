@@ -41,7 +41,7 @@ export function useDriverMap(state: DriverState | undefined, online: boolean) {
     {content.route ? <RouteLayer id="driver-pickup-route" data={content.route} state="active" activeTone="accentBlue"
       appearance={{ width: 4, opacity: 1, cap: 'round', join: 'round' }} /> : null}
     {content.pickup ? <MapPlacePin place={content.pickup} kind="origin" id="driver-pickup" /> : null}
-    <DriverVehicleMarker location={content.location} sequence={state?.revision ?? 0} online={online} />
+    <DriverVehicleMarker key={state?.accountId} location={content.location} sequence={state?.revision ?? 0} online={online} />
   </>, mapOverlay: <View pointerEvents="box-none" style={styles.chrome}>
     <VimaThemeToggle />
     <MapControls available={capabilities.traffic || capabilities.incidents} capabilities={capabilities} layers={layers} open={open}

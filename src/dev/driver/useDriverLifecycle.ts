@@ -40,9 +40,9 @@ export function useDriverLifecycle(client: MatchingClient, accountId: string, re
       setError(lifecycleCommandMessage(e));
     } finally { busyRef.current = false; setBusy(false); }
   };
-  const telemetry = async (snapshot: DriverState, coordinate: Coordinate, capturedAt: number) => {
+  const telemetry = async (snapshot: DriverState, coordinate: Coordinate, capturedAt: number, heading?: number) => {
     if (snapshot.assignment?.state !== 'IN_PROGRESS' || capturedAt < snapshot.assignment.lifecycle.startedAt!) return;
-    await journal.enqueueTelemetry(snapshot, coordinate, capturedAt); setQueued(await journal.pending()); await sync();
+    await journal.enqueueTelemetry(snapshot, coordinate, capturedAt, heading); setQueued(await journal.pending()); await sync();
   };
   return { busy, queued, pendingCommands, error, sync, command, telemetry };
 }

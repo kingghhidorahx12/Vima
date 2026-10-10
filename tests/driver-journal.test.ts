@@ -47,6 +47,23 @@ test('offline prohibited pre-PIN; durable post-PIN replay GET first, stable IDs/
   } finally { h.f.close(); }
 });
 
+test('optional GPS heading survives offline journal restart and authoritative replay without altering meters', async () => {
+  const h = await fixture(); try {
+    await h.start(); h.setOffline(true);
+    await h.journal().enqueueTelemetry(h.state, [0.2, 0.2], h.f.clock.now()); // existing records without heading
+    h.f.clock.advance(5000);
+    await h.journal().enqueueTelemetry(h.state, [0.2002, 0.2], h.f.clock.now(), 95);
+    const entries = JSON.parse([...h.data.values()][0]!).entries;
+    assert.equal('heading' in entries[0].sample, false); assert.equal(entries[1].sample.heading, 95);
+    await h.f.restart(); h.setOffline(false);
+    await h.journal().sync();
+    assert.equal(h.state.location!.heading, 95);
+    assert.equal((await h.f.c.fetch(p, h.trip.id)).assignment!.sample.heading, 95);
+    assert.equal(h.state.assignment!.lifecycle.meter!.lastSequence, 2);
+    assert.equal(h.state.assignment!.lifecycle.meter!.distanceMeters, 22);
+  } finally { h.f.close(); }
+});
+
 test('stationary trip: no sample blocks finish, confirmed zero meters does not', async () => {
   const h = await fixture(); try {
     await h.start(); const journal = h.journal();

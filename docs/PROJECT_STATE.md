@@ -1,13 +1,75 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-10 en `codex/qa-android-stability-p0`,
-desde `codex/qa-eas-update-railway-p0` @ `47bd3abe636dd6d704bd0de82e62239349944043`.
+Actualizado 2026-10-10 en `codex/shared-vehicle-live-heading-p0`,
+desde `codex/qa-android-stability-p0` @ `3a927c480367b76b9202302245106281d492e7ad`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Vehículo compartido Driver/Passenger y telemetría de asignación — 2026-10-10
+
+- Base funcional reportada por el usuario: `3a927c4`. Se inspeccionaron HEAD,
+  cambios recientes, docs y actividad disponible; se conservaron los dos logs
+  locales ajenos sin modificar/versionar. Glass sigue descartado.
+- Causa: Passenger usaba un círculo; Driver tenía una base circular permanente
+  bajo el sprite. El Gateway copiaba `offer.sample` al asignar, sin actualizarlo
+  con nuevas ubicaciones ni telemetría. La ruta de recogida suplía artificialmente
+  el heading ausente, y el journal post-PIN descartaba el heading GPS.
+- Ambos roles reutilizan el mismo `VehicleMarker`, Images y PNG cenital Vima
+  light/dark existente (52×64, cuerpo 38×50, frente hacia arriba/norte, @3x).
+  Se elimina sólo la base circular permanente; adquisición one-shot conservada.
+  Symbol usa heading 360° alineado al mapa; desconocido usa orientación neutra
+  de viewport. No artwork nuevo ni rotación adicional por bearing de cámara.
+  AnimatedSource sigue siendo la única frontera animada MapLibre; Layers normales,
+  paint con expresiones validadas, sin React por frame ni animatedProps.paint.
+- Rumbo autoritativo: desplazamiento geodésico >=8 m y velocidad plausible
+  (<=60 m/s), GPS consistente dentro de 35°, último rumbo bajo el umbral de ruido.
+  Reacquisición >60 s no infiere dirección a través del hueco. La ruta planificada
+  no demuestra el sentido real de circulación; no se fuerza orientación a ella
+  ni se declara map matching. Se conservan coordenadas, interpolación shortest-arc
+  y cruces 359°/0° existentes. Reduced Motion Passenger sin interpolación espacial;
+  Driver conserva su política essential; ambos sin halo animado bajo reducción.
+- Cambio backend aislado: aceptación usa la última ubicación real; actualizaciones
+  publican `assignment.sample` sólo para el Driver dueño del viaje activo y avanzan
+  la revisión que despierta el long-poll Passenger. Post-PIN propaga lo mismo con
+  la revisión existente. `capturedAt`/`headingKnown` son metadata opcional compatible;
+  heading ausente se distingue explícitamente de norte. `TripTelemetry.heading`
+  opcional se conserva en el journal/replay sin alterar metering, comandos,
+  idempotencia, settlement ni borrar credenciales/operaciones offline.
+- Telemetría atrasada aceptada para metering no reemplaza una posición con fecha
+  más nueva. Passenger sólo muestra el vehículo en ASSIGNED/ARRIVED_PICKUP/
+  IN_PROGRESS, nunca flota Home ni otras cuentas; samples sin timestamp o vencidos
+  a 60 s quedan ocultos. Deadline y foreground vuelven a evaluar frescura. El marker
+  rechaza regresión de sequence/timestamp; identidad se reinicia sólo por cambio
+  de cuenta Driver/asignación Passenger, sin remontar mapa/sheet.
+- Nuevas revisiones del carro no reemiten targets Camera idénticos. Camera,
+  route-fit, geometría de ruta, login, location cadence/watchdog y backend auth
+  permanecen sin cambios. El filtrado de rumbo no modifica muestras de metering.
+- Despliegue pendiente y **no ejecutado**: primero Gateway compatible en Railway,
+  después OTA QA del mismo runtime en ambos teléfonos. La OTA nueva envía heading
+  opcional post-PIN y requiere ese Gateway antes de usarla. Sin dependencias,
+  cambios nativos, APK/EAS Build ni merge a main.
+- Validaciones: TypeScript y lint PASS; suite completa **342/342**, Gateway
+  **89/89**, focal final de render Driver/Passenger **10/10**. Worklets, splash,
+  schema MapLibre (capas del vehículo incluidas), export Hermes Android/iOS y
+  aislamiento fixture/server/pricing/paths/credenciales/QA PASS. Expo Doctor
+  **20/21**, únicamente los cinco patches SDK 57 previamente conocidos; no se
+  actualizan dependencias. Se mantienen los warnings Node de módulos sin type
+  y deprecación react-test-renderer, sin alterar tooling para ocultarlos.
+- QA Android físico de esta corrección **PENDIENTE**. Sin USB/Metro: instalar/abrir
+  QA compatible y comprobar misma OTA en ambos equipos; uno Passenger y otro Driver.
+  Probar light/dark y Reduced Motion, OFFLINE→LOCATING→AVAILABLE, aceptar y observar
+  desplazamiento real en ASSIGNED→ARRIVED_PICKUP→IN_PROGRESS. En recorrido seguro,
+  comprobar calles horizontales/verticales/diagonales, giros y mapa rotado, detenerse
+  para verificar rumbo estable. Sólo el pasajero del viaje ve ese vehículo.
+  Activar modo avión >60 s: Passenger deja de presentar la última muestra como
+  viva; cerrar/reabrir Driver, reconectar, recuperar viaje/journal y ver posición
+  fresca en ambos sin retroceso por replay. Verificar ausencia de crash Fabric/
+  MapLibre, mapa sin recentrarse por cada fix y settlement conservado (0 m parado
+  continúa siendo válido). Hacer la prueba como acompañante, sin operar al conducir.
 
 ### Estabilización QA Android: arranque, cuenta y mapa — 2026-10-10
 

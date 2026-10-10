@@ -1,14 +1,14 @@
 import type { CircleAppearance } from '../../map/models';
-import { useEffect, useMemo } from 'react';
-import { useSharedValue } from 'react-native-reanimated';
+import { useMemo } from 'react';
 import { Camera, type CameraMode, type CameraTarget, type RecenterIntent } from '../../map/Camera';
 import { TrafficFlowLayer } from '../../map/TrafficFlowLayer';
 import { IncidentLayer } from '../../map/IncidentLayer';
 import type { IncidentDetails } from '../../map/incidentDetails';
 import type { TrafficLayerPreferences } from '../../map/traffic';
 import { RouteLayer, type RouteLayerProps } from '../../map/RouteLayer';
-import { VehicleLayer } from '../../map/VehicleLayer';
-import type { VehicleMotionConfig, VehicleSample } from '../../map/vehicleMotion';
+import { VehicleMarker } from '../../map/DriverVehicleMarker';
+import type { VehicleMotionConfig } from '../../map/vehicleMotion';
+import type { RequestState } from '../../services/matching/contracts';
 import type { Assignment, Place, RideQuote } from './model';
 import { PassengerMapPin, PassengerUserLocation } from './PassengerMapPin';
 import { visualTokens as t } from '../../design/tokens';
@@ -23,23 +23,29 @@ export interface PassengerMapConfig {
   readonly viewport: (quote: RideQuote | undefined, assignment: Assignment | undefined, origin: Place | null) => CameraTarget;
   readonly vehicleMotion: VehicleMotionConfig;
 }
-export function PassengerMap({ quote, assignment, origin, destination, currentLocation, home, ready, sheetHeight, topOcclusion = 0, homeBottomOcclusion, locationCtaVisible = false, searchPresentationActive,
+export function PassengerMap({ quote, assignment, requestState, origin, destination, currentLocation, home, ready, sheetHeight, topOcclusion = 0, homeBottomOcclusion, locationCtaVisible = false, searchPresentationActive,
   cameraMode = 'automatic', recenter, fitRoute, northRequest, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
-  quote?: RideQuote; assignment?: Assignment; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
+  quote?: RideQuote; assignment?: Assignment; requestState?: RequestState; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
   ready: boolean; sheetHeight: number; topOcclusion?: number; homeBottomOcclusion?: number; locationCtaVisible?: boolean; layersMenuOpen?: boolean; searchPresentationActive?: boolean; cameraMode?: CameraMode;
   recenter?: RecenterIntent; fitRoute?: Omit<PassengerRouteFitIntent, 'sheetHeight'> & { sheetHeight?: number }; northRequest?: number;
   layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
   onIncidentSelect?: (details: IncidentDetails) => void;
   manualSelection?: { coordinate: Place['coordinate']; kind: 'origin' | 'destination' } | null; config: PassengerMapConfig;
 }) {
-  const sample = useSharedValue<VehicleSample | null>(null);
-  useEffect(() => { sample.set(assignment?.sample ?? null); }, [assignment?.sample, sample]);
-  const target = useMemo(() => {
+  const vehicle = assignment?.sample;
+  const location = vehicle?.capturedAt !== undefined && !home &&
+    ['ASSIGNED', 'ARRIVED_PICKUP', 'IN_PROGRESS'].includes(requestState ?? '')
+    ? { coordinate: vehicle.coordinate, receivedAt: vehicle.capturedAt,
+      ...(vehicle.headingKnown !== false ? { heading: vehicle.heading } : {}) } : undefined;
+  const targetValue = useMemo(() => {
     const view = config.viewport(quote, assignment, origin);
     // The caller measures top chrome in the map's coordinate frame. Navigation remains
     // outside the map; the sheet contributes only its visible height.
     return { ...view, padding: { ...view.padding, top: Math.max(view.padding?.top ?? 0, topOcclusion), bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
   }, [assignment, config, origin, quote, sheetHeight, topOcclusion]);
+  // Live vehicle revisions must not reissue an identical camera command on every fix.
+  const targetKey = JSON.stringify(targetValue);
+  const target = useMemo(() => JSON.parse(targetKey) as typeof targetValue, [targetKey]);
   // Preserve previous non-Home recenter behavior. Normal Home uses the measured
   // search top as its bottom viewport boundary for both initial and explicit centers.
   const previousRecenterPadding = useMemo(() => ({ ...target.padding,
@@ -72,8 +78,8 @@ export function PassengerMap({ quote, assignment, origin, destination, currentLo
     {displayKeyAvailable ? <IncidentLayer enabled={!!layers?.incidents} onSelect={onIncidentSelect} /> : null}
     {!searchPresentationActive && quote ? <RouteLayer id="passenger-route" data={assignment?.routeToOrigin ?? quote.route}
       activeTone="accentBlue" state="active" appearance={config.route} active={active} /> : null}
-    {!searchPresentationActive ? <VehicleLayer id="passenger-assigned-vehicle" kind="circle" sample={sample}
-      appearance={config.vehicle} motion={config.vehicleMotion} /> : null}
+    {!searchPresentationActive ? <VehicleMarker key={assignment?.id} id="passenger-assigned-vehicle"
+      location={location} sequence={vehicle?.sequence ?? 0} /> : null}
     {showCurrentLocation ? <PassengerUserLocation place={currentLocation!} active={active} /> : null}
     {visibleOrigin ? <PassengerMapPin place={visibleOrigin} kind="origin" /> : null}
     {!searchPresentationActive && (quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}

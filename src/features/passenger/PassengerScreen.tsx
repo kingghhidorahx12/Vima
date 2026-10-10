@@ -610,7 +610,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           setMapUserControlled(true); if (homeFloatingSearch) setHomePanNeedsRecenter(true); },
           onPress: event => { setIncident(null); if (pickingMap) setSelectedCoordinate(normalizeCoordinate(event.nativeEvent.lngLat)); },
           onDidFinishLoadingMap: () => { setMapReady(true); setMapFailed(false); }, onDidFailLoadingMap: () => setMapFailed(true) }}
-        mapContent={<PassengerMap quote={flow.quote} assignment={assignment} origin={flow.origin} destination={flow.destination}
+        mapContent={<PassengerMap quote={flow.quote} assignment={assignment} requestState={flow.trip?.requestState} origin={flow.origin} destination={flow.destination}
           currentLocation={flow.currentLocation} onIncidentSelect={pickingMap ? undefined : setIncident}
           home={flow.phase === 'home' && !flow.destination}
           ready={mapReady} searchPresentationActive={flow.field !== null}

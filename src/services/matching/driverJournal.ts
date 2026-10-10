@@ -16,6 +16,8 @@ function decode(raw: string): Journal {
     if (entry.kind === 'telemetry') {
       if (!integer(entry.sample.sequence) || !entry.sample.sequence || !integer(entry.sample.capturedAt)) throw new Error('invalid_driver_journal');
       normalizeCoordinate(entry.sample.coordinate);
+      if (entry.sample.heading !== undefined && (!Number.isFinite(entry.sample.heading) || entry.sample.heading < 0 || entry.sample.heading >= 360))
+        throw new Error('invalid_driver_journal');
     } else if (entry.kind !== 'command' || !id(entry.commandId) ||
       !['complete_stop', 'incur_addition', 'finish', 'cash_received', 'cash_problem'].includes(entry.command.name)) throw new Error('invalid_driver_journal');
   }
@@ -77,14 +79,15 @@ export function createDriverJournal(storage: Storage, accountId: string, client:
   }
   return {
     sync: () => serial(sync),
-    enqueueTelemetry: (snapshot: DriverState, coordinate: TripTelemetry['coordinate'], capturedAt: number) => serial(async () => {
+    enqueueTelemetry: (snapshot: DriverState, coordinate: TripTelemetry['coordinate'], capturedAt: number, heading?: number) => serial(async () => {
       snapshot = currentSnapshot(snapshot);
       if (snapshot.assignment?.state !== 'IN_PROGRESS' || !integer(capturedAt)) throw new Error('offline_not_available');
       const journal = await current(snapshot);
       if (journal.entries.some(e => e.kind === 'command' && e.command.name === 'finish')) throw new Error('finish_already_queued');
       const sequence = Math.max(snapshot.assignment.lifecycle.meter!.lastSequence,
         ...journal.entries.filter(e => e.kind === 'telemetry').map(e => e.sample.sequence)) + 1;
-      const sample = { sequence, coordinate: normalizeCoordinate(coordinate), capturedAt };
+      const sample = { sequence, coordinate: normalizeCoordinate(coordinate), capturedAt,
+        ...(heading !== undefined && Number.isFinite(heading) && heading >= 0 && heading < 360 ? { heading } : {}) };
       journal.entries.push({ kind: 'telemetry', sample }); await write(journal); return sample;
     }),
     enqueueCommand: (snapshot: DriverState, commandId: string, command: PostPinCommand) => serial(async () => {
