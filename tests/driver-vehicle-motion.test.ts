@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import React from 'react';
@@ -80,20 +81,29 @@ test('default Passenger Reduced Motion still snaps; Driver essential keeps smoot
   }
 });
 
-test('local car artwork has identical geometry and PNG dimensions in both palettes', () => {
-  const variants = ['light', 'dark'].map(name => {
-    const svg = readFileSync(`assets/driver/vehicle-${name}.svg`, 'utf8');
-    assert.doesNotMatch(svg, /(?:href|src)=|<image|<circle|M21 31L26 39/);
-    assert.match(svg, /viewBox="0 0 36 54"/);
-    assert.match(svg, /visual 30 x 46/);
-    assert.match(svg, /fill="#F7F8F7"/); // Both variants keep a light body, no dark badge.
-    for (const [suffix, scale] of [['', 1], ['@3x', 3]] as const) {
-      const png = readFileSync(`assets/driver/vehicle-${name}${suffix}.png`);
-      assert.equal(png.readUInt32BE(16), 36 * scale); assert.equal(png.readUInt32BE(20), 54 * scale);
+test('approved photographic sprite preserves source, transparent centered footprint and shared theme registration', () => {
+  const { PNG } = require('pngjs'); // Already installed by Expo tooling; no runtime image processor.
+  const original = readFileSync('assets/driver/vehicle-approved-source.png');
+  assert.equal(createHash('sha256').update(original).digest('hex'),
+    '122d51574d491b256cb059112269f71e9df98d9e740fcfecc55260799a036ec9');
+  for (const [suffix, scale] of [['', 1], ['@2x', 2], ['@3x', 3]] as const) {
+    const png: { width: number; height: number; data: Buffer } = PNG.sync.read(readFileSync(`assets/driver/vehicle-approved${suffix}.png`));
+    assert.equal(png.width, 30 * scale); assert.equal(png.height, 50 * scale);
+    let left = png.width, right = 0, top = png.height, bottom = 0;
+    for (let y = 0; y < png.height; y++) for (let x = 0; x < png.width; x++) {
+      const alpha = png.data[(y * png.width + x) * 4 + 3]!;
+      if (x === 0 || y === 0 || x === png.width - 1 || y === png.height - 1) assert.equal(alpha, 0);
+      if (alpha > 32) { left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y); }
     }
-    return svg.replace(/#[0-9a-f]{3,8}/gi, '#palette');
-  });
-  assert.equal(variants[0], variants[1]);
+    assert.ok(Math.abs((right - left + 1) / scale - 21) <= 1);
+    assert.ok(Math.abs((bottom - top + 1) / scale - 46) <= 1);
+    assert.ok(Math.abs(left + right - (png.width - 1)) <= 1);
+    assert.ok(Math.abs(top + bottom - (png.height - 1)) <= 1);
+  }
+  const marker = readFileSync('src/map/DriverVehicleMarker.tsx', 'utf8');
+  assert.match(marker, /approvedVehicle = require\('\.\.\/\.\.\/assets\/driver\/vehicle-approved\.png'\)/);
+  assert.match(marker, /'vima-driver-light': approvedVehicle, 'vima-driver-dark': approvedVehicle/);
+  assert.doesNotMatch(marker, /vehicle-light\.png|vehicle-dark\.png/);
 });
 
 test('sun/light_mode and moon/dark_mode map to actual non-missing bundled Material Symbols glyphs', () => {

@@ -47,7 +47,11 @@ test('Passenger uses the same registered car and map-aligned heading in active p
       assert.deepEqual(car.props.layout['icon-rotate'], ['get', 'heading']);
       assert.equal(layers.some(n => /-base$/.test(n.props.id)), false);
       assert.equal(layers.some(n => n.props.animatedProps), false);
-      assert.ok(tree.root.findByType('MapLibreImages' as never).props.images[`vima-driver-${theme}`]);
+      const images = tree.root.findByType('MapLibreImages' as never).props.images;
+      assert.ok(images[`vima-driver-${theme}`]);
+      assert.equal(images['vima-driver-light'], images['vima-driver-dark']);
+      assert.equal(car.props.layout['icon-size'], 1);
+      assert.equal(car.props.layout['icon-anchor'], 'center');
       assert.deepEqual(validateStyleMin({ version: 8, sources: { vehicle: { type: 'geojson', data: read() } },
         layers: layers.map(n => ({ id: n.props.id, type: n.props.type, source: 'vehicle',
           ...(n.props.paint ? { paint: n.props.paint } : {}), ...(n.props.layout ? { layout: n.props.layout } : {}),

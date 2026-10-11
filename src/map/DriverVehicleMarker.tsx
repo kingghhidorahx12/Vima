@@ -11,8 +11,8 @@ import type { DriverState } from '../services/matching/contracts';
 import { useFreshVehicleLocation } from './useFreshVehicleLocation';
 
 const AnimatedSource = Animated.createAnimatedComponent(GeoJSONSource);
-const images = { 'vima-driver-light': require('../../assets/driver/vehicle-light.png'),
-  'vima-driver-dark': require('../../assets/driver/vehicle-dark.png') };
+const approvedVehicle = require('../../assets/driver/vehicle-approved.png');
+const images = { 'vima-driver-light': approvedVehicle, 'vima-driver-dark': approvedVehicle };
 const motion = createVehicleMotion(() => { 'worklet'; return false; });
 const empty = JSON.stringify({ type: 'FeatureCollection', features: [] });
 
@@ -23,7 +23,7 @@ export function DriverVehicleMarker({ location, sequence, online = true }: {
   return <VehicleMarker location={location} sequence={sequence} online={online} essential />;
 }
 
-/** North-facing Sedan A: 36×54 canvas, ~30×46 silhouette, centered pivot; Metro @3x. */
+/** Approved north-facing PNG: 30×50 canvas, ~21×46 silhouette without distortion; Metro @2x/@3x. */
 export function VehicleMarker({ location: incoming, sequence, online = true, essential = false, id = 'driver-vehicle' }: {
   location?: DriverState['location']; sequence: number; online?: boolean; essential?: boolean; id?: string;
 }) {

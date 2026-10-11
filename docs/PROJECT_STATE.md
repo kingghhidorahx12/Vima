@@ -1,13 +1,46 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-10 en `codex/sedan-fino-passenger-theme-p0`,
-desde `codex/shared-vehicle-live-heading-p0` @ `8c1d70b62a11934b4b093c57d4d19c84d46dc412`.
+Actualizado 2026-10-10 en `codex/approved-vehicle-sprite-p0`,
+desde `codex/sedan-fino-passenger-theme-p0` @ `dda9d62ffc363a2fbb28c181119a80e308ed6a72`.
 Sin merge a main.
 
 Las secciones de implementación son cronológicas; los ajustes más recientes
 sustituyen los valores visuales descritos en las secciones anteriores.
 
 ## IMPLEMENTADO
+
+### Sprite definitivo desde la imagen aprobada — 2026-10-10
+
+- HEAD inspeccionado y trabajo ajeno preservado. Se sustituye el sedán dibujado
+  anteriormente por el PNG cenital aprobado, conservado sin modificaciones como
+  `assets/driver/vehicle-approved-source.png` (1024×1536). Preparación documentada
+  en `assets/driver/VEHICLE.md`: recorte del alpha útil, padding simétrico y resize
+  proporcional. Sin redibujar, generar una variante dark ni modificar colores.
+- Exportes transparentes 30×50, 60×100 y 90×150 px para 1x/2x/3x. A `icon-size=1`,
+  silueta ~20.91×46.09 dp dentro del canvas 30×50 dp: se preserva la proporción
+  original estrecha en vez de deformarla hasta 30 dp de ancho. Anchor central y
+  frente hacia norte intactos. Revisión visual de los exportes sobre fondos claro
+  y oscuro realizada; no equivale a QA de MapLibre en Android físico.
+- `Images` registra el mismo PNG bajo ambos nombres light/dark existentes.
+  Driver y Passenger asignado siguen usando `VehicleMarker`; se retiran los seis
+  SVG/PNG anteriores sin consumidores. El original de alta resolución no se importa
+  en la app. No cambian halo one-shot separado, Layers, AnimatedSource, ausencia
+  de feature sin location, heading, interpolación, timestamps ni Reduced Motion.
+- Sin cambios de backend, telemetría, matching, lifecycle, auth, pricing, Camera,
+  route-fit, shell ni Sol/Luna. Sin dependencias/configuración nativa: compatible
+  con OTA, sin nuevo Development Build. Sin publicación OTA/Railway ni merge main.
+- Validación final: TypeScript, lint, suite completa **343/343**, worklets y schema
+  MapLibre (tests Driver/Passenger) PASS. Regresiones de worklet autosuficiente,
+  Layers normales, source vacío sin location, rumbo/movimiento/frescura y Reduced
+  Motion conservadas. Hash del original, alpha/footprint centrado y registro
+  compartido cubiertos. Export Hermes Android/iOS y aislamiento fixture/server/
+  pricing/paths/credenciales/QA PASS. Comparación de hashes confirma los tres PNG
+  derivados incluidos en el bundle y el original excluido. Expo Doctor no se
+  repitió en esta ronda de assets; resultado previo 20/21 por patches SDK 57.
+- QA Android físico **PENDIENTE**: comprobar sprite pequeño/completo en light/dark
+  y ambos roles, sin base pesada; al recibir location real aparece en la posición
+  autoritativa y conserva rumbo al desplazarse/girar el mapa. Reabrir/reconectar y
+  repetir con Reduced Motion; sin location no debe aparecer automóvil.
 
 ### Sedán fino A y Sol/Luna Passenger — 2026-10-10
 
