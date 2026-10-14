@@ -1,8 +1,56 @@
-# Gateway geoespacial Vima P0
+# Gateway geoespacial y autenticación de producto Vima
+
+## Autenticación productiva P1.1 (implementación local, aún no habilitada en Railway)
+
+La configuración productiva es opt-in: sólo cuando `VIMA_PRODUCT_AUTH_PROVIDER=twilio`
+se activan los endpoints OTP de producto y se deja de cargar `VIMA_AUTH_CONFIG_PATH`.
+No configures el proveedor OTP en `VIMA_BACKEND_MODE=qa`; QA continúa usando su
+`AuthConfig` externo y la app `LiveAccountGate`. Las sesiones son autoridades distintas.
+
+Preparación Passenger y propuesta administrativa Driver (no implementada) en
+[PRODUCT_ACCESS_ROLLOUT.md](../docs/PRODUCT_ACCESS_ROLLOUT.md). Producto requiere un
+servicio/volumen separado del QA operativo; no se agrega una autoridad QA de fallback.
+El modo no-QA se llama `local` en la configuración actual, incluso detrás de Railway.
+
+Requiere servidor Node >=22.13, un volumen persistente (`VIMA_GEO_RUNTIME_DIR`, por
+ejemplo `/data`) y estas variables externas:
+
+| Variable | Uso |
+| --- | --- |
+| `VIMA_PRODUCT_AUTH_PROVIDER=twilio` | Habilita auth de producto fuera de QA. |
+| `VIMA_PRODUCT_AUTH_SECRET` | Secreto aleatorio de al menos 32 caracteres para derivar hashes HMAC. |
+| `TWILIO_ACCOUNT_SID` | Identidad de servidor Twilio. |
+| `TWILIO_VERIFY_SERVICE_SID` | Verify Service para SMS. |
+| `TWILIO_AUTH_TOKEN` | Credencial privada Twilio. |
+
+El gateway persiste `auth-v1.json` en el runtime dir mediante escrituras serializadas
+y reemplazo atómico. Restringe acceso al volumen. Se almacenan HMAC de teléfonos y
+hashes de access/refresh tokens, nunca teléfono ni tokens en claro. OTP se limita a
+teléfonos mexicanos, una solicitud por minuto y cinco por teléfono en una hora; cada
+challenge expira en diez minutos y permite cinco verificaciones. La app necesita
+`EXPO_PUBLIC_VIMA_API_BASE_URL` HTTPS. No incluyas ninguna variable secreta en EAS,
+`EXPO_PUBLIC_*`, el bundle ni los logs.
+
+Rutas exactas: `POST /v1/auth/otp/start`, `POST /v1/auth/otp/verify`,
+`POST /v1/auth/register`, `POST /v1/auth/refresh`, `POST /v1/auth/logout` y
+`GET /v1/auth/me`. Sólo start/verify/register/refresh son públicas; logout y me
+requieren access token. No existe un bypass público por prefijo `/v1/auth/`.
+Las nuevas cuentas sólo tienen capacidad Passenger. No se ha creado aprobación
+Driver ni perfil vehicular. Para más detalle, ver [decisiones](../docs/DECISIONS.md)
+y [estado](../docs/PROJECT_STATE.md).
+
+El adapter está probado con OTP simulado. No se han configurado credenciales,
+enviado SMS real, desplegado Railway ni publicado OTA; la autenticación productiva
+no debe anunciarse como live hasta completar esas comprobaciones.
+
+Twilio API: [Verify Verification](https://www.twilio.com/docs/verify/api/verification)
+y [Verification Check](https://www.twilio.com/docs/verify/api/verification-check).
+
+## Gateway geoespacial Vima P0
 
 Node >=22.13 y TypeScript con el toolchain existente, sin framework ni base de datos adicional.
-Incluye AuthConfig, matching y lifecycle con almacenamiento durable. Admite validación local
-y QA interno persistente; el producto público todavía no está habilitado.
+Incluye AuthConfig, matching y lifecycle con almacenamiento durable. Admite validación local,
+QA interno persistente y la nueva autenticación OTP de producto, pendiente de configuración live.
 
 ## Ejecutar
 

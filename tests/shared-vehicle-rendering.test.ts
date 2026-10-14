@@ -22,7 +22,7 @@ test('Passenger uses the same registered car and map-aligned heading in active p
       'src/design/themes/index.tsx': { useVimaTheme: () => ({ name: theme, roles: { positive: '#00D68F' } }) },
     } });
     const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
-    const config = { viewport: () => ({ center: [0, 0], zoom: 14, bearing: 125, padding: {} }) };
+    const config = { viewport: () => ({ center: [0, 0], zoom: 14, bearing: 125, padding: {} }), route: { width: 4, opacity: 1 } };
     let a = assignment(); let phase: RequestState = 'ASSIGNED'; let home = false;
     const element = () => React.createElement(PassengerMap, { assignment: a, requestState: phase, config, home,
       ready: true, origin: null, destination: null, sheetHeight: 100 });
@@ -32,6 +32,7 @@ test('Passenger uses the same registered car and map-aligned heading in active p
     const settle = async () => { await h.flush(); h.frame(0); h.frame(1000); await h.act(async () => tree.update(element())); };
     try {
       await settle();
+      const markerSource = tree.root.findAllByType('MapLibreSource' as never).find(n => n.props.id === 'passenger-assigned-vehicle-source');
       const cameraCalls = h.calls.filter((c: unknown[]) => c[0] === 'setStop').length;
       for (const state of ['ASSIGNED', 'ARRIVED_PICKUP', 'IN_PROGRESS'] as const) {
         phase = state; a = assignment(a.sample.sequence + 1);
@@ -72,7 +73,7 @@ test('Passenger uses the same registered car and map-aligned heading in active p
       await h.act(async () => tree.update(element())); await settle(); assert.deepEqual(read().features, []);
       a = assignment(13); await h.act(async () => tree.update(element())); await settle();
       assert.deepEqual(read().geometry.coordinates, a.sample.coordinate);
-      assert.equal(h.calls.filter((c: unknown[]) => c[0] === 'unmount' && c[1] === 'MapLibreSource').length, 0);
+      assert.equal(tree.root.findAllByType('MapLibreSource' as never).find(n => n.props.id === 'passenger-assigned-vehicle-source'), markerSource);
     } finally { await h.act(async () => tree.unmount()); }
   }
 });

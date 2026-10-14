@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, BackHandler, Image, Keyboard, Pressable, ScrollView, StyleSheet, TextInput, View, type ImageSourcePropType } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import type { VimaMapRef } from '../../map/VimaMap';
@@ -42,8 +42,12 @@ import { mapPersonality } from '../../motion/mapPersonality';
 import { IncidentCard } from './IncidentCard';
 import type { IncidentDetails } from '../../map/incidentDetails';
 import { SearchEntranceRegistry } from './searchEntrance';
+import { DestinationSummary, JourneyClosure, JourneyStatus } from './PassengerJourneySummary';
 
 export interface PassengerBoundaries {
+  readonly account?: () => void;
+  readonly communicationAvailable?: boolean;
+  readonly renderRestoration?: (state: { ready: boolean; error?: Error; retry: () => void }) => ReactNode;
   readonly schedule: (quote: RideQuote | undefined) => void;
   readonly call: (assignment: Assignment) => void;
   readonly safety: (assignment: Assignment) => void;
@@ -190,7 +194,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       read(viewportNode.current, setViewportMeasure);
     });
     return () => { active = false; cancelAnimationFrame(frame); };
-  }, [measureKey]);
+  }, [measureKey, sheetFrameHeight]);
   // Previous physical heights keep the sheet continuous while the new generation is measured.
   const headerHeight = headerMeasure?.height ?? 0;
   const naturalHeight = contentMeasure && headerMeasure ? contentMeasure.height + headerHeight : 0;
@@ -392,6 +396,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setViewportMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
     {flow.connection !== 'online' ? <ElementEntrance timing={motionTimings.state}>
       <StatusNotice>Sin conexión · Intentando reconectar</StatusNotice></ElementEntrance> : null}
+    {flow.phase === 'home' && (flow.trip?.phase === 'cancelled' || flow.trip?.phase === 'expired') ?
+      <StatusNotice>{flow.trip.phase === 'cancelled' ? 'Viaje cancelado. Puedes preparar otro viaje.' : 'No encontramos un conductor. Puedes intentarlo de nuevo.'}</StatusNotice> : null}
     {flow.quoteExpired ? <ElementEntrance timing={motionTimings.state}>
       <StatusNotice>La cotización venció. Revisa y confirma la nueva cotización.</StatusNotice></ElementEntrance> : null}
     {visibleError ? <ElementEntrance timing={motionTimings.success}><Animated.View style={errorPress.style}><Pressable
@@ -441,7 +447,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         </> : null}
         {flow.search.trim() ? <>
           {flow.places.length ? <View testID="passenger-search-results" style={styles.searchResults}>
-            {searchEntries.map(({ place, identity, entranceIndex }) => <PlaceRow key={identity} place={place} presentation="list"
+            {searchEntries.map(({ place, identity, entranceIndex }, index) => <PlaceRow highlighted={index === 0} key={identity} place={place} presentation="list"
               animateEntry={entranceIndex !== undefined && entranceIndex < 5} staggerIndex={entranceIndex} exit
               resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}
           </View> : null}
@@ -525,9 +531,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           <TextAction label="Ver todos" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('recents'); }} /></View>
         {flow.recents.slice(0, homeRecentLimit).map((place) => <PlaceRow key={place.id} place={place} rich presentation="list" resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
+        {!flow.recents.length ? <VimaText variant="bodySmall" style={{ color: theme.roles.textSecondary }}>Tus destinos confirmados aparecerán aquí.</VimaText> : null}
       </> : flow.phase === 'confirm' || flow.phase === 'requesting' ? <>
         {addressFields}
-        {flow.loadingQuote ? <ActivityIndicator color={theme.roles.positiveStrong} /> : null}
+        {flow.destination ? <DestinationSummary place={flow.destination} resolveMedia={gateway.resolvePlaceMedia} /> : null}
+        {flow.loadingQuote ? <ActivityIndicator accessibilityLabel="Calculando ruta y tarifa" color={theme.roles.positiveStrong} /> : null}
         {flow.quote ? <>
           <View style={styles.metrics}>
             <Metric icon="car" value={`${flow.quote.durationMinutes} min`} label="Duración" />
@@ -542,7 +550,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         </> : null}
         <VimaButton label="Solicitar viaje" onPress={() => { void flow.submit(); }} haptic="requestRide"
           loading={flow.phase === 'requesting'} disabled={!flow.canSubmit} />
-      </> : assignment ? <>
+      </> : flow.trip && ['completed', 'cancelled', 'expired'].includes(flow.phase) ? <JourneyClosure trip={flow.trip} onHome={goHome} /> : assignment ? <>
+        <JourneyStatus trip={flow.trip!} />
         <View style={[styles.driverCard, presentation.card]}>
           <View style={styles.row}>
             <View style={[styles.avatar, { backgroundColor: theme.roles.positiveWash }]}><VimaGlyph name="profile" color={theme.roles.positiveStrong} /></View>
@@ -550,8 +559,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
               <View style={styles.rating}><VimaGlyph name="star" color={theme.roles.warning} /><VimaText variant="bodySmall">{assignment.driver.rating}</VimaText></View>
             </View>
           </View>
-          <View style={[styles.pin, { backgroundColor: theme.roles.subtleSurface }]}><VimaText variant="caption" style={{ color: theme.roles.textSecondary }}>PIN</VimaText>
-            <VimaText variant="h1" selectable accessibilityLabel={`PIN ${assignment.pin.split('').join(' ')}`}>{assignment.pin}</VimaText></View>
+          {['ASSIGNED', 'ARRIVED_PICKUP'].includes(flow.trip?.requestState ?? 'ASSIGNED') ? <View style={[styles.pin, { backgroundColor: theme.roles.positiveWash }]}><VimaText variant="caption" style={{ color: theme.roles.textSecondary }}>PIN</VimaText>
+            <VimaText variant="h1" selectable accessibilityLabel={`PIN ${assignment.pin.split('').join(' ')}`}>{assignment.pin}</VimaText></View> : null}
           <View style={styles.vehicle}>
             {boundaries.vehicleImage ? <Image source={boundaries.vehicleImage} style={styles.vehicleImage} resizeMode="contain" />
               : <View style={[styles.vehicleImage, { backgroundColor: theme.roles.subtleSurface }]} accessible accessibilityLabel="Imagen del vehículo no disponible"><VimaGlyph name="car" color={theme.roles.control} /></View>}
@@ -560,12 +569,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
               <VimaText variant="h3" selectable>{assignment.vehicle.plate}</VimaText></View>
           </View>
         </View>
-        <View style={styles.row}><VimaButton style={styles.fill} secondary communication icon="phone" label="Llamar" onPress={() => boundaries.call(assignment)} disabled={blocked} />
-          <VimaButton style={styles.fill} secondary icon="shield" label="Seguridad" onPress={() => boundaries.safety(assignment)} /></View>
+        <View style={styles.row}><VimaButton style={styles.fill} secondary communication icon="phone" label="Llamar" onPress={() => boundaries.call(assignment)} disabled={blocked || !boundaries.communicationAvailable} />
+          <VimaButton style={styles.fill} secondary icon="shield" label="Seguridad" onPress={() => boundaries.safety(assignment)} disabled={!boundaries.communicationAvailable} /></View>
         <TextAction danger label="Cancelar viaje" onPress={() => { void flow.act('cancel'); }} disabled={blocked || !['ASSIGNED', 'ARRIVED_PICKUP'].includes(flow.trip?.requestState ?? 'ASSIGNED')} />
         {flow.trip?.lifecycle?.settlement ? <VimaText variant="bodyMedium">Efectivo: {money(flow.trip.lifecycle.settlement.price.totalMinor / 100, 'MXN')}</VimaText> : null}
         {flow.trip?.lifecycle?.disputeId ? <VimaText variant="caption" selectable>Referencia de pago: {flow.trip.lifecycle.disputeId}</VimaText> : null}
-        {flow.phase === 'completed' ? <VimaButton label="Volver al inicio" onPress={() => flow.returnHome()} /> : null}
       </> : matching ? <>
         <View onLayout={(event) => { pulseHeight.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height;
           setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
@@ -624,7 +632,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           homeBottomOcclusion={homeFloatingSearch ? bottomFootprint : undefined}
           layersMenuOpen={layersOpen}
           sheetHeight={interaction ? sheetFrameHeight - interaction.targetOffset : sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
-        sheet={{ interaction, header, hitTestPolicy: detachedPanel ? 'content-only' : 'sheet',
+        sheet={{ interaction, header, waitForGeometry: true, hitTestPolicy: detachedPanel ? 'content-only' : 'sheet',
           style: [styles.sheet, detachedPanel && styles.detachedSheet,
           !detachedPanel && roundedPassengerSheet && styles.roundedPassengerSheet], onVisibleHeightChange: reportVisibleSheetHeight }}
         renderPhase={() => content} />
@@ -680,8 +688,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       {mapFailed ? <View style={[styles.mapStatus, presentation.floating, { top: topFrameShift + chromeBottom + 12 }]}><VimaGlyph name="warning" color={theme.roles.warning} />
         <VimaText variant="caption">No se pudo cargar el mapa</VimaText></View> : null}
     </View>
-    <PassengerBottomNavigation visible={navVisible} bottomInset={bottomInset} onHome={goHome} />
+    <PassengerBottomNavigation visible={navVisible} bottomInset={bottomInset} onHome={goHome} onProfile={boundaries.account} />
     <VimaLaunchSurface active={focused} ready={(mapReady || mapFailed) && settledSheetHeight !== undefined && mapWidth > 0} />
+    {boundaries.renderRestoration?.({ ready: flow.activeReady, error: flow.activeError, retry: flow.retry })}
   </View>;
 }
 
@@ -751,8 +760,8 @@ function AddressField({ label, place, color, onPress, disabled, embedded = false
       {place ? <VimaText variant="caption" style={{ color: theme.roles.textSecondary }} numberOfLines={1}>{place.address}</VimaText> : null}</View>
   </Pressable></Animated.View>;
 }
-function PlaceRow({ place, onPress, resolveMedia, rich = false, presentation = 'card', animateEntry = false, staggerIndex, exit = false }: { place: PlaceSuggestion; onPress: () => void;
-  resolveMedia?: PassengerGateway['resolvePlaceMedia']; rich?: boolean; presentation?: 'card' | 'list'; animateEntry?: boolean;
+function PlaceRow({ place, onPress, resolveMedia, rich = false, highlighted = false, presentation = 'card', animateEntry = false, staggerIndex, exit = false }: { place: PlaceSuggestion; onPress: () => void;
+  resolveMedia?: PassengerGateway['resolvePlaceMedia']; rich?: boolean; highlighted?: boolean; presentation?: 'card' | 'list'; animateEntry?: boolean;
   staggerIndex?: number; exit?: boolean }) {
   const feedback = usePressFeedback();
   const theme = useVimaTheme();
@@ -764,7 +773,7 @@ function PlaceRow({ place, onPress, resolveMedia, rich = false, presentation = '
     onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
     style={({ pressed }) => [presentation === 'list' ? styles.listRow : styles.recent,
       presentation === 'list' ? { backgroundColor: theme.roles.surface, borderBottomColor: theme.roles.border } : presentationStyles.card,
-      rich && styles.richRecent, pressed && presentationStyles.pressed,
+      rich && styles.richRecent, highlighted && { backgroundColor: theme.roles.positiveWash, borderBottomColor: 'transparent' }, pressed && presentationStyles.pressed,
       pressed && presentation === 'card' && styles.pressedElevation]}>
     <PlaceThumbnail place={place} resolveMedia={resolveMedia} size={rich ? 64 : 48} />
     <View style={styles.fill}><VimaText variant="bodyMedium">{place.name}</VimaText>

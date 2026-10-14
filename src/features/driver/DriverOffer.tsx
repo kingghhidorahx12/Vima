@@ -29,16 +29,16 @@ export function DriverOffer({ offer, revision, now, disabled, error = '', retryA
       <View style={styles.header}>
         <View style={styles.titleGroup}>
           <View style={[styles.stateMark, { backgroundColor: theme.roles.positive }]} />
-          <VimaText variant="h2" style={styles.title}>Nueva solicitud</VimaText>
+          <VimaText variant="h3" style={styles.title}>Nueva solicitud</VimaText>
         </View>
-        <View style={[styles.countdown, { backgroundColor: theme.roles.warningWash }]} accessibilityLabel={`${seconds} segundos restantes`}>
+        <View style={[styles.countdown, { backgroundColor: theme.roles.elevatedSurface, borderColor: theme.roles.positiveStrong }]} accessibilityLabel={`${seconds} segundos restantes`}>
           <VimaText variant="h3" style={{ color: theme.roles.warning }}>{seconds} s</VimaText>
         </View>
       </View>
       <View accessible accessibilityLabel={`Recogida: ${offer.pickup.name}. ${offer.pickup.address}. A ${offer.etaMinutes} minutos.`}
         style={[styles.pickup, { backgroundColor: theme.roles.elevatedSurface,
           ...elevationStyle('level1', theme.roles.shadow) }]}>
-        <VimaGlyph name="route" color={theme.roles.positive} />
+        <VimaGlyph name="recenter" color={theme.roles.location} />
         <View style={styles.pickupCopy}>
           <VimaText variant="caption" style={{ color: theme.roles.textSecondary }}>Recogida</VimaText>
           <VimaText variant="bodyMedium" numberOfLines={1}>{offer.pickup.name}</VimaText>
@@ -53,13 +53,16 @@ export function DriverOffer({ offer, revision, now, disabled, error = '', retryA
         <VimaText variant="bodySmall" numberOfLines={2} style={styles.errorCopy}>{error}</VimaText>
       </View> : null}
       {retryAvailable ? <VimaButton secondary label="Reintentar acción" disabled={retryDisabled} onPress={onRetry} /> : null}
-      <VimaButton label="Aceptar" disabled={disabled || expired} onPress={onAccept} />
-      <VimaButton secondary danger label="Rechazar" disabled={disabled || expired} onPress={onReject} />
+      <View style={styles.decisions}>
+        <VimaButton style={styles.decision} label="Aceptar" disabled={disabled || expired} onPress={onAccept} />
+        <VimaButton style={styles.decision} secondary danger label="Rechazar" disabled={disabled || expired} onPress={onReject} />
+      </View>
     </View>
   </ElementEntrance>;
 }
 
 const styles = StyleSheet.create({
+  decisions: { flexDirection: 'row', gap: t.spacing.scalePx[1] }, decision: { flex: 1 },
   surface: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingTop: t.spacing.scalePx[3],
     paddingBottom: t.spacing.scalePx[3], gap: t.spacing.scalePx[2] },
   context: { gap: t.spacing.scalePx[2], flexShrink: 1 },
@@ -67,7 +70,7 @@ const styles = StyleSheet.create({
   titleGroup: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[2] },
   title: { flexShrink: 1 },
   stateMark: { width: 6, height: 36, borderRadius: t.radii.pillPx },
-  countdown: { minWidth: 72, minHeight: 48, paddingHorizontal: t.spacing.scalePx[2], borderRadius: t.radii.pillPx,
+  countdown: { width: 56, height: 56, borderWidth: 2, paddingHorizontal: t.spacing.scalePx[2], borderRadius: t.radii.pillPx,
     alignItems: 'center', justifyContent: 'center' },
   pickup: { flexDirection: 'row', gap: t.spacing.scalePx[2], padding: t.spacing.scalePx[2], borderRadius: t.radii.cardPx },
   pickupCopy: { flex: 1, minWidth: 0, gap: t.spacing.scalePx[0] },

@@ -1,6 +1,196 @@
 # Estado real del proyecto
 
-Actualizado 2026-10-10 en `codex/approved-vehicle-sprite-p0`,
+## Acceso productivo Passenger — bloqueos integrados corregidos 2026-10-14
+
+- Mismo checkout `codex/product-phone-auth-p1-1`, HEAD `2c9018f4`; auth P1.1,
+  mapas operativos, Passenger/Driver visuales y ambos logs locales preservados.
+  Estos cambios siguen locales; HEAD no identifica el bundle implementado.
+- Se corrige el deadline de 12 s que abortaba el long-poll válido de 25 s:
+  presupuesto por operación, matching `/changes` 30 s, cancelación vigente.
+- Sesión revocada/refresh definitivamente rechazado publica invalidación,
+  desmonta Passenger protegido, limpia credenciales/cache y vuelve a OTP.
+  Red transitoria conserva sesión. Segundo 401 tras refresh termina cerrado;
+  refresh concurrente sigue single-flight. Respuestas antiguas exitosas tampoco
+  atraviesan un cambio de cuenta. Logout bloquea aceptación concurrente de otra.
+- SecureStore tiene plazo de 8 s; timeout libera UI, nunca la cola nativa aún
+  pendiente. Quarantine/cleanup impiden sobrescritura tardía y restaurar una
+  generación revocada. Error de borrado no se declara logout completo.
+- `EXPO_PUBLIC_VIMA_AUTH_MODE=product` abre las pantallas OTP existentes incluso
+  en APK interno; cierra rutas QA/DEV con tokens, sin selector ni fallback.
+  `product-preview` prepara APK productivo interno en canal independiente,
+  manteniendo canales/identificadores QA y producción. No se ejecutó build.
+- Compatibilidad acotada: thumbnails usan únicamente headers de producto para
+  media del mismo Gateway en modo product, sin leer tokens QA; logout retira esa
+  imagen autenticada. Resolver, media aprobada, dimensiones y fallback conservados.
+- Driver de producto sigue pendiente: no se conceden capacidades ni se mezcla
+  autoridad QA. Propuesta mínima administrativa y dependencias, configuración
+  Railway y pasos Android sin USB/Metro en [PRODUCT_ACCESS_ROLLOUT.md](PRODUCT_ACCESS_ROLLOUT.md).
+- Sin cambios en backend, matching/lifecycle autoritativos, pricing, mapas,
+  route-fit, sedán, Camera, heading ni movimiento. Sin dependencias/código nativo.
+  Sin commit/push, Railway, EAS Build ni OTA. SMS/Android físico **PENDIENTES**.
+- Validación final: nuevas regresiones de integración **12/12** (focal con media
+  **17/17**), suite completa **393/393**, TypeScript y lint PASS. Worklets,
+  MapLibre/schema (suite), splash, fixture isolation y export Hermes Android/iOS
+  PASS. Ambos bundles pasan aislamiento server/pricing/paths y contienen sesión
+  de producto sin `LiveAccountGate` ni namespace de credenciales QA. Los exports
+  usan URLs sintéticas y no leen dotenv. Hashes verifican mapas/Driver/Gateway,
+  DECISIONS y ambos logs QA conservados salvo documentación Gateway de esta ronda.
+
+## Acceso/cuenta P1 — reanudación auditada 2026-10-14
+
+- Se auditaron checkout/diff y productSession/AccessSurface/accessModel. La UI,
+  rutas, OTP, registro, cooldown, cuenta/ajustes y recuperación ya estaban
+  implementados; no se reconstruyen ni se reaplica la referencia.
+- Se cerró una carrera reproducida: refresh antiguo después de logout podía
+  reescribir SecureStore. Generación local de auth + serialización invalidan
+  respuestas obsoletas; 401 de una cuenta anterior no refresca/borra la nueva.
+  Expiración real actual sigue devolviendo sesión ausente. No cambia el backend
+  P1.1, sus contratos/capacidades, ni la autenticación QA.
+- AccessSurface/accessModel sin cambios. Sólo productSession, regresiones y docs
+  se modifican; mapas, matching/lifecycle, Passenger/Driver y logs QA conservados.
+  Detalle en [ACCESS_ACCOUNT_P1.md](ACCESS_ACCOUNT_P1.md).
+- Focales **26/26**, suite completa **381/381**, TypeScript, lint, worklets,
+  splash y diff-check PASS. Hashes confirman src/Gateway/logs preservados salvo
+  el cliente productSession. SMS real y Android físico
+  **PENDIENTES**. Sin contratos nuevos, dependencias o cambios nativos; sin
+  commit/push, Railway ni OTA.
+
+## Driver P1 — presentación local sobre mapas operativos
+
+- Checkout y pendientes de auth/acceso/Passenger preservados. Se aplica el tablero
+  Driver correcto con componentes/tokens existentes: títulos compactos, copy,
+  GPS/red semánticos, Conectarme/Desconectarme reales, oferta legible sin scroll y
+  recogida/ETA agrupadas. Sin afirmación de accuracy ausente en el contrato.
+- Cuenta local de consulta desde estados compactos: nombre/iniciales y vehículo
+  del perfil autorizado, tema persistente global y estado Reduced Motion. Regresa
+  sin desmontar mapa/sheet; se cierra ante oferta/fase nueva. No hay cuenta/nav
+  que tape operación durante OFFER/viaje. QA tools y autoridad Driver conservados.
+- Proporciones/snaps/viewport/Camera, sedán, rutas, ubicación, matching, lifecycle,
+  PIN, idempotencia, journal offline, settlement y backend intactos. Sin permisos
+  Driver nuevos, ganancias/documentos/fotos/teléfonos/historial ficticios.
+- Archivos, límites y diferencias en [DRIVER_VISUAL_P1.md](DRIVER_VISUAL_P1.md).
+  Focales de presentación/viewport **18/18**, suite **377/377**, TypeScript, lint,
+  worklets, schema MapLibre, splash y diff-check PASS. Hermes Android/iOS e
+  aislamiento fixture/server/pricing/paths/credenciales PASS.
+  Android físico **PENDIENTE**.
+  Sin commit/push, despliegue, dependencias ni cambios nativos.
+
+## Passenger P1 — tablero de viaje, implementación local 2026-10-13
+
+- Auth/acceso P1.1 y mapas operativos pendientes conservados en el mismo checkout.
+  [PASSENGER_VISUAL_P1.md](PASSENGER_VISUAL_P1.md) detalla superficies, archivos,
+  preservación y diferencias justificadas del tablero aprobado.
+- Home/Search correctos reutilizados: estado vacío de recientes y énfasis visual
+  del primer resultado sin modificar orden/selección. Confirmación añade ficha
+  real del destino con media/fallback; campos, métricas, unpriced y CTA conservados.
+- Recogida/viaje/pago tienen título y contexto reales; PIN visible pre-inicio.
+  Cierre independiente del panel del conductor: settlement real, cero metros
+  válido y regreso Home existente. Fin anticipado no afirma llegada al destino.
+  Cancelación/expiración conservan el flow con aviso de estado.
+- Comunicación sin implementación queda disabled por capacidad de host; sin
+  llamadas/alertas ficticias, fotos, notas, rating de viaje, pagos nuevos o historial.
+  MapLibre/sedán, camera/route-fit, sesión, contratos, Motion/Reduced Motion,
+  matching/lifecycle/pricing/backend intactos. Sin dependencias ni cambio nativo.
+- Focales nuevos **3/3**, suite completa **374/374**, TypeScript, lint, worklets,
+  schema MapLibre (suite), splash, Hermes Android/iOS, aislamiento fixture/
+  server/pricing/paths/credenciales y `git diff --check` PASS.
+  Android físico **PENDIENTE**. Sin commit, push ni despliegue.
+
+## Acceso y cuenta Vima P1 — dirección visual local 2026-10-13
+
+- Misma rama `codex/product-phone-auth-p1-1` y HEAD `2c9018f4`; se conserva la
+  implementación P1.1 y la corrección operativa de mapas sin commit previa.
+  Detalle, archivos y límites reales en [ACCESS_ACCOUNT_P1.md](ACCESS_ACCOUNT_P1.md).
+- Tablero aprobado aplicado a acceso + cuenta usando assets maestros, tokens,
+  Inter/Material Symbols, Light/Dark persistente, safe areas, teclado/scroll y
+  Motion/Reduced Motion existentes. Arranque reutiliza el progreso de fonts/theme
+  y lockup aprobado. Sin recrear paisaje/foto ni reinstalar Glass global; wash
+  puntual de las cards de acceso/cuenta, sin blur nativo.
+- México +52; OTP de seis dígitos/autofill, reenvío 60 s, expiración real, errores
+  recuperables, back/cancelación y nombre obligatorio para nuevas cuentas.
+  Sesión existente continúa al Passenger real: cuenta/identidad/solicitud activa
+  terminan antes de mostrar Home. No se duplica la recuperación de viaje.
+- Perfil productivo muestra nombre e iniciales auténticos, apariencia global,
+  estado de Reduced Motion y logout confirmado. Offline informa cierre local
+  sin confirmación server; fallo SecureStore permite retry sin declarar éxito.
+  Cancelación/timeout no borran credenciales válidas ni aceptan respuestas tardías.
+- Sin contrato para teléfono en `/me`, foto, edición posterior del nombre,
+  pagos/soporte ni enrolamiento Driver: no se simulan. Cuenta nueva sigue siendo
+  sólo Passenger. Twilio Service necesita seis dígitos; SMS real no verificado.
+  LiveAccountGate/QA permanecen separados; Perfil QA no se habilita.
+- Sin cambios de Gateway, matching, lifecycle, settlement, mapas/cámara/route-fit,
+  dependencias o configuración nativa. Focales **15/15**, suite **371/371**,
+  TypeScript/lint, worklets, MapLibre, splash, Hermes Android/iOS e isolation PASS.
+  Doctor del mismo checkout **20/21** por nueve patches SDK 57; no se actualizan.
+- Sin commit/push, Railway, OTA ni EAS Build. QA Android físico/SMS **PENDIENTE**;
+  esta ronda JS no requiere nuevo Development Build.
+
+## Autenticación productiva OTP P1.1 — implementación local 2026-10-11
+
+Base auditada: `codex/approved-vehicle-sprite-p0` @
+`2c9018f4b8b34453bed2296f25cb4a8cc540f757`. El trabajo se desarrolla en
+`codex/product-phone-auth-p1-1`; aún no se publica ni se despliega.
+
+- Se incorporó OTP passwordless mexicano con adapter Twilio Verify SMS y modo
+  simulado inyectable para pruebas. Un teléfono conocido inicia sesión; uno nuevo
+  debe verificar OTP y proporcionar nombre obligatorio. La capacidad creada es
+  sólo `passenger`; no existe enrolamiento/aprobación Driver ni carga de fotos.
+- Gateway expone los seis endpoints exactos definidos: OTP start/verify,
+  register, refresh, logout y me. Sólo start/verify/register/refresh omiten
+  bearer; logout/me validan access token. La autenticación QA de
+  `createAuthConfig` permanece en modo QA/local y `LiveAccountGate` no cambia.
+  Al habilitar Twilio en producción se desactiva la autoridad QA estática.
+- `auth-v1.json` guarda identidad sin teléfono en claro (HMAC), hashes de tokens,
+  desafíos acotados y capacidades versionadas. Las escrituras se serializan y
+  reemplazan con archivo temporal + rename atómico. Access/refresh tokens se
+  conservan sólo en el SecureStore de producto `vima.product-session.v1`, distinto
+  de `vima.session-credential` QA. Se rota refresh, revoca logout y se recupera
+  sesión aún refrescable al volver a abrir la app.
+- Producción navega `/` → `/auth` → `/passenger`; QA y DEV conservan sus rutas.
+  Passenger reutiliza `PassengerScreen`, el gateway y la recuperación autoritativa
+  de solicitud activa. El mapa se extrae a un módulo compartido sin cambiar su
+  composición/configuración.
+- Tests focales cubren onboarding/login, persistencia/reinicio, límites OTP,
+  tokens rotatorios/revocables, separación QA/producto, autorización de
+  capacidades, rutas exactas y transporte/errores de sesión. El test focal quedó
+  en **9/9 PASS**; suite completa **352/352 PASS**; TypeScript y lint PASS;
+  Gateway **89/89 PASS**. `check:worklets`, `check:fixture-isolation`,
+  `check:splash`, export Hermes Android/iOS y `check:release-isolation` pasaron.
+  Expo Doctor completó **20/21**: el chequeo de schema que requiere Expo API
+  falló por red (`ENOTFOUND exp.host`); no se actualizaron dependencias.
+- Pendiente para habilitar live: configurar externamente `VIMA_PRODUCT_AUTH_PROVIDER=twilio`,
+  `VIMA_PRODUCT_AUTH_SECRET` (32+ caracteres aleatorios), `TWILIO_ACCOUNT_SID`,
+  `TWILIO_VERIFY_SERVICE_SID`, `TWILIO_AUTH_TOKEN`, volumen persistente y URL HTTPS
+  de API en la app. Ninguna clave se incorpora al repositorio. No se probó SMS real,
+  no se desplegó Railway y no se publicó OTA. QA físico queda pendiente.
+
+## Mapas operativos Passenger/Driver P1 — corrección local 2026-10-13
+
+- Base real `2c9018f4`, mismo checkout con auth P1.1 preservada. Detalle de causas,
+  contratos, distribución y QA en [OPERATIONAL_MAPS_P1.md](OPERATIONAL_MAPS_P1.md).
+- Primer layout Passenger: relectura al recibir el frame real; sheet persistente
+  fuera de layout hasta tener geometría y primer snap directo. Home, snaps finales,
+  medidas, safe areas y reviewing/confirm route-fit conservados.
+- Los clips sí muestran el sedán Passenger. Se corrige el encuadre de entrada con
+  coordenada fresca real, sin refit por cada muestra ni cambiar asset/heading/motion.
+  ASSIGNED puede presentar su ruta real tras reapertura sin quote local; no se usa
+  la ruta de recogida como navegación en IN_PROGRESS. No se modifica telemetría.
+- Driver: mapa/panel overlay persistentes y frame medido; AVAILABLE 64% mapa,
+  OFFER 53%, ASSIGNED 72% (panel 28–52%) e IN_PROGRESS 77% (23–48%). Mínimo medido
+  protege acciones/error/PIN. Operación principal fija y secundarios expandibles;
+  OFFER conserva Aceptar/Rechazar sin scroll. Cámara/controles usan footprint real.
+- Chrome Driver reutiliza logo, tema, notificaciones disabled, recenter, brújula y
+  Capas. Pan manual y Reduced Motion conservados. Selector QA removido del viewport
+  normal; cuenta/mode disponibles por ruta interna QA y DevMenu.
+- Sin cambios en Gateway/auth productiva, matching, lifecycle, PIN, settlement,
+  pricing, Camera compartida, route-fit Passenger, sedán, assets o dependencias nativas.
+  Sin commit/push, despliegue Railway, OTA ni EAS Build. QA Android físico **PENDIENTE**.
+- Validaciones: suite completa **358/358 PASS**, Gateway/matching/pricing **89/89**,
+  TypeScript, lint, worklets, schema MapLibre, fixture/splash, export Hermes Android/
+  iOS y release isolation PASS. Expo Doctor **20/21** por nueve patches SDK 57
+  actualmente recomendados (sin actualizar dependencias ni relajar checks).
+
+Historial previo actualizado 2026-10-10 en `codex/approved-vehicle-sprite-p0`,
 desde `codex/sedan-fino-passenger-theme-p0` @ `dda9d62ffc363a2fbb28c181119a80e308ed6a72`.
 Sin merge a main.
 

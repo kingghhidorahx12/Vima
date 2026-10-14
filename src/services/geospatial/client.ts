@@ -21,7 +21,7 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
     input.signal?.addEventListener('abort', abort, { once: true });
     try {
       if (input.signal?.aborted) throw new GeospatialError('cancelled');
-      return await Promise.race([api.request({ ...input, signal: controller.signal }), interrupted]);
+      return await Promise.race([api.request({ ...input, timeoutMs, signal: controller.signal }), interrupted]);
     } catch (error) {
       if (timedOut) throw new GeospatialError('timeout');
       if (input.signal?.aborted) throw new GeospatialError('cancelled');

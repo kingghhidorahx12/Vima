@@ -121,7 +121,8 @@ test('real RootProviders gates bootstrap; runtime theme/OFFER→ASSIGNED reuse m
     const map = tree.root.findByType('MapLibreMap' as never); const darkStyle = map.props.mapStyle;
     const controls = () => tree.root.findAllByType('Pressable' as never);
     const toggle = controls().find(n => n.props.accessibilityLabel === 'Cambiar a modo claro')!;
-    assert.equal(toggle.props.style({ pressed: false })[0].width, 40);
+    assert.equal(toggle.props.style({ pressed: false })[0].width, 44); // touch target; visible circle remains 40
+    assert.ok(toggle.findAllByType('View' as never).some(n => [n.props.style].flat(Infinity).some(s => s?.width === 40)));
     await h.act(async () => toggle.props.onPress());
     assert.equal(tree.root.findByType('StatusBar' as never).props.style, 'dark');
     assert.notDeepEqual(tree.root.findByType('MapLibreMap' as never).props.mapStyle, darkStyle);

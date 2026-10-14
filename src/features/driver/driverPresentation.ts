@@ -20,7 +20,7 @@ export function driverSurfaceVariant(availability: DriverAvailability): DriverSu
 export function driverPresentation(state?: DriverState): DriverPresentation {
   const availability = state?.availability ?? 'OFFLINE';
   switch (availability) {
-    case 'LOCATING': return { availability, variant: 'compact', title: 'Obteniendo tu ubicación',
+    case 'LOCATING': return { availability, variant: 'compact', title: 'Localizando tu posición',
       copy: 'Mantén el GPS activo para empezar a recibir viajes.', tone: 'neutral',
       action: 'availability_offline', actionLabel: 'Desconectarme' };
     case 'AVAILABLE': return { availability, variant: 'compact', title: 'Disponible para viajes',
@@ -39,9 +39,9 @@ export function driverPresentation(state?: DriverState): DriverPresentation {
       copy: 'Revisa el punto de recogida antes de continuar.', tone: 'positive',
       action: 'assignment_cancel', actionLabel: 'Cancelar asignación' };
     case 'OFFLINE':
-    default: return { availability: 'OFFLINE', variant: 'compact', title: 'No estás disponible',
+    default: return { availability: 'OFFLINE', variant: 'compact', title: 'Estás desconectado',
       copy: 'Conéctate para empezar a recibir solicitudes.', tone: 'neutral',
-      action: 'availability_available', actionLabel: 'Disponible' };
+      action: 'availability_available', actionLabel: 'Conectarme' };
   }
 }
 
@@ -54,7 +54,7 @@ export function driverConnectionLabel(connection: DriverConnection) {
 export function driverGpsLabel(state: DriverState | undefined, error: string) {
   const locationError = /ubicaci|gps|señal|servicios de localización/i.test(error);
   if (locationError) return { label: 'Sin ubicación', tone: 'critical' as const };
-  if (state?.location) return { label: 'Ubicación precisa', tone: 'location' as const };
+  if (state?.location) return { label: 'Ubicación disponible', tone: 'location' as const };
   if (state?.availability === 'LOCATING') return { label: 'Buscando señal', tone: 'warning' as const };
   return { label: 'Sin ubicación', tone: 'critical' as const };
 }

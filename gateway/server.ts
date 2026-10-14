@@ -18,6 +18,8 @@ import { MatchingCoordinator, type MatchingClock } from './matching/coordinator.
 import { MatchingError, type AuthConfig } from './matching/auth.ts';
 import { matchingHttp } from './matching/http.ts';
 import type { MatchingServerTrace } from './matching/trace.ts';
+import type { createProductAuth } from './productAuth.ts';
+import { ProductAuthError } from './productAuth.ts';
 
 export interface GatewayLog { requestId: string; endpoint: string; durationMs: number; upstreamStatus?: number; count: number; error?: GeospatialErrorCode }
 async function readBody(request: IncomingMessage, maximum: number): Promise<unknown> {
@@ -34,21 +36,50 @@ async function readBody(request: IncomingMessage, maximum: number): Promise<unkn
 export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, options: {
   now?: () => number; logger?: (entry: GatewayLog) => void; localPlaces?: readonly VimaLocalPlace[]; configured?: boolean;
   pricing?: PricingConfiguration; media?: PlaceMediaCatalog; auth?: AuthConfig; matchingClock?: MatchingClock; matchingTrace?: MatchingServerTrace;
+  productAuth?: ReturnType<typeof createProductAuth>;
 } = {}) {
+  // QA continues to use createAuthConfig/LiveAccountGate only. Product sessions
+  // are a separate auth authority and are unavailable on QA deployments.
+  const productAuth = config.qa ? undefined : options.productAuth;
+  const legacyAuth = productAuth ? undefined : options.auth;
   const now = options.now ?? Date.now;
   const state = createGatewayState(config, now);
   const contributions = createContributionRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const popularity = createPopularityRepository(config.runtimeDir ?? '.runtime', options.localPlaces ?? [], now);
   const quotes = createQuoteService(adapter, config, options.pricing ?? { status: 'pricing_not_configured' }, now);
-  const matching = options.auth && options.configured && options.pricing?.status === 'ready' ? new MatchingCoordinator({
-    pricingConfig: options.pricing.config,
-    quotePricingConfig: () => quotes.pricingBasis,
-    auth: options.auth, directory: config.runtimeDir ?? '.runtime', clock: options.matchingClock, trace: options.matchingTrace,
-    quote: (id, owner) => { const value = quotes.store.lookupOwned(id, owner); return value?.status === 'priced' ? value.quote : undefined; },
-    eta: (origin, destination) => adapter.route({ origin, destination, stops: [] }, { signal: AbortSignal.timeout(config.upstreamTimeoutMs) }),
-  }) : undefined;
   let recovered = false;
-  const matchingReady = matching?.start().then(() => { recovered = true; }).catch(() => { recovered = false; });
+  let matching: MatchingCoordinator | undefined;
+  const auth: AuthConfig | undefined = legacyAuth || productAuth ? {
+    drivers: legacyAuth?.drivers ?? [],
+    authenticate(header) {
+      if (productAuth) {
+        try { return productAuth.authConfig.authenticate(header); } catch { /* Legacy local/QA credentials remain a separate authority. */ }
+      }
+      if (legacyAuth) return legacyAuth.authenticate(header);
+      throw new MatchingError(401, 'unauthorized');
+    },
+    principal(id) { return productAuth?.authConfig.principal(id) ?? legacyAuth?.principal(id); },
+    profile(id) { return legacyAuth?.profile(id) ?? productAuth!.authConfig.profile(id); },
+  } : undefined;
+  const createMatching = (pricing: Extract<PricingConfiguration, { status: 'ready' }>, matchingAuth: AuthConfig) => new MatchingCoordinator({ pricingConfig: pricing.config,
+        quotePricingConfig: () => quotes.pricingBasis, auth: matchingAuth, directory: config.runtimeDir ?? '.runtime',
+        clock: options.matchingClock, trace: options.matchingTrace,
+        quote: (id, owner) => { const value = quotes.store.lookupOwned(id, owner); return value?.status === 'priced' ? value.quote : undefined; },
+        eta: (origin, destination) => adapter.route({ origin, destination, stops: [] }, { signal: AbortSignal.timeout(config.upstreamTimeoutMs) }),
+      });
+  let matchingReady: Promise<void> = Promise.resolve();
+  if (auth && options.configured && options.pricing?.status === 'ready') {
+    const pricing = options.pricing; const matchingAuth = auth;
+    if (productAuth) {
+      matchingReady = productAuth.ready.then(async () => {
+        matching = createMatching(pricing, matchingAuth); await matching.start(); recovered = true;
+      }).catch(() => { recovered = false; });
+    } else {
+      // Preserve local/QA's synchronous snapshot validation and failure behavior.
+      matching = createMatching(pricing, matchingAuth);
+      matchingReady = matching.start().then(() => { recovered = true; }).catch(() => { recovered = false; });
+    }
+  }
   const media = options.media ?? emptyPlaceMediaCatalog();
   const attachImage = <T extends { id: string; canonicalId?: string; provenance?: string }>(place: T): T => {
     const image = place.provenance === 'vima-local' ? media.imageFor(place.canonicalId ?? place.id) : undefined;
@@ -77,7 +108,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
         endpoint = 'health'; reply(200, { status: 'ok', configured: options.configured === true }); return;
       }
       if (request.method === 'GET' && path === '/ready') {
-        const ready = Boolean(options.configured && options.auth && options.pricing?.status === 'ready' && recovered && matching?.ready);
+        const ready = Boolean(options.configured && auth && options.pricing?.status === 'ready' && recovered && matching?.ready);
         reply(ready ? 200 : 503, { status: ready ? 'ready' : 'unavailable' }); return;
       }
       if (config.qa && path.startsWith('/v1/')) {
@@ -86,7 +117,10 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
         if (request.headers['x-forwarded-proto'] !== 'https') throw new MatchingError(403, 'https_required');
       }
       await matchingReady;
-      if (await matchingHttp(request, path, options.auth, matching, () => readBody(request, config.maxBodyBytes), controller.signal, reply)) {
+      if (productAuth && await productAuth.handle(request, path, () => readBody(request, config.maxBodyBytes), reply)) {
+        endpoint = 'product-auth'; count = 1; return;
+      }
+      if (await matchingHttp(request, path, auth, matching, () => readBody(request, config.maxBodyBytes), controller.signal, reply)) {
         endpoint = 'matching'; count = 1; return;
       }
       if (request.method === 'GET' && path.startsWith('/v1/geospatial/discovery?')) {
@@ -113,7 +147,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       if (path.includes('?')) throw new GeospatialError('invalid_result');
       if (request.method === 'POST' && path === '/v1/passenger/quotes') {
         endpoint = 'passenger.quotes';
-        const principal = request.headers.authorization ? options.auth?.authenticate(request.headers.authorization) : undefined;
+        const principal = request.headers.authorization ? auth?.authenticate(request.headers.authorization) : undefined;
         if (request.headers.authorization && !principal) throw new MatchingError(401, 'unauthorized');
         if (principal && principal.role !== 'passenger') throw new MatchingError(403, 'forbidden');
         const result = await quotes.quote(await readBody(request, config.maxBodyBytes), context, principal?.accountId);
@@ -210,6 +244,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       }
       category = 'no_result'; reply(404, { error: { code: category } });
     } catch (error) {
+      if (error instanceof ProductAuthError) { reply(error.status, { error: { code: error.code } }); return; }
       if (error instanceof MatchingError) { reply(error.status, { error: { code: error.code } }); return; }
       if (error instanceof PricingError) {
         reply(error.code === 'idempotency_conflict' ? 409 : 503, { error: { code: error.code } }); return;

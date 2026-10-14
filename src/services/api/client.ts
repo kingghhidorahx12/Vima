@@ -4,6 +4,8 @@ export interface ApiRequest<T> {
   readonly decode: (value: unknown) => T;
   readonly body?: unknown;
   readonly signal?: AbortSignal;
+  /** Operation budget, including response decoding; long-poll callers supply their own. */
+  readonly timeoutMs?: number;
   readonly idempotencyKey?: string;
 }
 
@@ -18,7 +20,9 @@ export class ApiError extends Error {
 }
 
 /** No backend URL, endpoints or success fixtures are invented by the bootstrap. */
-export function createApiClient(baseUrl: string, readCredential: () => Promise<string | null>, options: { development?: boolean } = {}): ApiClient {
+export function createApiClient(baseUrl: string, readCredential: () => Promise<string | null>, options: {
+  development?: boolean; fetcher?: typeof fetch
+} = {}): ApiClient {
   const base = new URL(baseUrl);
   const host = base.hostname;
   const octets = host.split('.').map(Number);
@@ -35,7 +39,7 @@ export function createApiClient(baseUrl: string, readCredential: () => Promise<s
       const credential = await readCredential();
       if (localHttp && credential) throw new Error('Credentials require HTTPS');
       if (idempotencyKey && !/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) throw new Error('Invalid idempotency key');
-      const response = await fetch(url.toString(), {
+      const response = await (options.fetcher ?? fetch)(url.toString(), {
         method, signal,
         headers: {
           Accept: 'application/json',

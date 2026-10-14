@@ -139,7 +139,7 @@ test('visible Driver offer keeps all critical content outside scrolling and does
     await h.act(async () => tree.update(React.createElement(Offer, { ...props, revision: 5, now: 20000 })));
     assert.equal(events.length, 2); assert.ok(tree.root.findAll(node => String(node.type) === 'Pressable').every(button => button.props.disabled));
     const screen = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
-    assert.match(screen, /renderPhase=\{\(\) => offer \?\s*<DriverOffer/);
-    assert.match(screen, /\/>\s*: <DriverStatePanel/);
+    assert.match(screen, /renderPhase=\{\(\) => offer \? <View[\s\S]*?<DriverOffer/);
+    assert.match(screen, /<\/View>\s*: <DriverMapPanel/);
   } finally { await h.act(async () => tree.unmount()); h.client.clear(); }
 });

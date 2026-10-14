@@ -17,9 +17,9 @@ import { accountValidationMessage } from './accountValidation';
 
 interface Session { api: ApiClient; matching: MatchingClient; identity: MatchingIdentity }
 /** Technical DEV gate only. Tokens go directly to SecureStore, never to Query or public configuration. */
-export function LiveAccountGate({ role, children }: { role: MatchingIdentity['role']; children: (session: Session) => ReactNode }) {
+export function LiveAccountGate({ role, children, accountTools = false }: { role: MatchingIdentity['role']; children: (session: Session) => ReactNode; accountTools?: boolean }) {
   const theme = useVimaTheme();
-  const client = useQueryClient(); const [session, setSession] = useState<Session>(); const [editing, setEditing] = useState(false);
+  const client = useQueryClient(); const [session, setSession] = useState<Session>(); const [editing, setEditing] = useState(accountTools);
   const [token, setToken] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const attempt = useRef<AbortController | null>(null);
   const validatedAccount = useRef<{ credential: string; session: Session } | null>(null);
@@ -55,10 +55,10 @@ export function LiveAccountGate({ role, children }: { role: MatchingIdentity['ro
       if (!isCurrent()) return;
       if (replacement) client.clear();
       validated.activate(); validatedAccount.current = { credential: validated.credential, session: validated.session };
-      setSession(validated.session); setEditing(false); setToken('');
+      setSession(validated.session); setEditing(accountTools && !replacement); setToken('');
     } catch (error) { if (attempt.current === controller) setError(accountValidationMessage(error)); }
     finally { if (attempt.current === controller) { attempt.current = null; setBusy(false); } }
-  }, [client, role]);
+  }, [accountTools, client, role]);
   useFocusEffect(useCallback(() => {
     if (__DEV__ || process.env.EXPO_PUBLIC_VIMA_VARIANT === 'qa') {
       void connect();
@@ -72,8 +72,7 @@ export function LiveAccountGate({ role, children }: { role: MatchingIdentity['ro
     void registerDevMenuItems([{ name: 'Cuenta de prueba Vima', callback: () => { setEditing(true); }, shouldCollapse: true }]).catch(() => {});
   }, []));
   if (!__DEV__ && process.env.EXPO_PUBLIC_VIMA_VARIANT !== 'qa') return null;
-  if (session && session.identity.role === role && !editing) return <View style={{ flex: 1 }}>{children(session)}
-    {process.env.EXPO_PUBLIC_VIMA_VARIANT === 'qa' ? <View style={{ position: 'absolute', top: 60, left: 16 }}><VimaButton secondary label="Cuenta QA / cambiar modo" onPress={() => setEditing(true)} /></View> : null}</View>;
+  if (session && session.identity.role === role && !editing) return <View style={{ flex: 1 }}>{children(session)}</View>;
   return <SafeAreaView style={[styles.screen, { backgroundColor: theme.roles.background }]}><VimaText variant="h2">{process.env.EXPO_PUBLIC_VIMA_VARIANT === 'qa' ? 'Cuenta QA ·' : 'Cuenta DEV ·'} {role === 'driver' ? 'Driver' : 'Passenger'}</VimaText>
     {session ? <VimaText variant="bodyRegular">{session.identity.accountId}</VimaText> : null}
     <VimaText variant="bodyRegular">Token de la configuración externa del gateway. Requiere HTTPS confiable.</VimaText>

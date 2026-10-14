@@ -160,7 +160,7 @@ test('Driver native initial camera is local and latest target applies only after
     const stops = h.calls.filter((c: unknown[]) => c[0] === 'setStop');
     assert.equal(stops.length, 1); assert.deepEqual(stops[0][1].center, current.center); assert.equal(stops[0][1].duration, 0);
     assert.equal(h.calls.filter((c: unknown[]) => c[0] === 'mount' && c[1] === 'MapLibreCamera').length, 1);
-    assert.match(readFileSync('src/features/driver/useDriverMap.tsx', 'utf8'), /initialTarget=\{target\} ready=\{ready\}/);
+    assert.match(readFileSync('src/features/driver/useDriverMap.tsx', 'utf8'), /initialTarget=\{intent.target\} ready=\{ready && \(!viewport \|\| viewport.height > 0\)\}/);
   } finally { await h.act(async () => tree.unmount()); }
 });
 

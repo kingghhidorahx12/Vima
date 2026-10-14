@@ -342,7 +342,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     [...(geography.data ?? []), ...(recents.data ?? [])],
     followUpResults?.query === search ? followUpResults.results : places.data,
     followUpResults?.query === search || !places.isPlaceholderData ? search : undefined) : [];
-  return { phase, connection, quoteExpired, origin, currentLocation: location.data ?? null, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
+  return { activeReady, activeError, phase, connection, quoteExpired, origin, currentLocation: location.data ?? null, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
     locationAvailable: !!location.data, locationLoading: location.isPending, canUseCurrentLocation: validPlace(location.data),
     savedPicker, useCurrentLocationForSavedSlot, field, search, setSearch: (value: string) => {
       cancelSelection(); setFollowUpResults(undefined);

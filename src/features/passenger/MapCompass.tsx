@@ -9,8 +9,9 @@ import { usePressFeedback } from '../../motion/usePressFeedback';
 import { useVimaTheme } from '../../design/themes';
 
 /** Mirrors map bearing; only visibility is animated. Fade is permitted by Reduced Motion. */
-export function MapCompass({ bearing, ready, onPress, size = 44 }: {
+export function MapCompass({ bearing, ready, onPress, size = 44, touchSize = size }: {
   bearing: number; ready: boolean; onPress: () => void; size?: 40 | 44;
+  touchSize?: 40 | 44;
 }) {
   const angle = Number.isFinite(bearing) ? ((bearing % 360) + 540) % 360 - 180 : 0;
   const visible = ready && angle !== 0;
@@ -24,12 +25,15 @@ export function MapCompass({ bearing, ready, onPress, size = 44 }: {
   const fade = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   return <Animated.View testID="passenger-compass" pointerEvents={visible ? 'auto' : 'none'}
     accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
-    style={[styles.position, { width: size, height: size }, fade]}>
+    style={[styles.position, { width: touchSize, height: touchSize }, fade]}>
     <Animated.View style={feedback.style}>
     <Pressable accessibilityRole="button" accessibilityLabel="Orientar mapa al norte" disabled={!visible}
+      hitSlop={size === 40 ? 2 : 0}
       onPressIn={visible ? feedback.onPressIn : undefined} onPressOut={visible ? feedback.onPressOut : undefined}
-      onPress={onPress} style={({ pressed }) => [styles.button, { width: size, height: size, backgroundColor: theme.roles.elevatedSurface },
+      onPress={onPress} style={({ pressed }) => [touchSize !== size ? styles.touchTarget : styles.button,
+        { width: touchSize, height: touchSize, backgroundColor: touchSize !== size ? 'transparent' : theme.roles.elevatedSurface },
         pressed && { backgroundColor: theme.roles.pressedSurface, boxShadow: [] }]}>
+      {touchSize !== size ? <View pointerEvents="none" style={[styles.button, { position: 'absolute', width: size, height: size, backgroundColor: theme.roles.elevatedSurface }]} /> : null}
       <View testID="passenger-compass-needle" style={[styles.needle, { transform: [{ rotate: `${-angle}deg` }] }]}>
         <View testID="passenger-compass-north-outline" style={[styles.northOutline, { borderBottomColor: theme.roles.control }]} />
         <View testID="passenger-compass-north" style={[styles.north, { borderBottomColor: theme.roles.onAction }]} />
@@ -40,6 +44,7 @@ export function MapCompass({ bearing, ready, onPress, size = 44 }: {
   </Animated.View>;
 }
 const styles = StyleSheet.create({
+  touchTarget: { alignItems: 'center', justifyContent: 'center' },
   position: { width: 44, height: 44 },
   button: { width: 44, height: 44, borderRadius: t.radii.pillPx,
     alignItems: 'center', justifyContent: 'center', ...elevationStyle('level1', t.colors.carbon) },

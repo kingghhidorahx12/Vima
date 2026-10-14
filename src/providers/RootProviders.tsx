@@ -1,6 +1,6 @@
 import { QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { useEffect, useRef, useState, useSyncExternalStore, type PropsWithChildren } from 'react';
-import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -56,6 +56,9 @@ export function RootProviders({ children }: PropsWithChildren) {
             <StatusBar style={theme.name === 'dark' ? 'light' : 'dark'} />
             <ReducedMotionProvider preference={preference.reducedMotion}>{ready ? children :
               <View testID="app-startup-progress" style={styles.startup} accessibilityLiveRegion="polite">
+                <View style={[styles.brand, theme.name === 'dark' && { backgroundColor: '#FFFFFF' }]}>
+                  <Image source={require('../../assets/brand/vima_splash_lockup_final.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="Vima" />
+                </View>
                 <ActivityIndicator color={theme.roles.positiveStrong} />
                 {/* Bootstrap cannot depend on the fonts whose loading it reports. */}
                 <Text style={[styles.message, { color: theme.roles.textPrimary }]}>Preparando Vima…</Text>
@@ -76,6 +79,7 @@ export function RootProviders({ children }: PropsWithChildren) {
 }
 
 const styles = StyleSheet.create({ fill: { flex: 1 },
+  brand: { padding: 12, borderRadius: 24 }, logo: { width: 220, height: 124 },
   startup: { flex: 1, padding: 32, gap: 16, alignItems: 'center', justifyContent: 'center' },
   message: { fontSize: 16, lineHeight: 24, textAlign: 'center' },
   retry: { minHeight: 48, borderRadius: 16, padding: 12, justifyContent: 'center' },

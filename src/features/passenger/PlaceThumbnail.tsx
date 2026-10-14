@@ -6,6 +6,11 @@ import { visualTokens as t } from '../../design/tokens';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 import { type PlaceMediaResolver } from '../../services/geospatial/placeMedia';
 import { useVimaTheme } from '../../design/themes';
+import { productAuthClient } from '../../services/auth/productSession';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- Static single-authority boundary removes QA storage from product bundles.
+const qaCredentials = process.env.EXPO_PUBLIC_VIMA_VARIANT === 'qa' && process.env.EXPO_PUBLIC_VIMA_AUTH_MODE !== 'product' ? (require('../../services/storage/credentials') as typeof import('../../services/storage/credentials')).credentials : null;
+const productMedia = process.env.EXPO_PUBLIC_VIMA_AUTH_MODE === 'product' || process.env.EXPO_PUBLIC_VIMA_VARIANT === 'production';
 
 function fallback(place: PlaceSuggestion): { icon: VimaGlyphName; tone: 'positive' | 'control' | 'location' | 'danger' } {
   const name = place.name.toLocaleLowerCase('es-MX');
@@ -21,27 +26,41 @@ function fallback(place: PlaceSuggestion): { icon: VimaGlyphName; tone: 'positiv
 /** Media never participates in Search; the fixed container remains while the photo loads or fails. */
 export function PlaceThumbnail({ place, resolveMedia, size = 48 }: { place: PlaceSuggestion; resolveMedia?: PlaceMediaResolver; size?: number }) {
   const theme = useVimaTheme();
-  const [credential, setCredential] = useState<string | null>(null);
-  useEffect(() => {
-    if (process.env.EXPO_PUBLIC_VIMA_VARIANT !== 'qa') return;
-    let active = true;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- QA-only authenticated image transport.
-    const { credentials } = require('../../services/storage/credentials') as typeof import('../../services/storage/credentials');
-    void credentials.read().then(value => { if (active) setCredential(value); }).catch(() => {});
-    return () => { active = false; };
-  }, []);
   const canonicalPlaceId = place.canonicalId ?? place.id;
   const media = place.image && resolveMedia?.(canonicalPlaceId, place.image);
+  const mediaUri = media?.uri;
+  const [authorization, setAuthorization] = useState<{ uri: string; headers: { Authorization: string } }>();
+  useEffect(() => {
+    if (!mediaUri) return;
+    let active = true;
+    const controller = new AbortController(); let unsubscribe: (() => void) | undefined;
+    if (productMedia) {
+      let auth: ReturnType<typeof productAuthClient>;
+      try { auth = productAuthClient(); } catch { return; }
+      const read = () => {
+        if (auth.getSnapshot().status !== 'authenticated') { setAuthorization(undefined); return; }
+        void auth.mediaHeaders(mediaUri, controller.signal).then(headers => {
+          if (active) setAuthorization({ uri: mediaUri, headers });
+        }).catch(() => { if (active) setAuthorization(undefined); });
+      };
+      unsubscribe = auth.subscribe(read); read();
+    } else if (qaCredentials && new URL(mediaUri).origin === new URL(process.env.EXPO_PUBLIC_VIMA_API_BASE_URL!).origin) {
+      void qaCredentials.read().then(value => {
+        if (active && value) setAuthorization({ uri: mediaUri, headers: { Authorization: 'Bearer ' + value } });
+      }).catch(() => {});
+    }
+    return () => { active = false; controller.abort(); unsubscribe?.(); };
+  }, [mediaUri]);
+  const headers = authorization?.uri === media?.uri ? authorization?.headers : undefined;
   const [failedKey, setFailedKey] = useState<string>();
   const category = fallback(place);
   const color = category.tone === 'positive' ? theme.roles.positiveStrong : category.tone === 'location'
     ? theme.roles.location : category.tone === 'danger' ? theme.roles.danger : theme.roles.control;
   return <View accessible={false} style={[styles.container, { width: size, height: size, backgroundColor: theme.roles.subtleSurface }]}>
     <VimaGlyph name={category.icon} color={color} />
-    {media && (process.env.EXPO_PUBLIC_VIMA_VARIANT !== 'qa' || credential) && failedKey !== media.cacheKey ? <Image key={media.cacheKey}
+    {media && (!(productMedia || qaCredentials) || headers) && failedKey !== media.cacheKey ? <Image key={media.cacheKey}
       source={{ uri: media.uri, cacheKey: media.cacheKey,
-        ...(credential && new URL(media.uri).origin === new URL(process.env.EXPO_PUBLIC_VIMA_API_BASE_URL!).origin
-          ? { headers: { Authorization: 'Bearer ' + credential } } : {}) }} cachePolicy={process.env.EXPO_PUBLIC_VIMA_VARIANT === 'qa' ? 'none' : 'memory-disk'}
+        ...(headers ? { headers } : {}) }} cachePolicy={productMedia || qaCredentials ? 'none' : 'memory-disk'}
       recyclingKey={canonicalPlaceId} contentFit="cover" transition={180}
       onError={() => setFailedKey(media.cacheKey)} style={styles.image} /> : null}
   </View>;

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { usePressFeedback } from '../../motion/usePressFeedback';
 import { VimaButton } from '../../design/components/VimaButton';
 import { VimaGlyph, type VimaGlyphName } from '../../design/components/VimaGlyph';
 import { VimaText } from '../../design/primitives';
@@ -12,12 +14,13 @@ import type { DriverState } from '../../services/matching/contracts';
 import { driverConnectionLabel, driverGpsLabel, driverPresentation, type DriverConnection } from './driverPresentation';
 
 export function DriverStatePanel({ state, connection, configured, busy, error, retryAvailable,
-  onAvailable, onOffline, onCancelAssignment, onRetry, lifecycleControls }: {
+  onAvailable, onOffline, onCancelAssignment, onRetry, lifecycleControls, onAccount }: {
   state?: DriverState; connection: DriverConnection; configured: boolean; busy: boolean; error: string;
   lifecycleControls?: ReactNode; retryAvailable: boolean; onAvailable: () => void; onOffline: () => void;
-  onCancelAssignment: (requestId: string) => void; onRetry: () => void;
+  onCancelAssignment: (requestId: string) => void; onRetry: () => void; onAccount?: () => void;
 }) {
   const theme = useVimaTheme();
+  const accountPress = usePressFeedback();
   const presentation = driverPresentation(state);
   const gps = driverGpsLabel(state, error);
   const network = driverConnectionLabel(connection);
@@ -32,13 +35,13 @@ export function DriverStatePanel({ state, connection, configured, busy, error, r
     testID={`driver-surface-${presentation.variant}`} style={[styles.surface, { backgroundColor: theme.roles.surface }]}>
     <View testID="driver-state-context" style={styles.context}>
       <View style={styles.headingRow}>
-        <View style={[styles.stateMark, { backgroundColor: presentation.tone === 'neutral' ? theme.roles.control
-          : presentation.tone === 'positive' ? theme.roles.positive : presentation.tone === 'warning'
-            ? theme.roles.warning : theme.roles.danger }]} />
         <View style={styles.headingCopy}>
-          <VimaText variant="h2">{presentation.title}</VimaText>
-          <VimaText variant="bodyRegular" style={{ color: theme.roles.textSecondary }}>{presentation.copy}</VimaText>
+          <VimaText variant="h3">{presentation.title}</VimaText>
+          <VimaText variant="bodySmall" style={{ color: theme.roles.textSecondary, textAlign: 'center' }}>{presentation.copy}</VimaText>
         </View>
+        {onAccount && state && !assignment ? <Animated.View style={accountPress.style}><Pressable accessibilityRole="button" accessibilityLabel="Mi cuenta y ajustes"
+          onPress={onAccount} onPressIn={accountPress.onPressIn} onPressOut={accountPress.onPressOut}
+          style={styles.account}><VimaGlyph name="profile" color={theme.roles.control} /></Pressable></Animated.View> : null}
       </View>
       <View style={styles.statusRow}>
         <DriverStatus icon="recenter" label={gps.label} tone={gps.tone} />
@@ -70,7 +73,7 @@ export function DriverStatePanel({ state, connection, configured, busy, error, r
         <VimaText variant="bodySmall" numberOfLines={2} style={styles.errorCopy}>{error}</VimaText>
       </View> : null}
       {lifecycleControls}
-      {presentation.actionLabel && (!assignment || ['ASSIGNED', 'ARRIVED_PICKUP'].includes(assignment.state)) ? <VimaButton label={presentation.actionLabel} secondary={presentation.action !== 'availability_available'}
+      {presentation.actionLabel && (!assignment || ['ASSIGNED', 'ARRIVED_PICKUP'].includes(assignment.state)) ? <VimaButton label={presentation.actionLabel} secondary={presentation.action !== 'availability_available' && presentation.availability !== 'AVAILABLE'}
         danger={presentation.action === 'assignment_cancel'} loading={busy} disabled={disabled} onPress={action} /> : null}
       {retryAvailable ? <VimaButton secondary label="Reintentar acción" disabled={busy} onPress={onRetry} /> : null}
     </View>
@@ -82,20 +85,23 @@ function DriverStatus({ icon, label, tone }: { icon: VimaGlyphName; label: strin
   const theme = useVimaTheme();
   const color = tone === 'positive' ? theme.roles.positiveStrong : tone === 'warning' ? theme.roles.warning
     : tone === 'critical' ? theme.roles.danger : theme.roles.location;
-  return <View style={[styles.status, { backgroundColor: theme.roles.subtleSurface }]}>
+  const wash = tone === 'positive' ? theme.roles.positiveWash : tone === 'warning' ? theme.roles.warningWash
+    : tone === 'critical' ? theme.roles.dangerWash : theme.roles.locationWash;
+  return <View style={[styles.status, { backgroundColor: wash }]}>
     <VimaGlyph name={icon} color={color} size={t.components.iconSizesPx[1]} />
     <VimaText variant="caption" numberOfLines={1}>{label}</VimaText>
   </View>;
 }
 
 const styles = StyleSheet.create({
+  account: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   surface: { paddingHorizontal: t.spacing.mobileHorizontalMarginPx, paddingTop: t.spacing.scalePx[3],
     paddingBottom: t.spacing.scalePx[3], gap: t.spacing.scalePx[2] },
   context: { gap: t.spacing.scalePx[2], flexShrink: 1 },
   actionZone: { gap: t.spacing.scalePx[1], paddingTop: t.spacing.scalePx[2], borderTopWidth: t.borders.standardWidthPx,
     flexShrink: 0 },
   headingRow: { flexDirection: 'row', gap: t.spacing.scalePx[2], alignItems: 'flex-start' },
-  headingCopy: { flex: 1, gap: t.spacing.scalePx[1] },
+  headingCopy: { flex: 1, alignItems: 'center', gap: t.spacing.scalePx[1] },
   stateMark: { width: 6, minHeight: 52, borderRadius: t.radii.pillPx },
   statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.scalePx[1] },
   status: { minHeight: 36, maxWidth: '100%', flexDirection: 'row', alignItems: 'center', gap: t.spacing.scalePx[1],

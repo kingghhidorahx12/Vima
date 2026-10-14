@@ -1,5 +1,7 @@
 import type { CircleAppearance } from '../../map/models';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { advanceAssignmentView, initialAssignmentView } from './assignmentMapView';
+import { useFreshVehicleLocation } from '../../map/useFreshVehicleLocation';
 import { Camera, type CameraMode, type CameraTarget, type RecenterIntent } from '../../map/Camera';
 import { TrafficFlowLayer } from '../../map/TrafficFlowLayer';
 import { IncidentLayer } from '../../map/IncidentLayer';
@@ -37,12 +39,23 @@ export function PassengerMap({ quote, assignment, requestState, origin, destinat
     ['ASSIGNED', 'ARRIVED_PICKUP', 'IN_PROGRESS'].includes(requestState ?? '')
     ? { coordinate: vehicle.coordinate, receivedAt: vehicle.capturedAt,
       ...(vehicle.headingKnown !== false ? { heading: vehicle.heading } : {}) } : undefined;
+  const pickupPhase = ['ASSIGNED', 'ARRIVED_PICKUP'].includes(requestState ?? '');
+  const freshLocation = useFreshVehicleLocation(location);
+  const view = config.viewport(quote, pickupPhase ? assignment : undefined, origin);
+  const [assignmentView, setAssignmentView] = useState(initialAssignmentView);
+  const freshCoordinate = freshLocation?.receivedAt === vehicle?.capturedAt &&
+    freshLocation?.coordinate[0] === vehicle?.coordinate[0] && freshLocation?.coordinate[1] === vehicle?.coordinate[1]
+    ? freshLocation?.coordinate : undefined;
+  const nextView = advanceAssignmentView(assignmentView, assignment, requestState, view, freshCoordinate);
+  if (nextView !== assignmentView) setAssignmentView(nextView);
+  const phaseViewport = nextView.target ?? view;
+  const phaseViewportKey = JSON.stringify(phaseViewport);
+  const stableViewport = useMemo(() => JSON.parse(phaseViewportKey) as CameraTarget, [phaseViewportKey]);
   const targetValue = useMemo(() => {
-    const view = config.viewport(quote, assignment, origin);
     // The caller measures top chrome in the map's coordinate frame. Navigation remains
     // outside the map; the sheet contributes only its visible height.
-    return { ...view, padding: { ...view.padding, top: Math.max(view.padding?.top ?? 0, topOcclusion), bottom: (view.padding?.bottom ?? 0) + sheetHeight } };
-  }, [assignment, config, origin, quote, sheetHeight, topOcclusion]);
+    return { ...stableViewport, padding: { ...stableViewport.padding, top: Math.max(stableViewport.padding?.top ?? 0, topOcclusion), bottom: (stableViewport.padding?.bottom ?? 0) + sheetHeight } };
+  }, [stableViewport, sheetHeight, topOcclusion]);
   // Live vehicle revisions must not reissue an identical camera command on every fix.
   const targetKey = JSON.stringify(targetValue);
   const target = useMemo(() => JSON.parse(targetKey) as typeof targetValue, [targetKey]);
@@ -76,7 +89,7 @@ export function PassengerMap({ quote, assignment, requestState, origin, destinat
       } : undefined} />
     {displayKeyAvailable ? <TrafficFlowLayer enabled={!!layers?.traffic} /> : null}
     {displayKeyAvailable ? <IncidentLayer enabled={!!layers?.incidents} onSelect={onIncidentSelect} /> : null}
-    {!searchPresentationActive && quote ? <RouteLayer id="passenger-route" data={assignment?.routeToOrigin ?? quote.route}
+    {!searchPresentationActive && (pickupPhase ? assignment?.routeToOrigin ?? quote?.route : quote?.route) ? <RouteLayer id="passenger-route" data={(pickupPhase ? assignment?.routeToOrigin ?? quote?.route : quote?.route)!}
       activeTone="accentBlue" state="active" appearance={config.route} active={active} /> : null}
     {!searchPresentationActive ? <VehicleMarker key={assignment?.id} id="passenger-assigned-vehicle"
       location={location} sequence={vehicle?.sequence ?? 0} /> : null}

@@ -61,8 +61,8 @@ test('Driver presentation maps real states to compact and operational critical a
     ['compact', 'compact', 'compact', 'compact']);
   assert.equal(driverSurfaceVariant('ASSIGNED'), 'operational');
   assert.deepEqual(driverPresentation(state('OFFLINE')), { availability: 'OFFLINE', variant: 'compact',
-    title: 'No estás disponible', copy: 'Conéctate para empezar a recibir solicitudes.', tone: 'neutral',
-    action: 'availability_available', actionLabel: 'Disponible' });
+    title: 'Estás desconectado', copy: 'Conéctate para empezar a recibir solicitudes.', tone: 'neutral',
+    action: 'availability_available', actionLabel: 'Conectarme' });
   assert.equal(driverPresentation(state('LOCATING')).actionLabel, 'Desconectarme');
   assert.equal(driverPresentation(state('AVAILABLE')).actionLabel, 'Desconectarme');
   assert.equal(driverPresentation(state('PAUSED')).actionLabel, 'Volver a estar disponible');
@@ -73,8 +73,8 @@ test('human GPS and connectivity statuses expose no telemetry or identifiers', (
   assert.deepEqual(driverConnectionLabel('online'), { label: 'En línea', tone: 'positive' });
   assert.equal(driverConnectionLabel('reconnecting').label, 'Conexión inestable');
   assert.equal(driverConnectionLabel('offline').label, 'Sin conexión');
-  assert.equal(driverGpsLabel(state('AVAILABLE'), '').label, 'Ubicación precisa');
-  assert.equal(driverGpsLabel(state('LOCATING'), '').label, 'Ubicación precisa');
+  assert.equal(driverGpsLabel(state('AVAILABLE'), '').label, 'Ubicación disponible');
+  assert.equal(driverGpsLabel(state('LOCATING'), '').label, 'Ubicación disponible');
   assert.equal(driverGpsLabel(state('LOCATING'), 'Activa los servicios de ubicación').label, 'Sin ubicación');
 });
 
@@ -97,7 +97,7 @@ const visibleText = (node: ReactTestInstance) => node.findAllByType('Text' as ne
 
 test('OFFLINE, LOCATING, AVAILABLE and PAUSED keep recovery actions in the non-scroll critical region', async () => {
   const cases = [
-    { value: state('OFFLINE'), labels: ['Disponible'] },
+    { value: state('OFFLINE'), labels: ['Conectarme'] },
     { value: state('LOCATING'), labels: ['Desconectarme', 'Reintentar acción'], error: 'No se pudo obtener tu ubicación.' },
     { value: state('AVAILABLE'), labels: ['Desconectarme'] },
     { value: state('PAUSED'), labels: ['Volver a estar disponible'] },
@@ -193,7 +193,7 @@ test('Driver controller stays functional and presentation contains no debug iden
   assert.ok(panel.indexOf('testID="driver-secondary-content"') < panel.indexOf('testID="driver-critical-region"'));
   assert.doesNotMatch(panel, /surface:\s*\{[^}]*\bheight:/s);
   assert.equal((screen.match(/<SafeAreaView/g) ?? []).length, 1);
-  assert.match(screen, /renderPhase=\{\(\) => offer \?\s*<DriverOffer/);
+  assert.match(screen, /renderPhase=\{\(\) => offer \? <View[\s\S]*?<DriverOffer/);
   assert.match(screen, /error=\{error\} retryAvailable=\{!!pending\.current\} retryDisabled=\{busy\}/);
   assert.doesNotMatch(panel + offer, /<VimaText[^>]*>[^<]*(?:accountId|revision|requestId|operationId)|Driver P0/i);
   assert.doesNotMatch(screen, /assigned\.value\.id|accountId\} ·|Driver P0/);
@@ -203,7 +203,7 @@ test('Driver controller stays functional and presentation contains no debug iden
 test('Driver uses the shared real vehicle map; fallback never fabricates a location', () => {
   assert.deepEqual(driverMapFallback, [-99.88795, 19.79021]);
   const screen = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
-  assert.match(screen, /useDriverMap\(data, connection === 'online'\)/);
+  assert.match(screen, /useDriverMap\(data, connection === 'online', \{ height: frameHeight, sheetHeight \}\)/);
   assert.doesNotMatch(screen, /PassengerUserLocation/);
   assert.doesNotMatch(screen, /zoom:\s*[0123]\b/);
 });

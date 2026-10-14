@@ -29,30 +29,31 @@ const moveEnter = FadeInDown.duration(motionTimings.navigation.duration).easing(
 const moveExit = FadeOutDown.duration(motionTimings.navigation.duration).easing(motionTimings.sheetClose.easing)
   .withTargetValues({ transform: [{ translateY: travel }] }).reduceMotion(ReduceMotion.Never);
 
-/** Visual destinations only. The three unavailable modules have no handlers or routes. */
-export function PassengerBottomNavigation({ visible, bottomInset, onHome }: { visible: boolean; bottomInset: number; onHome: () => void }) {
+/** Only a supplied product account boundary enables Perfil; unavailable tabs retain no handler. */
+export function PassengerBottomNavigation({ visible, bottomInset, onHome, onProfile }: { visible: boolean; bottomInset: number; onHome: () => void; onProfile?: () => void }) {
   const { reducedMotion } = useMotionPolicy();
   const theme = useVimaTheme();
   return visible ? <Animated.View testID="passenger-bottom-navigation"
     entering={reducedMotion ? fadeEnter : moveEnter} exiting={reducedMotion ? fadeExit : moveExit}
     style={[styles.navigation, { backgroundColor: theme.roles.surface,
       height: bottomNavigationHeight(bottomInset), paddingBottom: navigationBottomPadding(bottomInset) }]}>
-    {tabs.map(tab => <NavTab key={tab.label} tab={tab} onHome={onHome} />)}
+    {tabs.map(tab => <NavTab key={tab.label} tab={tab.label === 'Perfil' && onProfile ? { ...tab, enabled: true } : tab}
+      selected={tab.label === 'Inicio'} onHome={tab.label === 'Perfil' ? onProfile ?? onHome : onHome} />)}
   </Animated.View> : null;
 }
-function NavTab({ tab, onHome }: { tab: typeof tabs[number]; onHome: () => void }) {
+function NavTab({ tab, onHome, selected }: { tab: typeof tabs[number]; onHome: () => void; selected: boolean }) {
   const feedback = usePressFeedback();
   const theme = useVimaTheme();
   const presentation = usePassengerPresentation();
-  const active = useSharedValue(tab.enabled ? 1 : 0);
+  const active = useSharedValue(selected ? 1 : 0);
   useEffect(() => {
-    active.set(fadeTo(Number(tab.enabled), motionTimings.feedback));
+    active.set(fadeTo(Number(selected), motionTimings.feedback));
     return () => cancelAnimation(active);
-  }, [active, tab.enabled]);
+  }, [active, selected]);
   const inactiveColor = useAnimatedStyle(() => ({ opacity: 1 - active.get() }));
   const activeColor = useAnimatedStyle(() => ({ opacity: active.get() }));
   return <Animated.View style={[styles.tabFrame, feedback.style]}><Pressable accessibilityRole="tab" accessibilityLabel={tab.label}
-      accessibilityState={{ selected: tab.enabled, disabled: !tab.enabled }} disabled={!tab.enabled}
+      accessibilityState={{ selected, disabled: !tab.enabled }} disabled={!tab.enabled}
       accessibilityHint={tab.enabled ? undefined : 'Módulo no disponible'} onPress={tab.enabled ? onHome : undefined}
       onPressIn={tab.enabled ? feedback.onPressIn : undefined} onPressOut={tab.enabled ? feedback.onPressOut : undefined}
       style={({ pressed }) => [styles.tab, pressed && tab.enabled && presentation.pressed]}>

@@ -25,6 +25,16 @@
         "buildType": "apk"
       }
     },
+    "product-preview": {
+      "extends": "production",
+      "distribution": "internal",
+      "channel": "product-access-preview",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_VIMA_VARIANT": "production",
+        "EXPO_PUBLIC_VIMA_AUTH_MODE": "product"
+      }
+    },
     "production": {
       "channel": "production",
       "environment": "production"

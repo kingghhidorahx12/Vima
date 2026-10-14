@@ -42,16 +42,19 @@ export interface VimaRideSheetProps extends PropsWithChildren {
   readonly onVisibleHeightChange?: (height: number) => void;
   /** `content-only` lets transparent structural regions pass touches to the map. */
   readonly hitTestPolicy?: 'sheet' | 'content-only';
+  /** Keep the persistent sheet out of layout until its host has measured the frame. */
+  readonly waitForGeometry?: boolean;
 }
 
 export function VimaRideSheet({ children, style, interaction, enabled = true, open = true, header, onVisibleHeightChange,
-  hitTestPolicy = 'sheet' }: VimaRideSheetProps) {
+  hitTestPolicy = 'sheet', waitForGeometry = false }: VimaRideSheetProps) {
   const theme = useVimaTheme();
   const policy = useMotionPolicy();
   const offset = useSharedValue(interaction?.height ?? interaction?.targetOffset ?? 0);
   const start = useSharedValue(0);
   const dragging = useSharedValue(false);
   const wasOpen = useRef(false);
+  const measured = useRef(!!interaction?.height);
   const reportedHeight = useSharedValue(-1);
   const sheetHeight = interaction?.height ?? 0;
   const restHeight = sheetHeight - (interaction?.targetOffset ?? 0);
@@ -67,9 +70,13 @@ export function VimaRideSheet({ children, style, interaction, enabled = true, op
     const timing = !open ? motionTimings.sheetClose : !wasOpen.current
       ? motionTimings.sheetEnter : interaction?.timing ?? motionTimings.sheetSnap;
     wasOpen.current = open;
-    offset.set(moveTo(target, policy.reducedMotion, timing));
+    // A zero/unmeasured frame is not a real snap. Bootstrap directly at the first
+    // measured target; later transitions retain the approved sheet motion.
+    const firstGeometry = waitForGeometry && !measured.current && !!interaction?.height;
+    if (interaction?.height) measured.current = true;
+    offset.set(firstGeometry ? target : moveTo(target, policy.reducedMotion, timing));
     return () => cancelAnimation(offset);
-  }, [dragging, interaction, offset, open, policy.reducedMotion]);
+  }, [dragging, interaction, offset, open, policy.reducedMotion, waitForGeometry]);
 
   const pan = Gesture.Pan().enabled(enabled && open && !!interaction)
     .onStart(() => { dragging.set(true); cancelAnimation(offset); start.set(offset.get()); })
@@ -93,7 +100,7 @@ export function VimaRideSheet({ children, style, interaction, enabled = true, op
   const surface = <Animated.View testID="vima-ride-sheet-surface" pointerEvents={open ? contentOnly ? 'box-none' : 'auto' : 'none'} accessibilityElementsHidden={!open}
         importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
         style={[theme.surfaces.sheet, interaction?.height ? [styles.overlay, { height: interaction.height }] : null,
-          style, !open && !interaction?.height ? { display: 'none' } : null, animatedStyle]}>
+          style, (!open || waitForGeometry) && !interaction?.height ? { display: 'none' } : null, animatedStyle]}>
         <Animated.View testID="vima-ride-sheet-viewport" pointerEvents={contentOnly ? 'box-none' : 'auto'} style={viewportStyle}>
           {header ? <GestureDetector gesture={pan}><Animated.View testID="vima-ride-sheet-header-slot"
             pointerEvents={contentOnly ? 'box-none' : 'auto'}>{header}</Animated.View></GestureDetector> : null}

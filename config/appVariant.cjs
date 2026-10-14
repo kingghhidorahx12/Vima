@@ -3,7 +3,10 @@ function appVariant(env) {
   if (!env.EXPO_PUBLIC_VIMA_VARIANT && (env.NODE_ENV === 'production' || env.EAS_BUILD_PROFILE)) throw new Error('explicit_release_variant_required');
   const variant = env.EXPO_PUBLIC_VIMA_VARIANT ?? (env.NODE_ENV === 'production' || env.EAS_BUILD_PROFILE ? 'production' : 'development');
   if (!['development', 'qa', 'production'].includes(variant)) throw new Error('invalid_app_variant');
-  const profile = env.EAS_BUILD_PROFILE?.replace('-simulator', '');
+  if (env.EXPO_PUBLIC_VIMA_AUTH_MODE && !['qa', 'product'].includes(env.EXPO_PUBLIC_VIMA_AUTH_MODE)) throw new Error('invalid_auth_mode');
+  if (variant === 'production' && env.EXPO_PUBLIC_VIMA_AUTH_MODE === 'qa') throw new Error('production_qa_auth_forbidden');
+  if (env.EXPO_PUBLIC_VIMA_AUTH_MODE === 'product' && env.EXPO_PUBLIC_VIMA_FIXTURES === '1') throw new Error('product_fixtures_forbidden');
+  const profile = env.EAS_BUILD_PROFILE === 'product-preview' ? 'production' : env.EAS_BUILD_PROFILE?.replace('-simulator', '');
   if (profile && profile !== variant) throw new Error('inconsistent_build_variant');
   if (variant === 'qa') {
     if (env.EXPO_PUBLIC_VIMA_FIXTURES === '1') throw new Error('qa_fixtures_forbidden');

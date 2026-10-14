@@ -143,7 +143,7 @@ function LayerSwitch({ checked }: { checked: boolean }) {
   return <View style={[styles.switch, { backgroundColor: checked ? theme.roles.positive : theme.roles.disabledSurface }]}>
     <Animated.View style={[styles.knob, { backgroundColor: theme.roles.onAction }, knob]} /></View>;
 }
-function MapControl({ label, icon, onPress, disabled = false, active = false, expanded = false, busy = false }: {
+export function MapControl({ label, icon, onPress, disabled = false, active = false, expanded = false, busy = false }: {
   label: string; icon: VimaGlyphName; onPress: () => void; disabled?: boolean; active?: boolean; expanded?: boolean; busy?: boolean;
 }) {
   const { reducedMotion } = useMotionPolicy();

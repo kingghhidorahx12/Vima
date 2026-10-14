@@ -1281,3 +1281,34 @@ test('fit intent identity ignores renders/height/pan; a late quote never fits un
     assert.equal(fit().sheetHeight, 390);
   } finally { await act(async () => tree.unmount()); }
 });
+
+test('cold Passenger layout remeasures after the first real frame without restart or remount', async () => {
+  const previousFrame = globalThis.requestAnimationFrame; const previousCancel = globalThis.cancelAnimationFrame;
+  const frames = new Map<number, FrameRequestCallback>(); let serial = 0;
+  globalThis.requestAnimationFrame = callback => { frames.set(++serial, callback); return serial; };
+  globalThis.cancelAnimationFrame = handle => { if (typeof handle === 'number') frames.delete(handle); };
+  const flushFrame = async () => { const callbacks = [...frames.values()]; frames.clear();
+    await act(async () => callbacks.forEach(callback => callback(0))); };
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  try {
+    await settle(); await flushFrame(); // Initial read had no real native size.
+    const sheet = host(tree, 'SheetBoundary');
+    assert.equal(sheet.props.waitForGeometry, true);
+    assert.equal(sheet.props.interaction, undefined);
+    h.nativeHeights.set('passenger-sheet-header', 96);
+    h.nativeHeights.set('passenger-sheet-content', 250);
+    h.nativeHeights.set('passenger-sheet-viewport', 254);
+    await mapLayout(tree); // measureKey unchanged; first nonzero frame is the trigger.
+    assert.ok(frames.size > 0);
+    await act(async () => host(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+    await flushFrame();
+    assert.equal(host(tree, 'SheetBoundary'), sheet);
+    assert.equal(id(tree, 'vima-launch-surface').props.pointerEvents, 'none');
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+    assert.equal(host(tree, 'PassengerMapContent').props.sheetHeight, 350);
+  } finally {
+    await act(async () => tree.unmount()); fixture.controls.dispose();
+    globalThis.requestAnimationFrame = previousFrame; globalThis.cancelAnimationFrame = previousCancel;
+  }
+});

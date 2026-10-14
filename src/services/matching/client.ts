@@ -37,8 +37,8 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
     const timer = setTimeout(abort, timeout);
     try {
       if (input.signal?.aborted) controller.abort();
-      const result = await api.request({ ...input, signal: controller.signal }); status('online'); return result;
-    } catch (error) { if (!input.signal?.aborted) status(error instanceof ApiError ? 'online' : 'offline'); throw error; }
+      const result = await api.request({ ...input, timeoutMs: timeout, signal: controller.signal }); status('online'); return result;
+    } catch (error) { if (!input.signal?.aborted) status(error instanceof ApiError && error.status > 0 ? 'online' : 'offline'); throw error; }
     finally { clearTimeout(timer); input.signal?.removeEventListener('abort', abort); }
   }
   function subscribe(key: string, path: string, invalidate: () => void, reconnect: () => void) {
@@ -65,6 +65,8 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
           } else if (reconnected) { pollTrace('poll_reconnected', { pollId, revision: result.revision }); reconnect(); }
         } catch (error) {
           pollTrace('poll_error', { pollId, durationMs: Math.max(0, now() - startedAt), ...matchingTraceError(error) });
+          // Definitive authentication failure requires access recovery, never an offline retry loop.
+          if (error instanceof ApiError && error.status === 401) { stopReason = 'unauthorized'; controller.abort(); }
           if (controller.signal.aborted) {
             pollTrace('poll_stop', { pollId, aborted: true, reason: stopReason, durationMs: Math.max(0, now() - startedAt) }); break;
           }

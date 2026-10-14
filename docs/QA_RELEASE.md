@@ -1,8 +1,15 @@
 # QA release interno: EAS Update + Railway
 
 ## Estado y precondiciones
-Implementación local; Railway, EAS Build, canal remoto, OTA y dispositivo PENDIENTES.
-No se han desplegado servicios ni publicado updates. Producción permanece bloqueada.
+Para acceso OTP de Passenger usar el recorrido/canal separado de
+[PRODUCT_ACCESS_ROLLOUT.md](PRODUCT_ACCESS_ROLLOUT.md). No convertir el backend QA
+ni publicar modo product en el canal QA compartido; Driver QA sigue siendo independiente.
+El usuario ya reportó HTTPS Railway y recuperación de viaje Driver en la QA anterior
+(ver PROJECT_STATE). No se revalidan aquí esos servicios ni el artefacto instalado.
+Los bloques locales posteriores de auth/mapas/acceso no se consideran desplegados
+por ese antecedente. Esta ronda no publica updates ni modifica Railway; OTP/SMS real
+y QA físico del nuevo bundle siguen PENDIENTES. Esta guía describe el QA con tokens;
+la entrega de producto sigue el procedimiento separado indicado arriba.
 Proyecto EAS existente: 30422aec-d22b-40f0-8008-c6a316633fd8. Node >=22.13.
 
 ## Variables EAS
@@ -53,7 +60,8 @@ Configurar una vez el vínculo channel qa → branch qa (crear si no existen):
 
 Si ya existe: eas channel:edit qa --branch qa. Nunca apuntar production a qa.
 Instalar APK QA junto a Dev. PC/Metro apagados: abrir Passenger, ingresar token válido,
-cambiar a Driver mediante Cuenta QA / cambiar modo y enlaces existentes; validar restore,
+cambiar cuenta/rol mediante la herramienta interna `vima-qa://qa/account?role=driver`
+o `vima-qa://qa/account?role=passenger` y sus enlaces (sin selector sobre el mapa); validar restore,
 rol incorrecto, limpiar/cambiar cuenta, viajes y reinicio. Producción no habilita live.
 
 ## OTA y runtime

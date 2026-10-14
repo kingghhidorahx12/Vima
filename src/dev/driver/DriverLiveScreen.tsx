@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { AppState, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { AppState, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,7 +11,9 @@ import type { MatchingClient } from '../../services/matching/client';
 import type { DriverState } from '../../services/matching/contracts';
 import { createDriverActions } from '../../services/matching/driverActions';
 import { DriverRideShell } from '../../features/driver/DriverRideShell';
-import { DriverStatePanel } from '../../features/driver/DriverStatePanel';
+import { DriverAccountPanel } from '../../features/driver/DriverAccountPanel';
+import { DriverMapPanel } from '../../features/driver/DriverMapPanel';
+import { driverSheetInteraction, driverViewportPhase } from '../../features/driver/driverViewport';
 import { DriverOffer } from '../../features/driver/DriverOffer';
 import { type DriverConnection } from '../../features/driver/driverPresentation';
 import { useVimaTheme } from '../../design/themes';
@@ -115,20 +117,47 @@ function DriverSurface({ client, accountId, available }: { client: MatchingClien
     return () => { clearTimeout(initial); clearInterval(timer); };
   }, [expiresAt]);
   const data = state.data; const offer = data?.offer;
-  const driverMap = useDriverMap(data, connection === 'online');
-  return <SafeAreaView style={[styles.fill, { backgroundColor: theme.roles.background }]}><DriverRideShell {...driverMap} renderPhase={() => offer ?
+  const [accountFrame, setAccountFrame] = useState({ phase: '', open: false });
+  const closeAccount = useCallback(() => setAccountFrame(current => ({ ...current, open: false })), []);
+  const [frameHeight, setFrameHeight] = useState(0);
+  const [minimum, setMinimum] = useState({ phase: '', height: 0 });
+  const [visibleHeight, setVisibleHeight] = useState<{ phase: string; height: number }>();
+  const phase = driverViewportPhase(data);
+  // An incoming offer or an operational transition must never remain behind account settings.
+  const accountOpen = accountFrame.phase === phase && accountFrame.open;
+  if (accountFrame.phase !== phase) setAccountFrame({ phase, open: false });
+  const reportMinimum = useCallback((height: number) => setMinimum({ phase, height: height + 24 }), [phase]);
+  const interaction = useMemo(() => driverSheetInteraction(frameHeight, phase,
+    minimum.phase === phase ? minimum.height : 0), [frameHeight, phase, minimum]);
+  const sheetHeight = visibleHeight?.phase === phase ? visibleHeight.height
+    : interaction ? frameHeight - interaction.targetOffset : 0;
+  const driverMap = useDriverMap(data, connection === 'online', { height: frameHeight, sheetHeight });
+  const reportVisibleHeight = useCallback((height: number) => setVisibleHeight({ phase, height }), [phase]);
+  const renderLifecycle = (section: 'primary' | 'secondary') => data?.assignment ? <DriverLifecycleControls section={section}
+    assignment={data.assignment} busy={tripLifecycle.busy || busy} queued={tripLifecycle.queued} pendingCommands={tripLifecycle.pendingCommands}
+    onSync={() => { void tripLifecycle.sync(); }} onCommand={command => { void tripLifecycle.command(data, command); }} /> : null;
+  return <SafeAreaView style={[styles.fill, { backgroundColor: theme.roles.background }]}>
+    <View testID="driver-useful-frame" style={styles.fill} onLayout={event => setFrameHeight(event.nativeEvent.layout.height)}>
+    <DriverRideShell {...driverMap} sheet={{ interaction, waitForGeometry: true,
+      onVisibleHeightChange: reportVisibleHeight,
+      header: <View testID="driver-sheet-handle" style={styles.dragArea}><View style={[styles.handle, { backgroundColor: theme.roles.border }]} /></View> }}
+      renderPhase={() => offer ? <View onLayout={event => reportMinimum(event.nativeEvent.layout.height)}>
     <DriverOffer offer={offer} revision={data!.revision} now={now} disabled={busy || !!pending.current}
       error={error} retryAvailable={!!pending.current} retryDisabled={busy}
       onAccept={() => { void actions.startDriverAction({ kind: 'offer_accept', offerId: offer.id, requestId: offer.requestId }); }}
       onReject={() => { void actions.startDriverAction({ kind: 'offer_reject', offerId: offer.id, requestId: offer.requestId }); }}
-      onRetry={() => { void actions.retryPendingDriverAction(); }} />
-    : <DriverStatePanel state={data} connection={connection as DriverConnection} configured={available}
+      onRetry={() => { void actions.retryPendingDriverAction(); }} /></View>
+    : <DriverMapPanel state={data} onMinimumHeight={reportMinimum} connection={connection as DriverConnection} configured={available}
+    onAccount={() => setAccountFrame({ phase, open: true })}
     busy={busy || tripLifecycle.busy} error={error || tripLifecycle.error || (state.error ? 'No se pudo leer el estado.' : '')} retryAvailable={!!pending.current}
-    lifecycleControls={data?.assignment ? <DriverLifecycleControls assignment={data.assignment} busy={tripLifecycle.busy || busy}
-      queued={tripLifecycle.queued} pendingCommands={tripLifecycle.pendingCommands} onSync={() => { void tripLifecycle.sync(); }} onCommand={command => { void tripLifecycle.command(data, command); }} /> : null}
+    lifecycleControls={renderLifecycle('primary')} lifecycleSecondary={renderLifecycle('secondary')}
     onAvailable={() => { void actions.startDriverAction({ kind: 'availability_available' }); }}
     onOffline={() => { void actions.startDriverAction({ kind: 'availability_offline' }); }}
     onCancelAssignment={(requestId) => { void actions.startDriverAction({ kind: 'assignment_cancel', requestId, assignmentId: data!.assignment!.value.id }); }}
-    onRetry={() => { void actions.retryPendingDriverAction(); }} />} /></SafeAreaView>;
+    onRetry={() => { void actions.retryPendingDriverAction(); }} />} />
+    {accountOpen && data ? <View testID="driver-account-overlay" style={styles.account} accessibilityViewIsModal>
+      <DriverAccountPanel state={data} onClose={closeAccount} /></View> : null}
+    </View></SafeAreaView>;
 }
-const styles = StyleSheet.create({ fill: { flex: 1 } });
+const styles = StyleSheet.create({ account: { ...StyleSheet.absoluteFill, zIndex: 30 }, fill: { flex: 1 }, dragArea: { height: 24, alignItems: 'center', justifyContent: 'center' },
+  handle: { width: 32, height: 4, borderRadius: 2 } });
