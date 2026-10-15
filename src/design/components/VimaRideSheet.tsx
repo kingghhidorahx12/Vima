@@ -39,6 +39,8 @@ export interface VimaRideSheetProps extends PropsWithChildren {
   readonly open?: boolean;
   /** Optional dedicated drag area so scrollable content does not compete with the pan. */
   readonly header?: ReactNode;
+  /** Disable the header pan when a compact surface delegates movement to its ScrollView. */
+  readonly headerPanEnabled?: boolean;
   readonly onVisibleHeightChange?: (height: number) => void;
   /** `content-only` lets transparent structural regions pass touches to the map. */
   readonly hitTestPolicy?: 'sheet' | 'content-only';
@@ -46,7 +48,7 @@ export interface VimaRideSheetProps extends PropsWithChildren {
   readonly waitForGeometry?: boolean;
 }
 
-export function VimaRideSheet({ children, style, interaction, enabled = true, open = true, header, onVisibleHeightChange,
+export function VimaRideSheet({ children, style, interaction, enabled = true, open = true, header, headerPanEnabled = true, onVisibleHeightChange,
   hitTestPolicy = 'sheet', waitForGeometry = false }: VimaRideSheetProps) {
   const theme = useVimaTheme();
   const policy = useMotionPolicy();
@@ -78,7 +80,7 @@ export function VimaRideSheet({ children, style, interaction, enabled = true, op
     return () => cancelAnimation(offset);
   }, [dragging, interaction, offset, open, policy.reducedMotion, waitForGeometry]);
 
-  const pan = Gesture.Pan().enabled(enabled && open && !!interaction)
+  const pan = Gesture.Pan().enabled(enabled && headerPanEnabled && open && !!interaction)
     .onStart(() => { dragging.set(true); cancelAnimation(offset); start.set(offset.get()); })
     .onUpdate((event) => {
       if (!interaction) return;

@@ -6,6 +6,7 @@ import type { PersonalPlacesRepository, SavedPlace } from './personalPlaces.ts';
 import { createPlaceMediaResolver } from './placeMedia.ts';
 import type { MatchingClient } from '../matching/client.ts';
 import { GeospatialError } from './contracts.ts';
+import { approvedLocalPlaces } from './localPlaces.ts';
 
 const toPlace = (place: SavedPlace) => ({ ...place, id: place.canonicalId });
 
@@ -31,7 +32,16 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
     saveSavedSlot: personal ? (slot, place) => personal.saveSlot(slot, place) : undefined,
     removeSavedSlot: personal ? slot => personal.removeSlot(slot) : undefined,
     suggestPlaces: search.suggest, searchPlaces: search.search, followPlaceAction: search.followUp,
-    resolvePlace: search.resolve, closePlaces: search.close,
+    async resolvePlace(id, signal) {
+      if (signal?.aborted) throw new GeospatialError('cancelled');
+      // Discovery/saved suggestions need not belong to a provider session.
+      // Only an exact, verified catalog ID may bypass provider Details.
+      const local = approvedLocalPlaces.find(place => place.status === 'verified' && place.id === id);
+      if (!local) return search.resolve(id, signal);
+      search.close();
+      return local;
+    },
+    closePlaces: search.close,
     reversePlace: client.reverseGeocode,
     contributePlace: async (input, key, signal) => (await client.contributePlace(input, key, signal)).place,
     discoverPlaces: client.discovery,

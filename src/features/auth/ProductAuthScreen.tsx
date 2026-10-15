@@ -8,7 +8,6 @@ import { textStyle } from '../../design/typography';
 import { ElementEntrance } from '../../motion/ElementEntrance';
 import { motionTimings } from '../../motion/timing';
 import { productAuthClient, ProductAuthClientError } from '../../services/auth/productSession';
-import { withDeadline } from '../../services/api/deadline';
 import { AccessAction, AccessFrame, AccessNotice, RestorationSurface } from './AccessSurface';
 import { accessErrorMessage, countdown, mexicanPhoneDigits, otpDigits, otpResendSeconds, validMexicanPhone } from './accessModel';
 
@@ -27,7 +26,7 @@ export function ProductAuthScreen() {
     const controller = new AbortController(); pending.current = controller;
     setLoading(true); setError(''); setRestoreFailed(false);
     try {
-      const account = await withDeadline(productAuthClient().current(controller.signal), 12_000, controller.signal, () => controller.abort());
+      const account = await productAuthClient().current(controller.signal);
       if (!controller.signal.aborted && account) router.replace('/passenger' as Href);
     } catch (reason) { if (pending.current === controller) { setError(accessErrorMessage(reason)); setRestoreFailed(true); } }
     finally { if (pending.current === controller) { setLoading(false); pending.current = null; } }

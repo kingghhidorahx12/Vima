@@ -53,6 +53,73 @@ test('reviewed Plaza identities collapse to the local coordinate, never other bu
   assert.equal(samePlace(suggestions[1]!, plaza), true); // Wire canonicalId survives without providerRef/coordinate.
 });
 
+test('local Discovery IDs resolve and quote from the verified catalog without a TomTom session', async () => {
+  const paths: string[] = [];
+  const origin = { id: 'origin', name: 'Origen', address: '', coordinate: [-99.875, 19.8] as const };
+  const client = createGeospatialClient({ async request(input) {
+    paths.push(input.path);
+    if (input.path.startsWith('/v1/geospatial/discovery')) return input.decode({ popular: [],
+      featured: localPlaces.map(local => ({ id: local.id, canonicalId: local.id, name: local.name,
+        address: local.address, provenance: 'vima-local', regionId: local.regionId })) });
+    assert.equal(input.path, '/v1/passenger/quotes');
+    const draft = input.body as { origin: typeof origin; destination: typeof localPlaces[number]; stops: [] };
+    const local = localPlaces.find(local => local.id === draft.destination.id)!;
+    assert.deepEqual(draft.destination, { id: local.id, name: local.name, address: local.address, coordinate: local.coordinate });
+    // Synthetic server response at the transport boundary; no routing fallback in the app.
+    return input.decode({ status: 'unpriced', reason: 'pricing_not_configured', routePreview: {
+      id: `route-${draft.destination.id}`, createdAt: 1, expiresAt: 300001, ...draft,
+      route: { geometry: { type: 'Feature', properties: {}, geometry: { type: 'LineString',
+        coordinates: [origin.coordinate, draft.destination.coordinate] } },
+      bounds: { southwest: [-100, 19], northeast: [-99, 20] }, distanceMeters: 1200, durationSeconds: 180 },
+    } });
+  } }, 500);
+  const gateway = createPassengerLiveGateway(client, async () => null);
+  const discovery = await gateway.discoverPlaces!('atlacomulco');
+  for (const suggestion of discovery.featured) {
+    assert.equal('coordinate' in suggestion, false);
+    const local = localPlaces.find(place => place.id === suggestion.id)!;
+    assert.equal(rankRegionalPlaces([], localPlaces, local.name)[0]!.id, local.id);
+    const destination = await gateway.resolvePlace!(suggestion.id);
+    assert.deepEqual(destination, local);
+    const quote = await gateway.quote({ origin, destination, stops: [] }, undefined, `local-${local.id}`);
+    assert.equal(quote.destination.id, local.id);
+    assert.deepEqual(quote.destination.coordinate, local.coordinate);
+    assert.deepEqual(quote.route.geometry.coordinates.at(-1), local.coordinate);
+  }
+  assert.deepEqual(paths, ['/v1/geospatial/discovery?regionId=atlacomulco',
+    '/v1/passenger/quotes', '/v1/passenger/quotes']);
+});
+
+test('local resolution closes provider search and retains session validation for external IDs', async () => {
+  const paths: string[] = []; let providerDetails = 0;
+  const local = localPlaces[0]!;
+  const external = { id: 'external-choice', name: 'Otro comercio', address: 'Otra calle', coordinate: [-99, 19] as const };
+  const client = createGeospatialClient({ async request(input) {
+    paths.push(input.path);
+    if (input.path.endsWith('/sessions')) return input.decode({ sessionId: 'local-test' });
+    if (input.method === 'DELETE') return input.decode({});
+    if (input.path.endsWith('/autocomplete')) return input.decode({ suggestions: [external] });
+    assert.ok(input.path.endsWith('/resolve')); providerDetails++;
+    assert.deepEqual(input.body, { id: external.id });
+    return input.decode(external);
+  } }, 500);
+  const gateway = createPassengerLiveGateway(client, async () => null);
+  await assert.rejects(gateway.resolvePlace!('vima-local:unknown'), { code: 'no_result' });
+  await assert.rejects(gateway.resolvePlace!(external.id), { code: 'no_result' });
+  const cancelled = new AbortController(); cancelled.abort();
+  await assert.rejects(gateway.resolvePlace!(local.id, cancelled.signal), { code: 'cancelled' });
+  assert.equal(paths.length, 0);
+  await gateway.suggestPlaces!('Otro');
+  assert.deepEqual(await gateway.resolvePlace!(local.id), local);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(paths.includes('/v1/geospatial/places/sessions/local-test'));
+  await assert.rejects(gateway.resolvePlace!(external.id), { code: 'no_result' });
+  assert.equal(providerDetails, 0);
+  await gateway.suggestPlaces!('Otro');
+  assert.deepEqual(await gateway.resolvePlace!(external.id), external);
+  assert.equal(providerDetails, 1);
+});
+
 test('canonical identity preserves neighboring branches and requires explicit evidence for an alias', () => {
   const branch = { id: 'branch-a', name: 'Coppel', address: 'Atlacomulco', coordinate: [-99.87, 19.80] as const,
     provenance: 'provider' as const, regionId: 'atlacomulco' };

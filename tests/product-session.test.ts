@@ -5,6 +5,47 @@ import { createProductAuthClient, PRODUCT_SESSION_STORAGE_KEY } from '../src/ser
 const sessionFixture = () => ({ accountId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479', displayName: 'María López',
   capabilities: ['passenger'], accessToken: 'a'.repeat(43), refreshToken: 'b'.repeat(43), accessExpiresAt: Date.now() + 900000 });
 
+test('cold restoration gives storage, refresh and me separate budgets instead of spending the me deadline on credentials', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_800_000_000_000 });
+  const original = { ...sessionFixture(), accessExpiresAt: Date.now() - 1 };
+  let stored: string | null = JSON.stringify(original); let reads = 0; let refreshes = 0; let me = 0;
+  const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+  const drain = async () => { for (let i=0;i<40;i++) await Promise.resolve(); };
+  const client = createProductAuthClient('https://gateway.example', {
+    read: async () => { reads++; await delay(6000); return stored; },
+    write: async value => { await delay(1000); stored = value; }, clear: async () => { stored = null; },
+  }, async input => {
+    if (new URL(String(input)).pathname === '/v1/auth/refresh') {
+      refreshes++; await delay(7000);
+      return Response.json({ status: 'authenticated', session: { ...original, accessExpiresIn: 900 } });
+    }
+    me++; await delay(5000); return Response.json(original);
+  });
+  let complete = false; const restored = client.current().then(value => { complete = true; return value; });
+  await drain(); t.mock.timers.tick(6000); await drain();
+  t.mock.timers.tick(7000); await drain(); t.mock.timers.tick(1000); await drain();
+  assert.equal(me, 1); assert.equal(complete, false);
+  t.mock.timers.tick(5000); await drain();
+  assert.equal((await restored)?.accountId, original.accountId);
+  assert.deepEqual([reads,refreshes,me], [1,1,1]);
+});
+
+test('cancelling while waiting for shared refresh prevents me but permits a fresh caller to finish restoration', async () => {
+  const original = { ...sessionFixture(), accessExpiresAt: Date.now() - 1 };
+  let finish!: (value: Response) => void; let calls = 0; let stored: string | null = JSON.stringify(original);
+  const client = createProductAuthClient('https://gateway.example', { read: async () => stored,
+    write: async value => { stored = value; }, clear: async () => { stored = null; } }, async input => {
+    if (new URL(String(input)).pathname === '/v1/auth/refresh') return new Promise<Response>(resolve => { finish=resolve; });
+    calls++; return Response.json(original);
+  });
+  const controller = new AbortController(); const first = client.current(controller.signal);
+  const rejected = assert.rejects(first); while (!finish) await new Promise<void>(resolve => setImmediate(resolve));
+  controller.abort(); await rejected;
+  const next = client.current();
+  finish(Response.json({ status:'authenticated', session:{ ...original, accessExpiresIn:900 } }));
+  assert.equal((await next)?.accountId,original.accountId); assert.equal(calls,1); assert.ok(stored);
+});
+
 test('a refresh started before logout cannot recreate the product session when its response arrives late', async () => {
   const original = sessionFixture(); let stored: string | null = JSON.stringify(original);
   let respond!: (response: Response) => void;

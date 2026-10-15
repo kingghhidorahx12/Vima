@@ -155,6 +155,20 @@ test('stored session routes to existing Passenger restoration; offline restorati
   }
 });
 
+test('restoration UI does not abort a still-valid sequence at twelve seconds and back ignores its late account', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let complete!: (value: typeof account) => void; let signal!: AbortSignal;
+  const h = harness({ current: (value: AbortSignal) => { signal = value; return new Promise(resolve => { complete = resolve; }); } });
+  const tree = await h.renderAuth();
+  try {
+    await h.act(async () => t.mock.timers.tick(12001));
+    assert.equal(signal.aborted, false); assert.equal(button(tree, 'Reintentar'), undefined);
+    await h.act(async () => h.back()); assert.equal(signal.aborted, true);
+    await h.act(async () => complete(account));
+    assert.equal(h.calls.some((call: unknown[]) => call[0] === 'replace'), false);
+  } finally { await h.act(async () => tree.unmount()); }
+});
+
 test('account shows real name, theme setting and confirmed product logout; unsupported actions are absent', async () => {
   let loggedOut = 0;
   const h = harness({ current: async () => account, logout: async () => { loggedOut++; } });

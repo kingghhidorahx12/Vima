@@ -54,7 +54,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     'react-native-reanimated': { __esModule: true, ...animated },
     'react-native-worklets': { scheduleOnRN: (fn, ...args) => fn(...args) },
     'react-native-gesture-handler': { Gesture: { Pan: () => {
-      const pan = { enabled: () => pan, onStart: () => pan, onUpdate: () => pan, onFinalize: () => pan,
+      const pan = { enabled: value => { mounted.sheetPanEnabled = value; return pan; }, onStart: () => pan, onUpdate: () => pan, onFinalize: () => pan,
         activeOffsetY: () => pan, failOffsetX: () => pan }; return pan;
     } }, GestureDetector: ({ children }) => React.createElement('GestureDetector', null, children) },
     'expo-image': { Image: 'ExpoImage' },

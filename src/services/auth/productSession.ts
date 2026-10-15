@@ -1,5 +1,5 @@
 import { ApiError, createApiClient, type ApiClient, type ApiRequest } from '../api/client.ts';
-import { RequestTimeoutError, withDeadline } from '../api/deadline.ts';
+import { RequestTimeoutError, withCancellation, withDeadline } from '../api/deadline.ts';
 
 export const PRODUCT_SESSION_STORAGE_KEY = 'vima.product-session.v1';
 export interface ProductSession { accountId: string; displayName: string; capabilities: readonly ['passenger'];
@@ -171,8 +171,12 @@ export function createProductAuthClient(baseUrl: string, storage: ProductSession
     if (!current) throw new ProductAuthClientError(401, 'unauthorized');
     return (current.accessExpiresAt > now() + 60_000 ? current : await refresh()).accessToken;
   };
-  const rawApi = createApiClient(baseUrl, access, { fetcher });
-  const requestWithTimeout = async <T>(request: ApiRequest<T>) => {
+  const requestWithTimeout = async <T>(request: ApiRequest<T>, generation: number) => {
+    // Storage and a shared token refresh already have their own bounded budgets.
+    // The operation's network deadline starts only once its credential is ready.
+    const credential = await withCancellation(access(), request.signal);
+    if (request.signal?.aborted || generation !== identityGeneration) throw new Error('auth_cancelled');
+    const rawApi = createApiClient(baseUrl, async () => credential, { fetcher });
     const controller = new AbortController();
     const abort = () => controller.abort();
     if (request.signal?.aborted) controller.abort();
@@ -191,7 +195,7 @@ export function createProductAuthClient(baseUrl: string, storage: ProductSession
   const api: ApiClient = { async request<T>(request: ApiRequest<T>) {
     const generation = identityGeneration;
     let result: T;
-    try { result = await requestWithTimeout(request); }
+    try { result = await requestWithTimeout(request, generation); }
     catch (error) {
       if (request.signal?.aborted) throw error;
       if (error instanceof ProductAuthClientError && error.status === 401 && snapshot.reason === 'expired') throw error;
@@ -199,7 +203,7 @@ export function createProductAuthClient(baseUrl: string, storage: ProductSession
       if (!(error instanceof ApiError) || error.status !== 401) throw error;
       await refresh();
       if (generation !== identityGeneration) throw new Error('auth_cancelled');
-      try { result = await requestWithTimeout(request); }
+      try { result = await requestWithTimeout(request, generation); }
       catch (retryError) {
         if (generation === identityGeneration && retryError instanceof ApiError && retryError.status === 401) {
           forget('expired'); await clearSession();

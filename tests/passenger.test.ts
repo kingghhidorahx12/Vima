@@ -11,6 +11,8 @@ import { manualClock } from './support/manualClock.ts';
 import { requestPassengerRide } from '../src/features/passenger/requests.ts';
 import { executeConfirmedCommand, tripKey } from '../src/features/trip/queries.ts';
 import { approvedLocalPlaces } from '../src/services/geospatial/localPlaces.ts';
+import { createGeospatialClient } from '../src/services/geospatial/client.ts';
+import { createPassengerLiveGateway } from '../src/services/geospatial/passengerGateway.ts';
 import type { ReactTestRenderer, ReactTestInstance } from 'react-test-renderer';
 
 const require = createRequire(import.meta.url);
@@ -126,6 +128,30 @@ test('cancel then search the same destination obtains a fresh authoritative quot
   } finally { await h.act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
 });
 
+test('cancel preserves draft places and automatically quotes a reconstructed snapshot without needing reselection', async () => {
+  const fixture = createPassengerFixtureGateway(clock); let quotes = 0;
+  // Matching snapshots strip optional place metadata: same identity/coordinate,
+  // but a different query key from the selected rich place.
+  const plain = (place: Place) => ({ id: place.id, name: place.name, address: place.address, coordinate: place.coordinate });
+  const gateway: PassengerGateway = { ...fixture.gateway,
+    recentPlaces: async () => fixturePlaces.slice(1).map(p => ({ ...p, category: 'park' })),
+    quote: async draft => ({ ...fixtureQuote(draft), id: `current-${++quotes}` }),
+    execute: async command => {
+      const result = await fixture.gateway.execute(command) as PassengerTrip;
+      return { ...result, quote: { ...result.quote, origin: plain(result.quote.origin), destination: plain(result.quote.destination) } };
+    },
+  };
+  const h = createHarness(); const tree = await h.render(gateway);
+  try {
+    await reachMatching(h, tree); await h.act(async () => press(tree, 'Cancelar')); await settle(h);
+    assert.equal(quotes, 2);
+    const map = nativeNode(tree, 'PassengerMapContent').props;
+    assert.equal(map.quote.id, 'current-2'); assert.equal(map.destination.id, map.quote.destination.id);
+    assert.deepEqual(map.quote.route.geometry.coordinates.at(-1), map.destination.coordinate);
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await h.act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+});
+
 test('Plaza search chooses the reviewed identity and sends its exact coordinate to quote/map without provider Details', async () => {
   const plaza = approvedLocalPlaces[0]!; const fixture = createPassengerFixtureGateway(clock);
   let details = 0; let chosen: Place | undefined;
@@ -150,6 +176,48 @@ test('Plaza search chooses the reviewed identity and sends its exact coordinate 
     assert.deepEqual(map.destination.coordinate, plaza.coordinate);
     assert.deepEqual(map.quote.route.geometry.coordinates.at(-1), plaza.coordinate);
   } finally { await h.act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+});
+
+test('normal search and popular local suggestions select and quote verified destinations through the live adapter', async () => {
+  for (const local of approvedLocalPlaces) for (const entry of ['search', 'popular']) {
+    const origin = { id: 'gps-origin', name: 'Tu ubicación', address: 'Atlacomulco', coordinate: [-99.875, 19.8] as const };
+    let quoted: Place | undefined; const paths: string[] = [];
+    const client = createGeospatialClient({ async request(input) {
+      paths.push(input.path);
+      if (input.path.startsWith('/v1/geospatial/discovery')) return input.decode({ popular: [{ id: local.id,
+        canonicalId: local.id, name: local.name, address: local.address, provenance: 'vima-local', regionId: local.regionId }], featured: [] });
+      if (input.path.endsWith('/sessions')) return input.decode({ sessionId: 'search-local' });
+      if (input.method === 'DELETE') return input.decode({});
+      if (input.path.endsWith('/autocomplete')) return input.decode({ suggestions: [] });
+      assert.equal(input.path, '/v1/passenger/quotes');
+      const draft = input.body as { origin: Place; destination: Place; stops: [] }; quoted = draft.destination;
+      const now = Date.now();
+      return input.decode({ status: 'unpriced', reason: 'pricing_not_configured', routePreview: {
+        ...draft, id: `local-quote-${entry}`, createdAt: now, expiresAt: now + 300000,
+        route: { geometry: { type: 'Feature', properties: {}, geometry: { type: 'LineString',
+          coordinates: [origin.coordinate, local.coordinate] } }, bounds: { southwest: [-100, 19], northeast: [-99, 20] },
+        distanceMeters: 1200, durationSeconds: 180 },
+      } });
+    } }, 500);
+    const gateway = createPassengerLiveGateway(client, async () => origin);
+    const h = createHarness(); const tree = await h.render(gateway);
+    try {
+      await settle(h);
+      await h.act(async () => press(tree, '¿A dónde vamos?')); await settle(h);
+      assert.ok(!text(tree).includes('Vima Local'));
+      if (entry === 'search') {
+        await h.act(async () => nativeNode(tree, 'TextInput').props.onChangeText(local.name)); await settle(h);
+      }
+      await h.act(async () => press(tree, `${local.name}, ${local.address}`)); await settle(h);
+      assert.equal(quoted?.id, local.id, `${entry}: ${local.id}`);
+      assert.deepEqual(quoted?.coordinate, local.coordinate);
+      const map = nativeNode(tree, 'PassengerMapContent').props;
+      assert.equal(map.destination.id, local.id);
+      assert.deepEqual(map.quote.route.geometry.coordinates.at(-1), local.coordinate);
+      assert.ok(!paths.some(path => path.endsWith('/resolve')), 'no provider Details for a verified local ID');
+      assert.equal(h.mounted.map, 1);
+    } finally { await h.act(async () => tree.unmount()); h.client.clear(); gateway.closePlaces?.(); }
+  }
 });
 
 test('a new destination hides the previous route while pending; an absent route fails closed and recovers', async () => {

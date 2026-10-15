@@ -97,6 +97,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const trip = useQuery({ ...tripQueryOptions(gateway, tripId ?? '', identity.context()), enabled: !!tripId && connection === 'online',
     select: passengerTrip, retry: false });
   const draftStops = trip.data?.phase === 'expired' ? trip.data.quote.stops : stops;
+  const drafting = confirming || editing || trip.data?.phase === 'cancelled' || trip.data?.phase === 'expired';
   const quote = useQuery({ queryKey: ['passenger', gateway.scope, 'quote', origin, destination, draftStops, draftRevision],
     queryFn: async ({ signal }) => {
       const draft = { origin: origin!, destination: destination!, stops: draftStops };
@@ -108,11 +109,11 @@ export function usePassengerFlow(gateway: PassengerGateway) {
         JSON.stringify(draft.stops.map(place => [place.id, place.coordinate]))) throw new GeospatialError('route_unavailable');
       return incoming;
     },
-    enabled: confirming && validDraft(origin, destination) && connection === 'online', retry: false,
+    enabled: drafting && validDraft(origin, destination) && connection === 'online', retry: false,
     staleTime: Infinity, refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false });
   const quoteExpiry = quote.data?.pricing ? (quote.data.pricing.status === 'priced' ? quote.data.pricing.quote : quote.data.pricing.routePreview).expiresAt : undefined;
   useEffect(() => {
-    if (!confirming || !quoteExpiry) return;
+    if (!drafting || !quoteExpiry) return;
     let timer: ReturnType<typeof setTimeout>;
     const expire = () => {
       const remaining = quoteExpiry - Date.now();
@@ -122,7 +123,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     };
     timer = setTimeout(expire, Math.max(0, Math.min(2_147_483_647, quoteExpiry - Date.now())));
     return () => clearTimeout(timer);
-  }, [confirming, quoteExpiry, client, gateway.scope]);
+  }, [drafting, quoteExpiry, client, gateway.scope]);
   useEffect(() => {
     const fence = identity.capture();
     if (connection === 'online' && fence.expectedTripId)

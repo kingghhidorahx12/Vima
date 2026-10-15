@@ -1,5 +1,38 @@
 # Estado real del proyecto
 
+## QA 56953: restauración, borrador y scroll — preparación OTA 2026-10-15
+
+- Base real 3afef0d, logs QA intactos. Video 56953.mp4 inspeccionado. Tras las dos
+  rondas locales se autoriza commit/push y OTA Android sólo product-access-preview,
+  environment production, runtime 0.0.2. Sin Gateway, APK ni cambios nativos.
+- Restauración: demostrado timeout de HEAD frente a éxito con iguales latencias
+  por fase; se retira presupuesto UI duplicado y se inicia deadline HTTP después
+  de obtener credencial. Límites storage/refresh/red intactos, cancelación y fences
+  de logout preservados. Sin RootProviders ni backend nuevo.
+- Borrador tras cancelar/expirar/editar cotiza aunque confirming=false; cubre
+  snapshots sin metadata opcional que cambian queryKey. Sin cambios de renderer,
+  route-fit, cámara, métricas/tarifas ni routing fast.
+- Scroll Home: superficie nativa táctil y acotada, nested scrolling, pan de header
+  desactivado sólo en Home compacto; wrappers transparentes y geometría intactos.
+- Vima Local visible oculta por decisión aprobada; catálogo/Plaza/normalización
+  intactos. Resolución local corregida: sólo ID exacto y verified del catálogo,
+  independiente de elecciones TomTom, con cancelación/cierre de búsqueda externa.
+  Los resultados locales permanecen en búsqueda normal; Populares también puede
+  resolverlos sin cambiar su presentación. IDs/guardados y validación externa intactos.
+- Evidencia y checklist: [PASSENGER_QA_56953.md](PASSENGER_QA_56953.md).
+  QA físico de estas correcciones PENDIENTE.
+- Validación final con resolución local: suite 415/415 y focales nuevos 3/3;
+  comparación timeout HEAD/actual previa 2/2. TypeScript, lint, worklets, splash,
+  fixture isolation y diff-check PASS.
+  Validaciones repetidas para publicación: 415/415, TypeScript, lint, worklets,
+  splash, fixture isolation y diff-check PASS.
+  Exportación limpia EAS production: Hermes Android/iOS e aislamiento release PASS.
+  La constante exacta de productAuthClient carga el HTTPS productivo, sin .invalid.
+  SHA-256 Android: Bz5y1M0g4EBIgm-wHt7LSg2eVNN7tXLCmkKIrSoekaA.
+  La publicación autorizada sube ese bundle comprobado sin volver a compilarlo.
+  Sin cambios en QA/otros canales, tarifas, routing fast ni capacidades Driver.
+  No hay validación física nueva.
+
 ## Preparación de publicación geoespacial — 2026-10-15
 
 - Publicación coordinada autorizada: Gateway product-preview con catálogo/ranking

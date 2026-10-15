@@ -79,7 +79,9 @@ test('Passenger detached panels use content-only structural hit testing without 
     assert.equal(host(tree, 'SheetBoundary').props.hitTestPolicy, 'content-only');
     assert.equal(id(tree, 'passenger-phase-presence').props.pointerEvents, 'box-none');
     assert.equal(id(tree, 'passenger-sheet-viewport').props.pointerEvents, 'box-none');
-    assert.equal(host(tree, 'ScrollView').props.pointerEvents, 'box-none');
+    assert.equal(host(tree, 'ScrollView').props.pointerEvents, undefined);
+    assert.equal(host(tree, 'ScrollView').props.nestedScrollEnabled, true);
+    assert.equal(style(host(tree, 'ScrollView')).flex, 1);
     assert.equal(id(tree, 'passenger-sheet-content').props.pointerEvents, undefined);
     assert.equal(id(tree, 'passenger-home-search').props.onPress instanceof Function, true);
     const clipped = tree.root.findAll(n => typeof n.type === 'string' && style(n).overflow === 'hidden');
@@ -90,6 +92,38 @@ test('Passenger detached panels use content-only structural hit testing without 
     assert.equal(id(tree, 'passenger-sheet-viewport').props.pointerEvents, undefined);
     assert.equal(host(tree, 'ScrollView').props.pointerEvents, undefined);
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
+});
+
+test('compact Home gives its bounded native scroll the touch surface, keeping map gaps and navigation independent', async () => {
+  for (const themeName of ['light', 'dark']) for (const count of [0, 1, 3, 8]) {
+    const fixture = createPassengerFixtureGateway(clock);
+    const h = createHarness({}, { themeName, realRideSheet: true });
+    const tree: ReactTestRenderer = await h.render({ ...fixture.gateway,
+      recentPlaces: async () => Array.from({ length: count }, (_, i) => ({ ...fixturePlaces[1]!, id: `recent-${i}`, name: `Reciente ${i}` })),
+    });
+    try {
+      await settle();
+      await mapLayout(tree, count === 8 ? 520 : 700);
+      await act(async () => {
+        id(tree, 'passenger-sheet-header').props.onLayout({ nativeEvent: { layout: { height: 100 } } });
+        id(tree, 'passenger-sheet-content').props.onLayout({ nativeEvent: { layout: { height: 540 } } });
+      });
+      const sheet = tree.root.findByType(h.load('src/design/components/VimaRideSheet.tsx').VimaRideSheet);
+      assert.equal(sheet.props.interaction.targetOffset, sheet.props.interaction.height * .50);
+      const scroll = host(tree, 'ScrollView');
+      assert.equal(scroll.props.pointerEvents, undefined);
+      assert.equal(style(scroll).flex, 1); assert.equal(scroll.props.nestedScrollEnabled, true);
+      assert.equal(h.mounted.sheetPanEnabled, false);
+      assert.equal(id(tree, 'passenger-phase-presence').props.pointerEvents, 'box-none');
+      assert.equal(id(tree, 'vima-ride-sheet-surface').props.pointerEvents, 'box-none');
+      assert.equal(hasNav(tree), true);
+      assert.equal(tree.root.findAll(n => typeof n.type === 'string' && n.props.accessibilityLabel?.startsWith('Reciente ')).length, Math.min(3, count));
+      await act(async () => scroll.props.onScroll({ nativeEvent: { contentOffset: { y: 160 } } }));
+      await press(tree, '¿A dónde vamos?');
+      assert.equal(h.mounted.sheetPanEnabled, true);
+      assert.equal(h.mounted.map, 1); assert.equal(h.mounted.unmountedMap, 0);
+    } finally { await act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+  }
 });
 
 test('Motion 1.2 press/release and keyed entries use approved values without spatial Reduced Motion', async () => {
@@ -291,7 +325,7 @@ test('Search results and Home rich recents use continuous list rows with fixed g
   } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
-test('Search suggestions and saved, recent, popular and local collections keep one list presentation', async () => {
+test('Search keeps saved/recent/popular lists and hides only the approved Vima Local presentation', async () => {
   const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
   const favorite = { ...fixturePlaces[1]!, id: 'favorite', name: 'Favorito de prueba' };
   const recent = { ...fixturePlaces[2]!, id: 'recent', name: 'Reciente de prueba' };
@@ -304,7 +338,9 @@ test('Search suggestions and saved, recent, popular and local collections keep o
   try {
     await settle(); await press(tree, '¿A dónde vamos?'); await settle();
     assertDetachedSurface(tree);
-    for (const place of [favorite, recent, popular, featured]) {
+    assert.equal(tree.root.findAll(n => typeof n.type === 'string' && n.props.children === 'Vima Local').length, 0);
+    assert.equal(tree.root.findAll(n => typeof n.type === 'string' && n.props.accessibilityLabel === `${featured.name}, ${featured.address}`).length, 0);
+    for (const place of [favorite, recent, popular]) {
       const row = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === `${place.name}, ${place.address}`);
       assert.ok(row, place.name);
       assert.equal(restingStyle(row).boxShadow, undefined);
@@ -1262,6 +1298,12 @@ test('fit candidate includes every LineString/MultiLineString point and rejects 
 test('cancel, new search and same destination quote issue a new review fit and keep the confirmation padding', async () => {
   const fixture = createPassengerFixtureGateway(clock); let revision = 0;
   const h = createHarness(); const tree: ReactTestRenderer = await h.render({ ...fixture.gateway,
+    recentPlaces: async () => fixturePlaces.slice(1).map(place => ({ ...place, category: 'park' })),
+    execute: async (command: Parameters<typeof fixture.gateway.execute>[0]) => {
+      const result = await fixture.gateway.execute(command) as Awaited<ReturnType<typeof fixture.gateway.fetch>>;
+      const plain = (place: typeof result.quote.origin) => ({ id: place.id, name: place.name, address: place.address, coordinate: place.coordinate });
+      return { ...result, quote: { ...result.quote, origin: plain(result.quote.origin), destination: plain(result.quote.destination) } };
+    },
     quote: async (draft: Parameters<typeof fixture.gateway.quote>[0]) => ({ ...fixtureQuote(draft), id: `route-${++revision}` }),
   });
   const fit = () => host(tree, 'PassengerMapContent').props.fitRoute;
@@ -1273,15 +1315,21 @@ test('cancel, new search and same destination quote issue a new review fit and k
     const first = fit(); assert.ok(first);
     await press(tree, 'Confirmar ubicaciones'); await measure(tree, 340);
     assert.equal(fit().confirmationBottomPadding, 28);
-    await press(tree, 'Solicitar viaje'); await press(tree, 'Cancelar'); await press(tree, 'Volver');
+    await press(tree, 'Solicitar viaje'); await press(tree, 'Cancelar');
+    await measure(tree);
+    assert.equal(revision, 2); assert.ok(fit().sequence > first.sequence);
+    const cancelledFit = fit(); assert.equal(cancelledFit.confirmationBottomPadding, 0);
+    await act(async () => host(tree, 'NativeMapBoundary').props.onTouchStart()); await measure(tree, 252);
+    assert.equal(fit().sequence, cancelledFit.sequence); // Manual inspection never triggers another fit.
+    await press(tree, 'Volver');
     await press(tree, '¿A dónde vamos?');
     await act(async () => host(tree, 'TextInput').props.onChangeText('Parque')); await settle();
     await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
     await mapLayout(tree); await measure(tree);
-    assert.equal(revision, 2);
-    assert.ok(fit().sequence > first.sequence);
+    assert.equal(revision, 3);
+    assert.ok(fit().sequence > cancelledFit.sequence);
     assert.equal(fit().confirmationBottomPadding, 0);
-    assert.equal(host(tree, 'PassengerMapContent').props.quote.id, 'route-2');
+    assert.equal(host(tree, 'PassengerMapContent').props.quote.id, 'route-3');
     await press(tree, 'Confirmar ubicaciones'); await measure(tree, 340);
     assert.equal(fit().confirmationBottomPadding, 28);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);

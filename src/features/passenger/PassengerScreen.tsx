@@ -407,7 +407,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       onPress={flow.retry} accessibilityRole="button" accessibilityLabel={visibleError}>
       <StatusNotice retry>{visibleError}</StatusNotice>
     </Pressable></Animated.View></ElementEntrance> : null}
-    <ScrollView ref={scroll} pointerEvents={detachedPanel ? 'box-none' : undefined}
+    <ScrollView ref={scroll} style={styles.fill} nestedScrollEnabled
       keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets
       onTouchStart={() => { dismissKeyboard(); setIncident(null); }} onScrollBeginDrag={dismissKeyboard}
       onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; setPulseVisible(scrollOffset.current < pulseHeight.current); }}>
@@ -475,8 +475,6 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             {flow.recents.map(place => <PlaceRow key={place.id} place={place} presentation="list" resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
           {flow.popular.length ? <><VimaText variant="bodyMedium">Populares en tu zona</VimaText>
             {flow.popular.map(place => <PlaceRow key={place.id} place={place} presentation="list" resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
-          {flow.featured.length ? <><VimaText variant="bodyMedium">Vima Local</VimaText>
-            {flow.featured.map(place => <PlaceRow key={place.id} place={place} presentation="list" resolveMedia={gateway.resolvePlaceMedia} onPress={() => choosePlace(place)} />)}</> : null}
         </>}
       </> : reviewing ? <>
         {addressFields}
@@ -635,7 +633,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           homeBottomOcclusion={homeFloatingSearch ? bottomFootprint : undefined}
           layersMenuOpen={layersOpen}
           sheetHeight={interaction ? sheetFrameHeight - interaction.targetOffset : sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[snap]! / 100} />}
-        sheet={{ interaction, header, waitForGeometry: true, hitTestPolicy: detachedPanel ? 'content-only' : 'sheet',
+        sheet={{ interaction, header, headerPanEnabled: !homeFloatingSearch, waitForGeometry: true, hitTestPolicy: detachedPanel ? 'content-only' : 'sheet',
           style: [styles.sheet, detachedPanel && styles.detachedSheet,
           !detachedPanel && roundedPassengerSheet && styles.roundedPassengerSheet], onVisibleHeightChange: reportVisibleSheetHeight }}
         renderPhase={() => content} />
