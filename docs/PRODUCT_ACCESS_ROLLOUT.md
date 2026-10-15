@@ -1,5 +1,14 @@
 # Acceso Passenger de producto y bloqueos de integración — 2026-10-14
 
+**Estado posterior de despliegue:** checkpoint `d7356734` publicado; Gateway
+product-preview HTTPS operativo, `/ready` 200 y persistencia comprobada tras
+reinicio. Verify Service de seis dígitos y OTP real verificados; teléfono nuevo
+retorna `registration_required`. APK interno product-preview generado (FINISHED)
+(`930e649e-6cfc-45bb-9488-af26ed35ed13`), con descarga en PROJECT_STATE.
+QA no modificado, sin OTA ni Driver
+productivo. Ver el estado actualizado en [PROJECT_STATE.md](PROJECT_STATE.md).
+La descripción de la ronda local a continuación se conserva como historial.
+
 Implementación local sobre `codex/product-phone-auth-p1-1`, HEAD
 `2c9018f4b8b34453bed2296f25cb4a8cc540f757`. El SHA no incluye todavía auth P1.1,
 mapas operativos ni acceso/cuenta P1. Se conservan esos pendientes y ambos logs QA.

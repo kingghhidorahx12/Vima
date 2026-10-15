@@ -89,7 +89,7 @@ function AuthenticatedPassenger({ session }: { session: ProductPassengerSession 
       mobilePersonalPlaces, mobileInstallationId, process.env.EXPO_PUBLIC_VIMA_API_BASE_URL,
       { matching: session.matching, accountId: session.identity.accountId, available: session.identity.matchingAvailable });
   });
-  return <PassengerScreen gateway={gateway} mapConfig={passengerMapConfig} boundaries={{ schedule() {}, call() {}, safety() {},
+  return <PassengerScreen gateway={gateway} mapConfig={passengerMapConfig} boundaries={{ call() {}, safety() {},
     account: () => router.push('/account' as Href),
     renderRestoration: ({ ready, error, retry }) => ready ? null : <View testID="product-trip-restoration" style={styles.restoration}>
       <RestorationSurface stage="trip" error={error ? 'No pudimos recuperar tu viaje. Revisa internet y reintenta sin cerrar tu sesión.' : ''} onRetry={retry} />

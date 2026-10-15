@@ -25,7 +25,7 @@ export function AccessFrame({ children, onBack, title }: PropsWithChildren<{ onB
             <VimaGlyph name="back" color={theme.roles.control} /></Pressable></Animated.View> : <View style={styles.back} />}
           <VimaThemeToggle touchSize={44} />
         </View>
-        {title ? <VimaText variant="h2">{title}</VimaText> : <View style={[styles.brand, theme.name === 'dark' && styles.darkBrand]}>
+        {title ? <VimaText variant="h2">{title}</VimaText> : <View style={styles.brand}>
           <Image source={require('../../../assets/brand/vima_header_lockup_final.png')} resizeMode="contain" style={styles.logo} accessibilityLabel="Vima" />
         </View>}
         {children}
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 }, scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24, gap: 20,
     maxWidth: 480, width: '100%', alignSelf: 'center' }, top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  brand: { alignSelf: 'center', padding: 8, borderRadius: t.radii.cardPx }, darkBrand: { backgroundColor: t.colors.white },
+  brand: { alignSelf: 'center', padding: 8, borderRadius: t.radii.cardPx },
   logo: { width: 140, height: 44 }, card: { padding: 16, borderWidth: 1, borderRadius: t.radii.cardPx, gap: 16 },
   notice: { padding: 12, borderRadius: t.radii.fieldPx, flexDirection: 'row', gap: 8, alignItems: 'center' },
   restoring: { flex: 1, justifyContent: 'center', gap: 20 },

@@ -249,13 +249,15 @@ test('ETA ranking offers at most two; exhausted group advances and a Driver is o
   } finally { f.close(); }
 });
 
-test('no candidates waits until original deadline; 60/120 seconds do not mutate server revision', async () => {
-  const f = setup(); try {
+test('empty driver directory waits until original deadline; 60/120 seconds do not mutate server revision', async () => {
+  const f = setup(0); try {
     await f.ready(); const r = await f.c.create(p, 'quote', 'no-candidates');
     f.clock.advance(60_000); assert.equal((await f.c.fetch(p, r.id)).revision, r.revision);
     f.clock.advance(60_000); assert.equal((await f.c.fetch(p, r.id)).revision, r.revision);
     f.clock.advance(780_000); await flush();
     const expired = await f.c.fetch(p, r.id); assert.equal(expired.requestState, 'NO_DRIVER_FOUND'); assert.equal(expired.phase, 'expired');
+    assert.equal(expired.assignment, undefined);
+    assert.equal(await f.c.activeRequest(p), null);
     f.clock.advance(10_000); assert.equal((await f.c.fetch(p, r.id)).revision, expired.revision);
   } finally { f.close(); }
 });

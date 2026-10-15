@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import React from 'react';
-import type { ReactTestRenderer } from 'react-test-renderer';
+import type { ReactTestRenderer, ReactTestInstance } from 'react-test-renderer';
 import { ProductAuthClientError } from '../src/services/auth/productSession.ts';
 import { validMexicanPhone, mexicanPhoneDigits, otpDigits, countdown } from '../src/features/auth/accessModel.ts';
 const require = createRequire(import.meta.url);
@@ -35,6 +36,25 @@ function harness(auth: Record<string, unknown>, dark = false) {
 const button = (tree: ReactTestRenderer, label: string) => tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label)!;
 const input = (tree: ReactTestRenderer, label: string) => tree.root.findByProps({ accessibilityLabel: label });
 
+test('access logo uses transparent master and an undecorated frame in both themes without resizing', async () => {
+  const surface = readFileSync(new URL('../src/features/auth/AccessSurface.tsx', import.meta.url), 'utf8');
+  assert.match(surface, /require\('\.\.\/\.\.\/\.\.\/assets\/brand\/vima_header_lockup_final\.png'\)/);
+  for (const dark of [false, true]) {
+    const h = harness({ current: async () => null }, dark);
+    const tree = await h.renderAuth();
+    try {
+      const logo = tree.root.findByProps({ accessibilityLabel: 'Vima' });
+      assert.ok(logo.props.source);
+      assert.deepEqual(logo.props.style, { width: 140, height: 44 });
+      assert.equal(logo.props.resizeMode, 'contain');
+      assert.equal(logo.parent!.props.style.alignSelf, 'center');
+      assert.equal(logo.parent!.props.style.padding, 8);
+      assert.equal(logo.parent!.props.style.backgroundColor, undefined);
+      assert.equal(logo.props.style.backgroundColor, undefined);
+    } finally { await h.act(async () => tree.unmount()); }
+  }
+});
+
 test('Mexican phone, six-digit OTP and deadline countdown are bounded and do not modify layout', () => {
   assert.equal(validMexicanPhone('5512345678'), true); assert.equal(validMexicanPhone('0551234567'), false);
   assert.equal(validMexicanPhone('+525512345678'), false);
@@ -42,6 +62,32 @@ test('Mexican phone, six-digit OTP and deadline countdown are bounded and do not
   assert.equal(validMexicanPhone(mexicanPhoneDigits('+1 555 123 4567')), false);
   assert.equal(otpDigits('12 34-56xx7'), '123456');
   assert.equal(countdown(60000, 1000), 59); assert.equal(countdown(60000, 70000), 0);
+});
+
+test('OTP has one native input hidden as a whole, preserves paste, autofill and deletion in both themes', async () => {
+  for (const dark of [false, true]) {
+    const h = harness({ current: async () => null, startOtp: async () => ({ challengeId: 'otp', expiresIn: 600 }) }, dark);
+    const tree = await h.renderAuth();
+    try {
+      await h.act(async () => input(tree, 'Teléfono mexicano').props.onChangeText('5512345678'));
+      await h.act(async () => button(tree, 'Continuar').props.onPress());
+      const field = () => input(tree, 'Código de verificación de seis dígitos');
+      assert.equal(tree.root.findAllByType('TextInput' as never).length, 1);
+      assert.equal(field().props.style.opacity, 0);
+      assert.equal(field().props.autoComplete, 'one-time-code');
+      assert.equal(field().props.textContentType, 'oneTimeCode');
+      assert.equal(field().props.importantForAutofill, 'yes');
+      assert.equal(field().props.autoFocus, true);
+      for (const [nativeValue, expected] of [['1', '1'], ['12', '12'], ['123', '123'], ['12', '12'], ['', ''], ['123 456', '123456'], ['654321', '654321']]) {
+        await h.act(async () => field().props.onChangeText(nativeValue));
+        assert.equal(field().props.value, expected);
+        const cells = tree.root.findByProps({ testID: 'product-otp-field' }).findAllByType('Text' as never);
+        assert.equal(cells.map((cell: ReactTestInstance) => cell.props.children).join(''), expected);
+      }
+      assert.equal(button(tree, 'Verificar código').props.disabled, false);
+      assert.equal(field().props.editable, true);
+    } finally { await h.act(async () => tree.unmount()); }
+  }
 });
 
 test('new phone uses existing endpoints, six cells, guarded resend and mandatory name in both themes', async t => {
@@ -58,7 +104,7 @@ test('new phone uses existing endpoints, six cells, guarded resend and mandatory
       await h.act(async () => input(tree, 'Teléfono mexicano').props.onChangeText('5512345678'));
       await h.act(async () => button(tree, 'Continuar').props.onPress());
       assert.deepEqual(events[0], ['start', '+525512345678']);
-      assert.equal(input(tree, 'Código de verificación de seis dígitos').props.maxLength, 6);
+      assert.equal(input(tree, 'Código de verificación de seis dígitos').props.maxLength, 32);
       assert.equal(tree.root.findByProps({ testID: 'product-otp-field' }).findAllByType('Text' as never).length, 6);
       assert.equal(button(tree, 'Reenviar código').props.disabled, true);
       await h.act(async () => t.mock.timers.tick(60000));

@@ -24,6 +24,7 @@ import { PassengerBottomNavigation, bottomNavigationHeight } from './PassengerBo
 import { usePassengerRouteFit } from './usePassengerRouteFit';
 import { isMatching, validDraft, type Assignment, type OriginStatus, type PassengerGateway, type Place, type RideQuote } from './model';
 import { usePassengerFlow } from './usePassengerFlow';
+import { matchingPolicy } from './matchingPolicy';
 import { passengerErrorMessage } from './passengerErrors';
 import type { PlaceSuggestion } from '../../services/geospatial/contracts';
 import { normalizeCoordinate, type Coordinate } from '../../map/models';
@@ -48,7 +49,7 @@ export interface PassengerBoundaries {
   readonly account?: () => void;
   readonly communicationAvailable?: boolean;
   readonly renderRestoration?: (state: { ready: boolean; error?: Error; retry: () => void }) => ReactNode;
-  readonly schedule: (quote: RideQuote | undefined) => void;
+  readonly schedule?: (quote: RideQuote | undefined) => void;
   readonly call: (assignment: Assignment) => void;
   readonly safety: (assignment: Assignment) => void;
   readonly vehicleImage?: ImageSourcePropType;
@@ -316,6 +317,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   </View>;
   const edit = async () => { dismissKeyboard(); if (await flow.edit()) setReviewedDraft(undefined); };
   const schedule = async () => {
+    if (!boundaries.schedule) return;
     dismissKeyboard();
     const draft = await flow.schedule();
     if (draft) { setReviewedDraft(undefined); boundaries.schedule(draft); }
@@ -583,14 +585,14 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           <VimaText variant="h3" style={styles.matchingTitle}>{flow.phase === 'prolonged'
             ? 'Aún buscamos un conductor' : 'Buscando un conductor\ncerca de ti...'}</VimaText>
           <VimaText variant="bodySmall" style={[styles.center, { color: theme.roles.textSecondary }]}>{flow.phase === 'prolonged'
-            ? 'Puede tomar unos minutos más.\nPuedes editar, programar o cancelar.' : flow.phase === 'expanding'
-              ? 'Puede tomar unos minutos más.' : 'Te conectaremos con el conductor más cercano disponible.'}</VimaText>
+            ? `La búsqueda puede durar hasta ${Math.ceil(matchingPolicy.limitMs / 60_000)} minutos.\nPuedes editar o cancelar.` : flow.phase === 'expanding'
+              ? 'Aún no hay un conductor asignado. Puedes cancelar en cualquier momento.' : 'Buscamos conductores disponibles. Puedes cancelar en cualquier momento.'}</VimaText>
         </ElementEntrance>
         {flow.phase === 'prolonged' ? <>
           <MatchingProgress />
           <View style={styles.matchingActions}>
           <VimaButton style={styles.fill} secondary compact label="Editar" onPress={() => { void edit(); }} disabled={blocked} />
-          <VimaButton style={styles.fill} secondary compact label="Programar" onPress={() => { void schedule(); }} disabled={blocked} />
+          {boundaries.schedule ? <VimaButton style={styles.fill} secondary compact label="Programar" onPress={() => { void schedule(); }} disabled={blocked} /> : null}
           <VimaButton style={styles.fill} secondary compact danger label="Cancelar" onPress={() => { void flow.act('cancel'); }} disabled={blocked} />
           </View>
         </> : <View style={styles.matchingActions}>

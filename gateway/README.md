@@ -1,6 +1,12 @@
 # Gateway geoespacial y autenticación de producto Vima
 
-## Autenticación productiva P1.1 (implementación local, aún no habilitada en Railway)
+## Autenticación productiva P1.1
+
+Product-preview independiente habilitado el 2026-10-14 sobre `d7356734`:
+`https://vima-gateway-product-production.up.railway.app`, `/ready` 200, Node 22,
+una réplica y volumen `/data`. Tarifas `/data/config/pricing.json`, runtime
+`/data/product`. OTP real Twilio de seis dígitos verificado; QA físico pendiente.
+El servicio QA no se modificó. Detalles actuales en [PROJECT_STATE.md](../docs/PROJECT_STATE.md).
 
 La configuración productiva es opt-in: sólo cuando `VIMA_PRODUCT_AUTH_PROVIDER=twilio`
 se activan los endpoints OTP de producto y se deja de cargar `VIMA_AUTH_CONFIG_PATH`.
@@ -39,9 +45,9 @@ Las nuevas cuentas sólo tienen capacidad Passenger. No se ha creado aprobación
 Driver ni perfil vehicular. Para más detalle, ver [decisiones](../docs/DECISIONS.md)
 y [estado](../docs/PROJECT_STATE.md).
 
-El adapter está probado con OTP simulado. No se han configurado credenciales,
-enviado SMS real, desplegado Railway ni publicado OTA; la autenticación productiva
-no debe anunciarse como live hasta completar esas comprobaciones.
+El adapter conserva tests con OTP simulado y ahora cuenta con prueba SMS real en
+product-preview. No se publicó OTA ni se habilitó capacidad Driver productiva.
+Registro completo y sesión desde el APK siguen pendientes de QA físico.
 
 Twilio API: [Verify Verification](https://www.twilio.com/docs/verify/api/verification)
 y [Verification Check](https://www.twilio.com/docs/verify/api/verification-check).

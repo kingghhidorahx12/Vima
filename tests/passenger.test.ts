@@ -307,7 +307,7 @@ test('alternatives appear at 120 seconds, search continues, and shell/map never 
       assert.ok(!text(tree).includes('Programar'));
       assert.ok(!text(tree).includes('Seguir buscando'));
     }
-    assert.ok(text(tree).includes('Puede tomar unos minutos más.'));
+    assert.ok(text(tree).includes('Aún no hay un conductor asignado.'));
     await harness.act(async () => time.advance(1)); await settle(harness);
     for (const label of ['Aún buscamos un conductor', 'Editar', 'Programar', 'Cancelar']) assert.ok(text(tree).includes(label));
     assert.ok(!text(tree).includes('Seguir buscando'));
@@ -325,6 +325,21 @@ test('alternatives appear at 120 seconds, search continues, and shell/map never 
   } finally {
     await harness.act(async () => tree.unmount()); harness.client.clear(); fixture.controls.dispose();
   }
+});
+
+test('matching without a scheduling boundary keeps cancellation available and never promises a booking', async () => {
+  const time = manualClock(); const fixture = createPassengerFixtureGateway(time.clock);
+  const harness = createHarness({ schedule: undefined }); const tree = await harness.render(fixture.gateway);
+  try {
+    await reachMatching(harness, tree);
+    assert.ok(text(tree).includes('Buscamos conductores disponibles.'));
+    await harness.act(async () => time.advance(120_000)); await settle(harness);
+    assert.ok(!text(tree).includes('Programar'));
+    assert.ok(text(tree).includes('15 minutos'));
+    await harness.act(async () => press(tree, 'Cancelar')); await settle(harness);
+    assert.ok(text(tree).includes('Viaje cancelado'));
+    assert.equal(harness.mounted.map, 1); assert.equal(harness.mounted.sheet, 1);
+  } finally { await harness.act(async () => tree.unmount()); harness.client.clear(); fixture.controls.dispose(); }
 });
 
 test('editing waits for authoritative cancellation, preserves draft and submits a fresh request', async () => {
@@ -509,7 +524,7 @@ test('rendered passenger flow preserves the actual shell/map instance across mat
     await settle(harness);
     assert.ok(text(tree).includes('Buscando un conductor'));
     assertSingleSheetSnap();
-    assert.ok(text(tree).includes('Te conectaremos con el conductor más cercano disponible.'));
+    assert.ok(text(tree).includes('Buscamos conductores disponibles.'));
     await harness.act(async () => fixture.controls.advance('prolonged'));
     await settle(harness);
     assert.ok(!text(tree).includes('Seguir buscando'));

@@ -1,5 +1,77 @@
 # Estado real del proyecto
 
+## Preparación OTA Android para QA físico — 2026-10-14
+
+- Publicación autorizada exclusivamente al canal/rama EAS `product-access-preview`,
+  environment `production`, runtime `0.0.2` compatible con APK
+  `930e649e-6cfc-45bb-9488-af26ed35ed13`. Sin diferencias nativas/dependencias
+  ni contratos servidor respecto de `d7356734`; sólo JS, pruebas y documentación.
+- No cambiar canales `qa`/`production`, Railway ni APK. El commit de esta ronda
+  entrega las correcciones para comprobarlas físicamente, no las declara verificadas.
+- Pendiente físico: contraste/logo Dark, OTP/pegado/autofill, primer Home,
+  cancelación, favoritos persistentes y offline/reconexión. El límite de búsqueda
+  y la ausencia de Driver productivo siguen vigentes.
+
+## Primer QA product-preview — correcciones locales 2026-10-14
+
+- OTP mantiene una sola entrada nativa, oculta por opacity para evitar spans
+  Android sobre las casillas; pegado normalizado a seis dígitos y autofill vigentes.
+- Formulario de acceso/OTP alineado arriba, sin centrado flexible excesivo;
+  se preserva el arreglo local del logo transparente y el layout de cuenta.
+- Copy de matching sin garantía de asignación, límite derivado de la política
+  real y sin Programar vacío en producto. Sin cambios de matching/backend.
+- Favoritos y Casa/Trabajo auditados: persistencia local SQLite real, intacta.
+  Home/mapa/bootstrap sin cambios especulativos; falta el video para ese tramo.
+- Detalle y QA pendiente en [PRODUCT_PREVIEW_FIRST_QA.md](PRODUCT_PREVIEW_FIRST_QA.md).
+  Cambios locales sin publicar; el APK desplegado continúa en `d7356734`.
+- Validación fresca: 396/396 pruebas, TypeScript, lint, worklets y diff-check PASS.
+
+## Logo de acceso sin tarjeta blanca — corrección local 2026-10-14
+
+- `AccessFrame` elimina exclusivamente el fondo blanco de `darkBrand`. El maestro
+  `vima_header_lockup_final.png` ya contiene alpha real; no se cambian asset,
+  medidas 140×44, padding 8, alineación ni lógica de acceso/cuenta.
+- No existe en el repo una variante maestra final con wordmark claro. Se conserva
+  el branding oficial sin recolorear ni generar otra versión; contraste del
+  wordmark oscuro y resultado Android light/dark pendientes de QA físico.
+- Sin commit, push, build, Railway ni OTA para esta corrección.
+
+## Product-preview desplegado — 2026-10-14
+
+- Checkpoint publicado y usado: `d7356734f27bf17ec34dce73d2345319dcbb9607`,
+  rama `codex/product-phone-auth-p1-1`. Las entradas anteriores que describen
+  estos bloques como locales/no desplegados son históricas.
+- Railway independiente `Vima-Product-Preview`: servicio `vima-gateway-product`,
+  HTTPS `https://vima-gateway-product-production.up.railway.app`, Node 22.23.3,
+  una réplica, modo `local`, proveedor `twilio`, `/ready` HTTP 200.
+- Volumen `/data`; auth/runtime `/data/product`; tarifas aprobadas externas
+  `/data/config/pricing.json`. Provisión atómica inicial sin copiar identidades
+  ni viajes QA. Comando final `node --experimental-strip-types gateway/main.ts`;
+  retirada la variable temporal de provisión. Nunca se sustituyó `/ready` por `/health`.
+- Tras redeploy, hashes de `auth-v1.json` y tarifas idénticos y `/ready` 200.
+  `/v1/auth/me` sin sesión devuelve 401. Se conservó el secreto estable en
+  la carpeta privada de credenciales y Railway, fuera de Git.
+- Verify Service real confirma `CodeLength=6`. SMS autorizado recibido y OTP
+  verificado mediante el Gateway: `registration_required`. No se creó un perfil
+  ficticio ni se habilitó Driver. Registro con nombre y sesión desde Android pendientes.
+- EAS production configurado con HTTPS productivo y mapas aprobados; estilo
+  HTTPS disponible (HTTP 200, versión 8, 55 capas). Perfil `product-preview`,
+  canal exclusivo `product-access-preview`, distribución interna APK, firma existente.
+  Build `930e649e-6cfc-45bb-9488-af26ed35ed13` FINISHED, SHA confirmado por EAS;
+  [APK interno](https://expo.dev/artifacts/eas/iNLW4Cq5ZmzUaovrM71R4oh0RztvBji5HaMx03ddNv4.apk).
+  No OTA, cambios al canal QA ni cambios de código.
+- `Vima-QA`, herramientas QA y ambos logs locales permanecen intactos.
+  QA físico del APK y viaje completo productivo siguen PENDIENTES; Driver de
+  producto requiere la aprobación/capacidad y perfil aún no implementados.
+- Verificación fresca: suite completa 393/393 (servidores loopback permitidos,
+  concurrencia 2), TypeScript, lint, worklets, splash, fixture isolation y
+  diff-check PASS. La ejecución inicial restringida se interrumpió y sustituyó
+  por esta ejecución completa; no se modificaron tests ni cobertura. Expo Doctor
+  20/21: nueve patches SDK 57 disponibles; dependencias intactas para preservar SHA.
+- Twilio Account Trial activo; no bloqueó el SMS ni su verificación autorizada.
+  Pendiente físico: instalar APK sin Metro/USB, registro con nombre o acceso de
+  cuenta existente, persistencia de sesión, logout/reapertura, temas, mapa y offline.
+
 ## Acceso productivo Passenger — bloqueos integrados corregidos 2026-10-14
 
 - Mismo checkout `codex/product-phone-auth-p1-1`, HEAD `2c9018f4`; auth P1.1,

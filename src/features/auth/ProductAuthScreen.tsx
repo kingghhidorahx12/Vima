@@ -120,7 +120,8 @@ export function ProductAuthScreen() {
               <VimaText variant="h3">{code[index] ?? ''}</VimaText></View>)}
           </View>
           <TextInput accessibilityLabel="Código de verificación de seis dígitos" value={code} onChangeText={value => setCode(otpDigits(value))}
-            autoFocus keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={6}
+            autoFocus keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={32}
+            autoCorrect={false} spellCheck={false} importantForAutofill="yes" underlineColorAndroid="transparent"
             caretHidden editable={!busy && !!remaining} style={styles.codeInput} selectionColor="transparent" onSubmitEditing={verifyCode} />
         </View>
         {!remaining ? <AccessNotice>El código venció. Solicita uno nuevo para continuar.</AccessNotice> : null}
@@ -143,14 +144,16 @@ export function ProductAuthScreen() {
     </ElementEntrance>
   </AccessFrame>;
 }
-const styles = StyleSheet.create({ content: { flexGrow: 1, justifyContent: 'center', gap: 16, paddingVertical: 24 },
-  heading: { gap: 8, marginBottom: 20 }, center: { textAlign: 'center' },
+const styles = StyleSheet.create({ content: { flexGrow: 1, justifyContent: 'flex-start', gap: 16, paddingTop: 8, paddingBottom: 24 },
+  heading: { gap: 8, marginBottom: 8 }, center: { textAlign: 'center' },
   phoneField: { minHeight: 56, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   separator: { height: 24, width: 1 }, phoneInput: { ...textStyle({ variant: 'body', weight: 400 }), flex: 1, minHeight: 56, paddingVertical: 0 },
   nameInput: { ...textStyle({ variant: 'body', weight: 400 }), minHeight: 56, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16 },
   textAction: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   codeField: { height: 56, position: 'relative' }, cells: { flexDirection: 'row', gap: 8, height: 56 },
   cell: { flex: 1, borderWidth: 1, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  codeInput: { ...StyleSheet.absoluteFill, color: 'transparent', backgroundColor: 'transparent', fontSize: 24 },
+  // Hide the entire native glyph/composition layer, including Android IME spans.
+  // It remains the sole full-size, accessible input; the six cells only display state.
+  codeInput: { ...StyleSheet.absoluteFill, opacity: 0, color: 'transparent', backgroundColor: 'transparent', fontSize: 24 },
   progress: { width: 96, height: 4, borderRadius: 2, alignSelf: 'center' }, progressComplete: { width: '50%', height: 4, borderRadius: 2 },
 });
