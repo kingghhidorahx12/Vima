@@ -3,13 +3,13 @@ import type { RouteFitIntent } from '../../map/Camera';
 import { normalizeCoordinate } from '../../map/models.ts';
 import type { Place, RideQuote } from './model';
 
-/** Empty space beyond complete pin artwork and authoritative geometry in confirm/matching. */
+/** Minimum edge clearance, shared with pin/control clearance rather than added again. */
 export const passengerRouteSafetyMargin = 28;
 
 export interface PassengerRouteFitIntent extends RouteFitIntent {
   /** Actual settled sheet viewport, captured with this intent (not a percentage estimate). */
   readonly sheetHeight: number;
-  /** Applies only after confirming locations; reviewing keeps its original fit. */
+  /** Confirmation's bottom minimum, shared with safety clearance in equivalent later fits. */
   readonly confirmationBottomPadding: number;
   readonly safetyMargin?: number;
   readonly viewportSize?: { width: number; height: number };
@@ -32,7 +32,7 @@ export function routeFitCandidate(quote: RideQuote | undefined, origin: Place | 
 }
 
 export function usePassengerRouteFit({ quote, origin, destination, reviewing, confirming, searchActive, ready,
-  measuredSheetHeight, confirmationRequest, matching = false, phase, viewport, userControlled = false, recenterRequest }: {
+  measuredSheetHeight, confirmationRequest, matching = false, viewport, userControlled = false, recenterRequest }: {
   quote?: RideQuote; origin: Place | null; destination: Place | null;
   reviewing: boolean; confirming: boolean; searchActive: boolean; ready: boolean;
   measuredSheetHeight?: number; confirmationRequest?: number;
@@ -42,25 +42,27 @@ export function usePassengerRouteFit({ quote, origin, destination, reviewing, co
   const candidate = useMemo(() => routeFitCandidate(quote, origin, destination), [quote, origin, destination]);
   const lastToken = useRef<string | undefined>(undefined);
   const serial = useRef(0);
-  const [issued, setIssued] = useState<{ key: string; intent: PassengerRouteFitIntent }>();
+  const [issued, setIssued] = useState<{ token: string; intent: PassengerRouteFitIntent }>();
   const key = candidate && !searchActive && (reviewing ? `review:${candidate.key}`
-    : confirming && confirmationRequest ? `${phase ?? 'confirm'}:${confirmationRequest}:${candidate.key}`
-    : matching ? `${phase ?? 'matching'}:${candidate.key}` : undefined);
+    : (confirming && confirmationRequest || matching) ? `route:${candidate.key}` : undefined);
   // Only settled, measured geometry authorizes another fit. Re-renders, animation
   // frames and GPS samples never create intents. Reviewing retains its existing fit.
   const geometry = !reviewing && viewport ? JSON.stringify([
     viewport.width, viewport.height, viewport.topOcclusion, measuredSheetHeight,
   ].map(value => Math.round(value ?? 0))) : '';
   const viewportWidth = viewport?.width; const viewportHeight = viewport?.height;
-  const token = key ? `${key}:${geometry}:recenter:${recenterRequest ?? 0}` : undefined;
+  // CONFIRM/REQUESTING/MATCHING share a fit if their real occupied viewport is
+  // unchanged. A state label is not a new camera command. Their 28 dp bottom
+  // requirements are the same minimum clearance (not additive margins).
+  const token = key ? `${key}:${geometry}:confirmation:${reviewing ? 0 : confirmationRequest ?? 0}:recenter:${recenterRequest ?? 0}` : undefined;
   useEffect(() => {
     if (!token || !key || !candidate || !ready || userControlled || measuredSheetHeight === undefined ||
       !Number.isFinite(measuredSheetHeight) || measuredSheetHeight <= 0 || lastToken.current === token) return;
     lastToken.current = token;
-    setIssued({ key, intent: { sequence: ++serial.current, coordinates: candidate.coordinates,
+    setIssued({ token, intent: { sequence: ++serial.current, coordinates: candidate.coordinates,
       sheetHeight: measuredSheetHeight, confirmationBottomPadding: confirming ? 28 : 0,
       ...(viewportWidth !== undefined && viewportHeight !== undefined ? { viewportSize: { width: viewportWidth, height: viewportHeight } } : {}),
       ...(!reviewing ? { safetyMargin: passengerRouteSafetyMargin } : {}) } });
   }, [candidate, key, token, measuredSheetHeight, ready, confirming, reviewing, userControlled, viewportWidth, viewportHeight]);
-  return ready && !userControlled && key && issued?.key === key ? issued.intent : undefined;
+  return ready && !userControlled && token && issued?.token === token ? issued.intent : undefined;
 }

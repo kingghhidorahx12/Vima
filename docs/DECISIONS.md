@@ -2,6 +2,17 @@
 
 Este documento registra las decisiones proporcionadas en la solicitud y reflejadas en el código. No define UX ni dirección visual.
 
+## Passenger P1 — corrección de zoom QA 57021 (2026-10-15)
+
+- Máxima escala útil con ruta y pines completos: no acumular holguras equivalentes.
+  Los 28 dp de seguridad y de confirmationBottomPadding son mínimos compartidos
+  con el clearance del pin; no se suman entre sí. Esta corrección sustituye el
+  criterio acumulativo de QA 56972 descrito debajo. Oclusiones reales una sola vez.
+- El nombre de fase no obliga a repetir una cámara equivalente. Se espera al
+  footprint visible estable y se conserva pan manual/Recentrar ruta.
+- Perfil muestra versión embebida del APK e identificación de la OTA en ejecución,
+  sin declarar actualidad frente al servidor ni implementar actualización manual.
+
 ## Passenger P1 — ajustes aprobados tras QA 56972 (2026-10-15)
 
 - CONFIRM/MATCHING: ruta autoritativa completa dentro del viewport realmente útil,

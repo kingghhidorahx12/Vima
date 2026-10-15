@@ -24,6 +24,8 @@ function harness(auth: Record<string, unknown>, dark = false) {
     'src/design/themes/index.tsx': { useVimaTheme: () => theme,
       useVimaThemeControl: () => ({ name: dark ? 'dark' : 'light', toggleTheme: () => calls.push(['theme']) }) },
   }, externalOverrides: { 'react-native': native,
+    'expo-modules-core': { requireOptionalNativeModule: () => ({ manifest: '{"version":"2.3.4"}' }) },
+    'expo-updates': { isEnabled: true, isEmbeddedLaunch: false, updateId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     'expo-router': { useRouter: () => router, useLocalSearchParams: () => ({}),
       useFocusEffect: (callback: () => void) => React.useEffect(callback, [callback]) },
@@ -175,6 +177,10 @@ test('account shows real name, theme setting and confirmed product logout; unsup
   const tree: ReactTestRenderer = await h.renderAccount();
   try {
     assert.ok(tree.root.findAllByType('Text' as never).some(n => n.props.children === account.displayName));
+    const about = tree.root.findByProps({ testID: 'vima-about' });
+    const info = about.findAllByType('Text' as never).map(n => React.Children.toArray(n.props.children).join('')).join('\n');
+    assert.match(info, /Acerca de Vima/); assert.match(info, /Versión del APK · 2\.3\.4/);
+    assert.match(info, /Desarrollo/); assert.doesNotMatch(info, /última versión/i);
     const labels = tree.root.findAllByType('Pressable' as never).map(n => n.props.accessibilityLabel);
     assert.equal(labels.some(label => /foto|editar|pago|soporte|conductor/i.test(label ?? '')), false);
     await h.act(async () => button(tree, 'Cambiar apariencia').props.onPress()); assert.ok(h.calls.some((c: unknown[]) => c[0] === 'theme'));
@@ -182,6 +188,21 @@ test('account shows real name, theme setting and confirmed product logout; unsup
     await h.act(async () => button(tree, 'Confirmar cierre de sesión').props.onPress());
     assert.equal(loggedOut, 1); assert.deepEqual(h.calls.slice(-3), [['clear'], ['dismiss'], ['replace', '/auth']]);
   } finally { await h.act(async () => tree.unmount()); }
+});
+
+test('About Vima is a discrete final Profile section in both themes, without replacing settings or logout', async () => {
+  for (const dark of [false, true]) {
+    const h = harness({ current: async () => account }, dark);
+    const tree: ReactTestRenderer = await h.renderAccount();
+    try {
+      const about = tree.root.findByProps({ testID: 'vima-about' });
+      const views = tree.root.findAll(n => typeof n.type === 'string');
+      assert.ok(views.indexOf(about) > views.indexOf(button(tree, 'Cerrar sesión')));
+      assert.equal(about.findAllByType('Pressable' as never).length, 0);
+      assert.ok(button(tree, 'Cambiar apariencia'));
+      assert.equal(h.calls.length, 0); // Metadata reading has no session/update/navigation side effect.
+    } finally { await h.act(async () => tree.unmount()); }
+  }
 });
 
 test('existing phone enters Passenger without registration; rapid taps use one verification', async () => {

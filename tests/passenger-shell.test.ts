@@ -700,6 +700,8 @@ test('measurement generations revalidate stable native header/content/viewport w
     });
     assert.equal(fit(), undefined); // Previous generation cannot authorize reviewing.
     nativeHeights(28, 250, 250); await flushFrame();
+    assert.equal(fit(), undefined); // Layout is ready, but the real sheet is still moving.
+    await act(async () => host(tree, 'SheetBoundary').props.onVisibleHeightChange(278));
     const reviewingFit = fit(); assert.ok(reviewingFit);
     assert.equal(reviewingFit.sheetHeight, 278);
     const reviewingVisible = host(tree, 'SheetBoundary').props.onVisibleHeightChange;
@@ -723,6 +725,31 @@ test('measurement generations revalidate stable native header/content/viewport w
     globalThis.requestAnimationFrame = previousFrame;
     globalThis.cancelAnimationFrame = previousCancel;
   }
+});
+
+test('route fit waits for the actual sheet rest footprint, not just final content layout', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const h = createHarness();
+  const tree: ReactTestRenderer = await h.render(fixture.gateway);
+  const fit = () => host(tree, 'PassengerMapContent').props.fitRoute;
+  try {
+    await settle(); await mapLayout(tree); await measure(tree);
+    await act(async () => host(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    await mapLayout(tree); await measure(tree, 250);
+    await press(tree, 'Confirmar ubicaciones');
+    await act(async () => {
+      id(tree, 'passenger-sheet-content').props.onLayout({ nativeEvent: { layout: { height: 400 } } });
+      id(tree, 'passenger-sheet-header').props.onLayout({ nativeEvent: { layout: { height: 28 } } });
+      id(tree, 'passenger-sheet-viewport').props.onLayout({ nativeEvent: { layout: { height: 400 } } });
+    });
+    assert.equal(fit(), undefined);
+    await act(async () => host(tree, 'SheetBoundary').props.onVisibleHeightChange(350));
+    assert.equal(fit(), undefined);
+    await act(async () => host(tree, 'SheetBoundary').props.onVisibleHeightChange(428));
+    const confirmed = fit(); assert.equal(confirmed.sheetHeight, 428);
+    await measure(tree, 400); assert.equal(fit().sequence, confirmed.sequence);
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await act(async () => tree.unmount()); fixture.controls.dispose(); }
 });
 
 test('origin, destination, quote identity and route geometry updates never replace measured React nodes', async () => {

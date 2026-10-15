@@ -10,6 +10,7 @@ import { useMotionPolicy } from '../../motion/ReducedMotion';
 import { productAuthClient, ProductAuthClientError, type ProductAccount } from '../../services/auth/productSession';
 import { AccessAction, AccessCard, AccessFrame, AccessNotice, RestorationSurface } from './AccessSurface';
 import { accessErrorMessage } from './accessModel';
+import { AboutVima } from './AboutVima';
 
 export function ProductAccountScreen() {
   const router = useRouter(); const client = useQueryClient(); const theme = useVimaTheme();
@@ -80,6 +81,7 @@ export function ProductAccountScreen() {
       <VimaButton secondary label="Conservar sesión" disabled={busy} onPress={() => setConfirmLogout(false)} />
     </AccessCard> : <VimaButton secondary danger label="Cerrar sesión" onPress={() => setConfirmLogout(true)} />}
     {error ? <AccessNotice>{error}</AccessNotice> : null}
+    <AboutVima />
   </AccessFrame>;
 }
 const styles = StyleSheet.create({ fill: { flex: 1 }, identity: { flexDirection: 'row', alignItems: 'center', gap: 16 },

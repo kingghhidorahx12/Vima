@@ -78,6 +78,18 @@ export function PassengerMap({ quote, assignment, requestState, origin, destinat
       passengerPinClearance.bottom + safetyMargin + (locationCtaVisible ? locationCtaHeight + t.spacing.scalePx[2]! : 0) +
       (fitRoute?.confirmationBottomPadding ?? 0),
     left: horizontalFitPadding, right: rightFitPadding };
+  if (safetyMargin > 0) {
+    // The measured sheet/chrome already excludes the covered map. Pin artwork,
+    // safety gap and the historical confirmation bias share that edge clearance;
+    // summing all three needlessly shrinks an already compact visible viewport.
+    fitPadding.top = (target.padding.top ?? 0) + Math.max(passengerPinClearance.top, safetyMargin);
+    fitPadding.bottom = (stableViewport.padding?.bottom ?? 0) + (fitRoute?.sheetHeight ?? sheetHeight) +
+      Math.max(passengerPinClearance.bottom, safetyMargin, fitRoute?.confirmationBottomPadding ?? 0) +
+      (locationCtaVisible ? locationCtaHeight + t.spacing.scalePx[2]! : 0);
+    fitPadding.left = Math.max(target.padding.left ?? 0, passengerPinClearance.side, safetyMargin);
+    fitPadding.right = Math.max(target.padding.right ?? 0,
+      t.spacing.mobileHorizontalMarginPx + mapControlSize + Math.max(passengerPinClearance.side, safetyMargin));
+  }
   const fitSize = safetyMargin > 0 ? fitRoute?.viewportSize : undefined;
   // An intermediate/occluded layout must never send impossible padding to MapLibre.
   // The next settled geometry issues a fresh intent instead of shrinking safe margins.

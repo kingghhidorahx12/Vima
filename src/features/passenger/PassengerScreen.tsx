@@ -221,6 +221,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const actualSheetHeight = measuredForCurrentGeneration ? viewportMeasure.height + headerHeight : undefined;
   const settledSheetHeight = measuredForCurrentGeneration && naturalHeight && interaction && actualSheetHeight !== undefined &&
     Math.abs(actualSheetHeight - (sheetFrameHeight - interaction.targetOffset)) < 1 ? actualSheetHeight : undefined;
+  // Layout can reach its final size before the sheet's translate finishes.
+  // Route commands wait for the real visible footprint to reach that size. An
+  // identical next-phase height needs no new native callback (or camera command).
+  // Home layout/scroll and sheet timing stay unchanged.
+  const routeSheetSettled = settledSheetHeight !== undefined && visibleSheetHeight !== undefined &&
+    Math.abs(visibleSheetHeight - settledSheetHeight) < 1;
   const routeViewportActive = !flow.field && (reviewing || flow.phase === 'confirm' || flow.phase === 'requesting' || matching);
   const routeCanRecenter = useMemo(() => routeViewportActive && !reviewing && !!routeFitCandidate(flow.quote, flow.origin, flow.destination),
     [routeViewportActive, reviewing, flow.quote, flow.origin, flow.destination]);
@@ -228,7 +234,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     reviewing, confirming: (flow.phase === 'confirm' || flow.phase === 'requesting') && !reviewing,
     matching, phase: flow.phase, searchActive: flow.field !== null, userControlled: mapUserControlled,
     recenterRequest: routeRecenterRequest, viewport: { width: mapWidth, height, topOcclusion },
-    ready: mapReady && !mapFailed && focused && mapWidth > 0 && mapLayoutNavHeight === navHeight &&
+    ready: routeSheetSettled && mapReady && !mapFailed && focused && mapWidth > 0 && mapLayoutNavHeight === navHeight &&
       height - (settledSheetHeight ?? height) > topOcclusion,
     measuredSheetHeight: settledSheetHeight, confirmationRequest: routeFitRequestId });
   // The sheet reports its actual visible footprint, including Home's in-panel search.

@@ -892,6 +892,9 @@ test('explicit location confirmation still emits a full route fit after its actu
       const interaction = nativeNode(tree, 'SheetBoundary').props.interaction;
       await h.act(async () => measured('passenger-sheet-viewport').props.onLayout({ nativeEvent: {
         layout: { height: interaction.height - interaction.targetOffset - 28 } } }));
+      // Layout size alone no longer claims the sheet's translate has finished.
+      await h.act(async () => nativeNode(tree, 'SheetBoundary').props.onVisibleHeightChange(
+        interaction.height - interaction.targetOffset));
     };
     await h.act(async () => nativeNode(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
     await measure();

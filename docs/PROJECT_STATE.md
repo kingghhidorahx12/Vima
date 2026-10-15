@@ -1,5 +1,35 @@
 # Estado real del proyecto
 
+## Passenger P1 — versión y zoom QA 57021, preparación OTA 2026-10-15
+
+- Base real d7c9cbc, OTA de referencia 01a140b9-9aca-783d-90ef-6e927f761971.
+  Sin cambios tracked previos; dos logs QA ajenos preservados. Publicación
+  autorizada: commit/push y OTA Android sólo product-access-preview, environment
+  production, runtime 0.0.2; sin Railway, APK ni cambios en otros canales.
+- Video 57021.mp4 inspeccionado: exceso de alejamiento en CONFIRM y escalas
+  adicionales entre fases. Causas reproducidas: márgenes acumulativos, token por
+  nombre de fase y layout listo antes del footprint visible final del sheet.
+- CONFIRM/REQUESTING/MATCHING combinan holguras por máximo, contando chrome/panel
+  una sola vez, y sólo repiten fit por ruta/viewport real o Recentrar. El mínimo
+  inferior 28 de confirmación queda incluido, no sumado a otros 28. Reviewing,
+  pan manual, bounds completos, Reduced Motion y Camera compartida conservados.
+- Perfil termina en «Acerca de Vima»: versión del binario desde config embebida
+  nativa y updateId realmente ejecutado desde Expo Updates. Embedded, desarrollo
+  y ausencia de datos explícitos; sin afirmar «última versión» ni consultar OTA.
+- Detalle, evidencia y checklist: [PASSENGER_CAMERA_VERSION_QA_57021.md](PASSENGER_CAMERA_VERSION_QA_57021.md).
+  Suite completa 423/423 PASS; focales cámara/versión 4/4 y confirmación 2/2 PASS.
+  TypeScript, lint, worklets, fixture isolation y diff-check PASS.
+  Validaciones repetidas para publicación: 423/423 PASS, TypeScript, lint,
+  worklets, splash, fixture isolation y diff-check PASS.
+  Android físico PENDIENTE. La publicación usa el export Android validado con
+  caché limpia, sin recompilar al subirlo, y compara su hash con el bundle servido.
+  Export EAS production: Hermes Android/iOS y aislamiento release/QA PASS.
+  HTTPS productivo exacto verificado en productAuthClient de ambos bytecodes,
+  sin destinos sintéticos; Perfil incluido. SHA-256 Android:
+  wZCBq1x3u9S9iFYPoVMg2q1qPThsrr4jmKADgN3TJ9Q.
+- Sin cambios en auth, backend, TomTom/routing fast, tarifas, matching/lifecycle,
+  Driver, navegación, scroll Home, dependencias ni configuración nativa.
+
 ## Passenger P1 — encuadre y Home QA 56972, preparación OTA 2026-10-15
 
 - Base real/publicada e8896a4, árbol tracked limpio al inicio, dos logs QA
