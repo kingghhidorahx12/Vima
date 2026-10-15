@@ -1,5 +1,36 @@
 # Estado real del proyecto
 
+## Passenger P1 — encuadre y Home QA 56972, preparación OTA 2026-10-15
+
+- Base real/publicada e8896a4, árbol tracked limpio al inicio, dos logs QA
+  preservados. Video Downloads/56972.mp4 inspeccionado. Publicación autorizada:
+  commit/push y OTA Android sólo product-access-preview, production, runtime 0.0.2.
+- Causa: al entrar en MATCHING se perdía el fit protegido y reaparecía el target
+  genérico; el token previo ignoraba cambios de altura y Recenter sólo centraba GPS.
+- CONFIRM/requesting/MATCHING usan la ruta completa y una intención por fase/
+  geometría estable medida, con 28 dp fuera del artwork de pines. Confirm conserva
+  su +28 dp óptico; matching no lo hereda. Se suprime el target automático genérico.
+- Pan manual suspende nuevos fits; «Recentrar ruta» recupera el encuadre con la
+  medición actual. Sin refits por GPS/rerenders, sin padding imposible al renderer,
+  sin cambios en Camera compartida, ruta, precios ni backend.
+- Guardados: tres botones de 44 dp, radio 16, gap 8, tintes del theme y level1
+  individuales. Mismos handlers/IDs/persistencia. Matching deja un título en panel;
+  Cancelar reutiliza el botón existente con bodyMedium 16 dp.
+- Scroll Home verificado por el usuario: no se cambia su implementación, hit
+  testing, arbitraje, Home 50%, safe areas ni bottom nav. Light/Dark equivalentes.
+- Detalle/pruebas/checklist: [PASSENGER_ROUTE_HOME_QA_56972.md](PASSENGER_ROUTE_HOME_QA_56972.md).
+  Suite 419/419 PASS; focales 7/7 y comprobación nativa final 2/2 PASS.
+  TypeScript, lint, worklets, splash, fixture isolation y diff-check PASS.
+  Validaciones repetidas para publicación: 419/419 PASS, TypeScript, lint,
+  worklets, splash, fixture isolation y diff-check PASS.
+  Export limpio EAS production: Hermes Android/iOS y aislamiento release/QA PASS.
+  productAuthClient carga exactamente el HTTPS productivo en ambos bytecodes,
+  sin destinos .invalid. SHA-256 Android:
+  zuSt7yHxWzhSKWqN29fV2psmR0Bq0FlCaHOorxEfA2U.
+  La publicación usa ese bundle Android sin recompilarlo.
+  QA Android físico de estos cambios PENDIENTE.
+- Sin APK, Railway, cambios en otros canales, dependencias ni cambios nativos.
+
 ## QA 56953: restauración, borrador y scroll — preparación OTA 2026-10-15
 
 - Base real 3afef0d, logs QA intactos. Video 56953.mp4 inspeccionado. Tras las dos

@@ -101,19 +101,19 @@ function LayerMenuRow({ layer, available, checked, onPress }: {
   </Pressable></Animated.View>;
 }
 
-export function LocationCTA({ busy, onPress }: { busy: boolean; onPress: () => void }) {
+export function LocationCTA({ busy, onPress, label = 'Tu ubicación' }: { busy: boolean; onPress: () => void; label?: string }) {
   const { reducedMotion } = useMotionPolicy();
   const feedback = usePressFeedback();
   const theme = useVimaTheme();
   const presentation = usePassengerPresentation();
-  return <ElementEntrance><Animated.View style={feedback.style}><Pressable accessibilityRole="button" accessibilityLabel="Tu ubicación"
+  return <ElementEntrance><Animated.View style={feedback.style}><Pressable accessibilityRole="button" accessibilityLabel={label}
     accessibilityState={{ busy }} onPressIn={feedback.onPressIn} onPressOut={feedback.onPressOut}
     onPress={() => { void semanticHaptics('toggle'); onPress(); }}
     style={({ pressed }) => [styles.location, presentation.floating,
       pressed && { backgroundColor: theme.roles.pressedSurface, boxShadow: [] }]}>
     {busy && !reducedMotion ? <ActivityIndicator size="small" color={theme.roles.location} />
       : <VimaGlyph name="recenter" color={theme.roles.location} />}
-    <VimaText variant="bodySmall">Tu ubicación</VimaText>
+    <VimaText variant="bodySmall">{label}</VimaText>
     <VimaGlyph name="chevron" color={theme.roles.controlMuted} />
   </Pressable></Animated.View></ElementEntrance>;
 }

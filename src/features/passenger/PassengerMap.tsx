@@ -15,7 +15,7 @@ import type { Assignment, Place, RideQuote } from './model';
 import { PassengerMapPin, PassengerUserLocation } from './PassengerMapPin';
 import { visualTokens as t } from '../../design/tokens';
 import type { PassengerRouteFitIntent } from './usePassengerRouteFit';
-import { locationCtaHeight, passengerPinClearance } from './mapCameraFootprint';
+import { locationCtaHeight, mapControlSize, passengerPinClearance } from './mapCameraFootprint';
 
 /** Required appearance/viewports are injected. The unfinished map design gets no production defaults. */
 export interface PassengerMapConfig {
@@ -68,7 +68,21 @@ export function PassengerMap({ quote, assignment, requestState, origin, destinat
     : previousRecenterPadding, [home, homeBottomOcclusion, target, sheetHeight, previousRecenterPadding]);
   const homeTarget = useMemo(() => home ? { ...target, padding: centeredPadding } : target,
     [home, target, centeredPadding]);
-  const horizontalFitPadding = Math.max(target.padding.left ?? 0, target.padding.right ?? 0, passengerPinClearance.side);
+  const safetyMargin = fitRoute?.safetyMargin ?? 0;
+  const horizontalFitPadding = Math.max(target.padding.left ?? 0, target.padding.right ?? 0, passengerPinClearance.side + safetyMargin);
+  const rightFitPadding = safetyMargin > 0 ? Math.max(horizontalFitPadding,
+    t.spacing.mobileHorizontalMarginPx + mapControlSize + passengerPinClearance.side + safetyMargin) : horizontalFitPadding;
+  const fitPadding = { ...target.padding,
+    top: (target.padding.top ?? 0) + passengerPinClearance.top + safetyMargin,
+    bottom: (target.padding.bottom ?? 0) - sheetHeight + (fitRoute?.sheetHeight ?? sheetHeight) +
+      passengerPinClearance.bottom + safetyMargin + (locationCtaVisible ? locationCtaHeight + t.spacing.scalePx[2]! : 0) +
+      (fitRoute?.confirmationBottomPadding ?? 0),
+    left: horizontalFitPadding, right: rightFitPadding };
+  const fitSize = safetyMargin > 0 ? fitRoute?.viewportSize : undefined;
+  // An intermediate/occluded layout must never send impossible padding to MapLibre.
+  // The next settled geometry issues a fresh intent instead of shrinking safe margins.
+  const fitHasRoom = !fitSize || fitSize.height > fitPadding.top + fitPadding.bottom &&
+    fitSize.width > fitPadding.left + fitPadding.right;
   const visibleOrigin = !searchPresentationActive && !home ? origin ?? quote?.origin : null;
   const manualOrigin = manualSelection?.kind === 'origin' ? manualSelection.coordinate : null;
   const samePosition = (coordinate: Place['coordinate']) => currentLocation?.coordinate[0] === coordinate[0]
@@ -78,15 +92,7 @@ export function PassengerMap({ quote, assignment, requestState, origin, destinat
   return <>
     <Camera target={ready ? homeTarget : undefined} recenterPadding={ready ? centeredPadding : undefined} northRequest={ready ? northRequest : undefined}
       mode={searchPresentationActive ? 'search-locked' : cameraMode}
-      recenter={ready ? recenter : undefined} fitRoute={ready && fitRoute ? {
-        ...fitRoute, padding: { ...target.padding,
-          top: (target.padding.top ?? 0) + passengerPinClearance.top,
-          bottom: (target.padding.bottom ?? 0) - sheetHeight + (fitRoute.sheetHeight ?? sheetHeight) +
-            passengerPinClearance.bottom + (locationCtaVisible ? locationCtaHeight + t.spacing.scalePx[2]! : 0) +
-            (fitRoute.confirmationBottomPadding ?? 0),
-          left: horizontalFitPadding,
-          right: horizontalFitPadding },
-      } : undefined} />
+      recenter={ready ? recenter : undefined} fitRoute={ready && fitRoute && fitHasRoom ? { ...fitRoute, padding: fitPadding } : undefined} />
     {displayKeyAvailable ? <TrafficFlowLayer enabled={!!layers?.traffic} /> : null}
     {displayKeyAvailable ? <IncidentLayer enabled={!!layers?.incidents} onSelect={onIncidentSelect} /> : null}
     {!searchPresentationActive && (pickupPhase ? assignment?.routeToOrigin ?? quote?.route : quote?.route) ? <RouteLayer id="passenger-route" data={(pickupPhase ? assignment?.routeToOrigin ?? quote?.route : quote?.route)!}

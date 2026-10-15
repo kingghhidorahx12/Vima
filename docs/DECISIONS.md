@@ -2,6 +2,18 @@
 
 Este documento registra las decisiones proporcionadas en la solicitud y reflejadas en el código. No define UX ni dirección visual.
 
+## Passenger P1 — ajustes aprobados tras QA 56972 (2026-10-15)
+
+- CONFIRM/MATCHING: ruta autoritativa completa dentro del viewport realmente útil,
+  con margen de seguridad 24–32 dp además del espacio del pin (implementación: 28).
+  Ajustar por fase/geometría asentada; respetar pan manual y recuperar ruta con
+  Recentrar. Sin modificar routing, tarifas ni datos; conservar Motion/Reduced Motion.
+- Home: Casa/Trabajo/Favoritos independientes, separación 8–10 dp, radio 16–18 dp,
+  color suave contenido y touch target mínimo 44 dp; misma geometría Light/Dark.
+  La implementación usa gap 8/radio 16/alto 44 y las acciones/persistencia vigentes.
+- Matching: evitar el título duplicado y mejorar Cancelar sin cambiar su comando.
+  El scroll Home ya validado físicamente queda expresamente fuera de esta ronda.
+
 | Decisión proporcionada | Implementación |
 | --- | --- |
 | Expo SDK 57 estable / React Native 0.86.x | Dependencias compatibles instaladas con Expo; lockfile reproducible. |

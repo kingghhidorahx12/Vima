@@ -840,8 +840,15 @@ test('global status chrome leaves Passenger edge-to-edge geometry and safe chrom
         const resting = Object.assign({}, ...control.props.style({ pressed: false }).filter(Boolean));
         assert.deepEqual(resting.boxShadow, style(logo).boxShadow);
       }
-      const savedStrip = tree.root.findAllByType('View' as never).find(n => style(n).height === 44 && style(n).boxShadow);
-      assert.deepEqual(style(savedStrip!).boxShadow, style(logo).boxShadow);
+      const savedButtons = id(tree, 'passenger-saved-place-buttons');
+      assert.equal(style(savedButtons).gap, 8);
+      assert.equal(style(savedButtons).boxShadow, undefined);
+      for (const label of ['Casa', 'Trabajo', 'Favoritos']) {
+        const button = savedButtons.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label)!;
+        assert.equal(restingStyle(button).borderRadius, 16);
+        assert.equal(restingStyle(button).overflow, 'hidden');
+        assert.deepEqual(style(button.parent!).boxShadow, style(logo).boxShadow);
+      }
       const search = id(tree, 'passenger-home-search');
       const searchStyle = Object.assign({}, ...search.props.style({ pressed: false }).filter(Boolean));
       assert.equal(searchStyle.height, 58); assert.equal(searchStyle.borderRadius, 24);
@@ -1251,7 +1258,7 @@ test('review fit waits for actual phase layout; confirm emits an independent fit
     const map = host(tree, 'PassengerMapContent').props;
     assert.deepEqual(first.coordinates, [map.origin.coordinate, ...(map.quote.route.geometry.type === 'LineString' ? map.quote.route.geometry.coordinates : map.quote.route.geometry.coordinates.flat()), map.destination.coordinate]);
     await act(async () => host(tree, 'NativeMapBoundary').props.onTouchStart());
-    await measure(tree, 254); assert.equal(fit().sequence, first.sequence);
+    await measure(tree, 254); assert.equal(fit(), undefined); // Manual inspection suppresses pending automatic fits.
     const oldViewport = id(tree, 'passenger-sheet-viewport').props.onLayout;
     await press(tree, 'Confirmar ubicaciones'); assert.equal(fit(), undefined);
     await act(async () => oldViewport({ nativeEvent: { layout: { height: firstHeight - 28 } } }));
@@ -1265,13 +1272,15 @@ test('review fit waits for actual phase layout; confirm emits an independent fit
     const finalHeight = await measure(tree, 340); const final = fit();
     assert.ok(final.sequence > first.sequence); assert.equal(final.sheetHeight, finalHeight);
     assert.equal(final.confirmationBottomPadding, 28);
-    await measure(tree, 342); assert.equal(fit().sequence, final.sequence);
+    await measure(tree, 342); const resized = fit();
+    assert.ok(resized.sequence > final.sequence); assert.equal(resized.sheetHeight, 370);
+    await measure(tree, 342); assert.equal(fit().sequence, resized.sequence); // No replay for identical settled geometry.
     await press(tree, `Destino ${fixturePlaces[1]!.name}`); assert.equal(fit(), undefined);
     const field = host(tree, 'TextInput'); await act(async () => field.props.onChangeText('Centro')); await settle();
     await mapLayout(tree, 772); await measure(tree, 240); assert.equal(fit(), undefined);
     await press(tree, `${fixturePlaces[2]!.name}, ${fixturePlaces[2]!.address}`);
     await measure(tree, 254);
-    const next = fit(); assert.ok(next.sequence > final.sequence); // Search lock ended and nav remains hidden.
+    const next = fit(); assert.ok(next.sequence > resized.sequence); // Search lock ended and nav remains hidden.
     await mapLayout(tree); await measure(tree, 254);
     assert.equal(fit().sequence, next.sequence);
     assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
@@ -1320,7 +1329,7 @@ test('cancel, new search and same destination quote issue a new review fit and k
     assert.equal(revision, 2); assert.ok(fit().sequence > first.sequence);
     const cancelledFit = fit(); assert.equal(cancelledFit.confirmationBottomPadding, 0);
     await act(async () => host(tree, 'NativeMapBoundary').props.onTouchStart()); await measure(tree, 252);
-    assert.equal(fit().sequence, cancelledFit.sequence); // Manual inspection never triggers another fit.
+    assert.equal(fit(), undefined); // Manual inspection suppresses route intents until an explicit recenter.
     await press(tree, 'Volver');
     await press(tree, '¿A dónde vamos?');
     await act(async () => host(tree, 'TextInput').props.onChangeText('Parque')); await settle();
@@ -1357,6 +1366,78 @@ test('fit intent identity ignores renders/height/pan; a late quote never fits un
     await update({ measuredSheetHeight: 390 }); assert.ok(fit().sequence > second.sequence);
     assert.equal(fit().sheetHeight, 390);
   } finally { await act(async () => tree.unmount()); }
+});
+
+test('Home saved places have separate clipped surfaces and the same compact flex geometry in Light/Dark', async () => {
+  for (const themeName of ['light', 'dark']) {
+    const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { themeName });
+    const tree: ReactTestRenderer = await h.render(fixture.gateway);
+    try {
+      await settle();
+      const group = id(tree, 'passenger-saved-place-buttons');
+      assert.equal(style(group).gap, 8); assert.equal(style(group).height, 44);
+      assert.equal(style(group).backgroundColor, undefined); assert.equal(style(group).boxShadow, undefined);
+      const buttons = group.findAllByType('Pressable' as never);
+      assert.deepEqual(buttons.map(n => n.props.accessibilityLabel), ['Casa', 'Trabajo', 'Favoritos']);
+      const fills = new Set();
+      for (const button of buttons) {
+        const surface = restingStyle(button); fills.add(surface.backgroundColor);
+        assert.equal(surface.height, 44); assert.ok(surface.minHeight >= 44);
+        assert.equal(surface.borderRadius, 16); assert.equal(surface.overflow, 'hidden');
+        assert.equal(surface.minWidth, 0); assert.equal(style(button.parent!).flex, 1);
+        assert.equal(style(button.parent!).borderRadius, surface.borderRadius);
+        assert.equal(style(button.parent!).boxShadow.length, 1);
+        assert.ok(button.findAll(n => typeof n.type === 'function' && n.type.name === 'VimaGlyph').length);
+        const label = button.findAll(n => String(n.type) === 'Text' && n.props.children === button.props.accessibilityLabel)[0]!;
+        assert.equal(style(label).flexShrink, 1); assert.equal(label.props.numberOfLines, 1);
+      }
+      assert.equal(fills.size, 3);
+      const scroll = host(tree, 'ScrollView');
+      assert.equal(scroll.props.nestedScrollEnabled, true); assert.equal(scroll.props.pointerEvents, undefined);
+      assert.equal(style(scroll).flex, 1); assert.equal(host(tree, 'SheetBoundary').props.headerPanEnabled, false);
+      assert.equal(hasNav(tree), true);
+    } finally { await act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+  }
+});
+
+test('CONFIRM to MATCHING keeps route fit authority, a single title and legible cancel; pan/recenter use the latest measured panel', async () => {
+  for (const themeName of ['light', 'dark']) {
+    const fixture = createPassengerFixtureGateway(clock); const h = createHarness({}, { themeName });
+    const tree: ReactTestRenderer = await h.render(fixture.gateway);
+    const map = () => host(tree, 'PassengerMapContent').props;
+    try {
+      await settle(); await mapLayout(tree); await measure(tree);
+      await act(async () => host(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+      await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+      await mapLayout(tree); await measure(tree);
+      await press(tree, 'Confirmar ubicaciones'); await measure(tree, 340);
+      const confirmed = map().fitRoute; assert.equal(confirmed.safetyMargin, 28);
+      assert.equal(map().cameraMode, 'user-controlled');
+      await press(tree, 'Solicitar viaje');
+      assert.equal(map().fitRoute, undefined); // Old phase measurements cannot fit MATCHING.
+      await measure(tree, 290);
+      const matched = map().fitRoute; assert.ok(matched.sequence > confirmed.sequence);
+      assert.equal(matched.confirmationBottomPadding, 0); assert.equal(map().cameraMode, 'user-controlled');
+      assert.equal(id(tree, 'passenger-top-chrome').findAll(n => String(n.type) === 'Text' && String(n.props.children).includes('Buscando')).length, 0);
+      const titles = tree.root.findAll(n => String(n.type) === 'Text' && String(n.props.children).startsWith('Buscando un conductor'));
+      assert.equal(titles.length, 1);
+      const cancel = tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === 'Cancelar')!;
+      assert.ok(restingStyle(cancel).minHeight >= 44);
+      const label = cancel.findAll(n => String(n.type) === 'Text' && n.props.children === 'Cancelar')[0]!;
+      assert.equal(style(label).fontSize, 16);
+      await measure(tree, 310); const resized = map().fitRoute; assert.ok(resized.sequence > matched.sequence);
+      await act(async () => host(tree, 'NativeMapBoundary').props.onTouchStart());
+      await measure(tree, 330); assert.equal(map().fitRoute, undefined);
+      await press(tree, 'Recentrar ruta');
+      assert.ok(map().fitRoute.sequence > resized.sequence);
+      assert.equal(map().fitRoute.sheetHeight, 358); assert.equal(map().recenter, undefined);
+      await measure(tree, 330); const stable = map().fitRoute.sequence;
+      await measure(tree, 330); assert.equal(map().fitRoute.sequence, stable);
+      assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+      await press(tree, 'Cancelar'); // Existing authoritative command is still wired.
+      assert.ok(tree.root.findAll(n => String(n.type) === 'Text' && String(n.props.children).includes('Viaje cancelado')).length);
+    } finally { await act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+  }
 });
 
 test('cold Passenger layout remeasures after the first real frame without restart or remount', async () => {
