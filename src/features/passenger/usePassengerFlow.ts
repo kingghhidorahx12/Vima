@@ -13,6 +13,8 @@ import { isGeographicQuery } from '../../services/geospatial/regionalRanking';
 import type { SavedSlot } from '../../services/geospatial/personalPlaces';
 import { useMatchingProjection } from './useMatchingProjection';
 import { ApiError } from '../../services/api/client';
+import { GeospatialError } from '../../services/geospatial/contracts';
+import { routeFitCandidate } from './usePassengerRouteFit';
 
 let operationSequence = 0;
 function operationId() { return `passenger-${Date.now()}-${++operationSequence}`; }
@@ -24,6 +26,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const [destination, setDestination] = useState<Place | null>(null);
   const [stops, setStops] = useState<readonly Place[]>([]);
   const [confirming, setConfirming] = useState(false);
+  const [draftRevision, setDraftRevision] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const locked = useRef(false);
   const [tripId, updateTripId] = useState<string>();
@@ -94,12 +97,16 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const trip = useQuery({ ...tripQueryOptions(gateway, tripId ?? '', identity.context()), enabled: !!tripId && connection === 'online',
     select: passengerTrip, retry: false });
   const draftStops = trip.data?.phase === 'expired' ? trip.data.quote.stops : stops;
-  const quote = useQuery({ queryKey: ['passenger', gateway.scope, 'quote', origin, destination, draftStops],
-    queryFn: ({ signal }) => {
+  const quote = useQuery({ queryKey: ['passenger', gateway.scope, 'quote', origin, destination, draftStops, draftRevision],
+    queryFn: async ({ signal }) => {
       const draft = { origin: origin!, destination: destination!, stops: draftStops };
-      const fingerprint = JSON.stringify(draft);
+      const fingerprint = JSON.stringify([draftRevision, draft]);
       if (quoteOperation.current?.draft !== fingerprint) quoteOperation.current = { draft: fingerprint, id: operationId() };
-      return gateway.quote(draft, signal, quoteOperation.current.id);
+      const incoming = await gateway.quote(draft, signal, quoteOperation.current.id);
+      if (!routeFitCandidate(incoming, draft.origin, draft.destination) || gateway.source === 'server' &&
+        JSON.stringify(incoming.stops.map(place => [place.id, place.coordinate])) !==
+        JSON.stringify(draft.stops.map(place => [place.id, place.coordinate]))) throw new GeospatialError('route_unavailable');
+      return incoming;
     },
     enabled: confirming && validDraft(origin, destination) && connection === 'online', retry: false,
     staleTime: Infinity, refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false });
@@ -154,6 +161,9 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const applyPlace = (value: Place, target: 'origin' | 'destination') => {
     if (pending || ambiguousRequest || isMatching(phase) || phase === 'assigned') return;
     requestId.current = null;
+    // A new selection owns a new quote/route, even when the destination matches
+    // an infinitely cached quote from a cancelled request. Retries keep this revision.
+    setDraftRevision(operationId());
     if (target === 'origin') setOrigin({ place: value, kind: 'manual' }); else {
       setDestination(value);
       setQuoteExpired(false);

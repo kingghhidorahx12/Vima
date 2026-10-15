@@ -56,11 +56,18 @@ export function rankRegionalPlaces<T extends PlaceSuggestion>(provider: readonly
     if (rankingReason(place, query, place.aliases).relevance === 3) continue;
     const duplicate = candidates.findIndex(other => samePlace(other, place));
     if (duplicate < 0) candidates.push(place);
-    else candidates[duplicate] = place;
+    else {
+      candidates[duplicate] = place;
+      // A reviewed record may link several distinct provider IDs (including a
+      // misplaced duplicate). Replace all linked choices, not just the first.
+      for (let index = candidates.length - 1; index > duplicate; index--)
+        if (samePlace(candidates[index]!, place)) candidates.splice(index, 1);
+    }
   }
   return candidates.map((place, index) => ({ place, index,
     rank: rankingReason(place, query, 'aliases' in place ? place.aliases : []) }))
     .sort((a, b) => a.rank.relevance - b.rank.relevance || a.rank.tier - b.rank.tier ||
-      a.rank.nameNoise - b.rank.nameNoise || a.index - b.index)
+      a.rank.nameNoise - b.rank.nameNoise ||
+      Number(b.place.provenance === 'vima-local') - Number(a.place.provenance === 'vima-local') || a.index - b.index)
     .map(({ place }) => place);
 }

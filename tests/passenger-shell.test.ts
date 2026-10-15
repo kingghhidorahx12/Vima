@@ -1259,6 +1259,35 @@ test('fit candidate includes every LineString/MultiLineString point and rejects 
   assert.equal(routeFitCandidate(malformed, quote.origin, quote.destination), undefined);
 });
 
+test('cancel, new search and same destination quote issue a new review fit and keep the confirmation padding', async () => {
+  const fixture = createPassengerFixtureGateway(clock); let revision = 0;
+  const h = createHarness(); const tree: ReactTestRenderer = await h.render({ ...fixture.gateway,
+    quote: async (draft: Parameters<typeof fixture.gateway.quote>[0]) => ({ ...fixtureQuote(draft), id: `route-${++revision}` }),
+  });
+  const fit = () => host(tree, 'PassengerMapContent').props.fitRoute;
+  try {
+    await settle(); await mapLayout(tree); await measure(tree);
+    await act(async () => host(tree, 'NativeMapBoundary').props.onDidFinishLoadingMap());
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    await mapLayout(tree); await measure(tree);
+    const first = fit(); assert.ok(first);
+    await press(tree, 'Confirmar ubicaciones'); await measure(tree, 340);
+    assert.equal(fit().confirmationBottomPadding, 28);
+    await press(tree, 'Solicitar viaje'); await press(tree, 'Cancelar'); await press(tree, 'Volver');
+    await press(tree, '¿A dónde vamos?');
+    await act(async () => host(tree, 'TextInput').props.onChangeText('Parque')); await settle();
+    await press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`);
+    await mapLayout(tree); await measure(tree);
+    assert.equal(revision, 2);
+    assert.ok(fit().sequence > first.sequence);
+    assert.equal(fit().confirmationBottomPadding, 0);
+    assert.equal(host(tree, 'PassengerMapContent').props.quote.id, 'route-2');
+    await press(tree, 'Confirmar ubicaciones'); await measure(tree, 340);
+    assert.equal(fit().confirmationBottomPadding, 28);
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+});
+
 test('fit intent identity ignores renders/height/pan; a late quote never fits under Search lock', async () => {
   type Props = Parameters<typeof usePassengerRouteFit>[0];
   const initial: Props = { quote, origin: quote.origin, destination: quote.destination, reviewing: true, confirming: false,

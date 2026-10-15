@@ -18,8 +18,10 @@ export const distanceMeters = (a: Coordinate, b: Coordinate) => {
 /** Explicit reference wins; a declared alias needs a spatial check. Never collapse branches by similar names. */
 export function samePlace(a: Candidate, b: Candidate): boolean {
   if (a.canonicalId && b.canonicalId && a.canonicalId === b.canonicalId) return true;
-  if (a.providerRef && b.providerRefs?.includes(a.providerRef)) return true;
-  if (b.providerRef && a.providerRefs?.includes(b.providerRef)) return true;
+  // The wire decoder retains canonicalId, not the gateway-only providerRef.
+  const aRef = a.providerRef ?? a.canonicalId; const bRef = b.providerRef ?? b.canonicalId;
+  if (aRef && b.providerRefs?.includes(aRef)) return true;
+  if (bRef && a.providerRefs?.includes(bRef)) return true;
   if (a.id === b.id && a.provenance === b.provenance) return true;
   if (!a.coordinate || !b.coordinate) return false;
   const aName = normalizePlaceName(a.name); const bName = normalizePlaceName(b.name);

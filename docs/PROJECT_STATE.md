@@ -1,5 +1,39 @@
 # Estado real del proyecto
 
+## Preparación de publicación geoespacial — 2026-10-15
+
+- Publicación coordinada autorizada: Gateway product-preview con catálogo/ranking
+  compartidos y OTA Android product-access-preview, environment production,
+  runtime 0.0.2. API compatible; sin cambios nativos, tarifas ni routeType (fast).
+- Se completa protección de Recientes/Favoritos/slots previos: coordenada corregida
+  al leer sólo las identidades verificadas de Plaza, conservando ID, metadata,
+  eliminación y storage original sin migración. Comercios independientes intactos.
+- Se verifica volumen /data y hashes antes/después del despliegue, sin modificar
+  credenciales ni sesiones/viajes. QA físico sigue PENDIENTE. No modificar Vima-QA.
+- Validación de preparación: 407/407 suite completa, TypeScript, lint, worklets,
+  splash y aislamiento de fixtures PASS, incluida la reparación de storage previo.
+
+## Passenger: identidad geoespacial y recotización — local 2026-10-15
+
+- Orbis real confirma dos fichas Plaza Atlacomulco con misma calle/número:
+  una junto al catálogo y otra desplazada 6,07 km. Se enlazan exclusivamente las
+  dos referencias auditadas al registro local [-99.88795, 19.79021]; ranking y
+  decoder-compatible identity eliminan duplicados vinculados, sin fusionar tiendas.
+- Reproducción antes del fix: cancelar → buscar de nuevo el mismo destino sólo
+  llamaba quote una vez y conservaba una identidad de ruta ya encuadrada. Cada nueva
+  selección ahora tiene revisión/operación de cotización propia; reintentos mantienen
+  su operación. Snapshots ajenos o sin geometría fallan cerrado, con carga/error y
+  recuperación. No hay cambios de Camera, RouteLayer ni algoritmo de route-fit.
+- Comparación live fast/short de cinco trayectos completada; retorno Plaza → Centro
+  reduce 4,874 a 2,802 km con +64 s usando short. No se cambia política global,
+  tarifas ni servidor desplegado. Evidencia, límites y QA en
+  [PASSENGER_GEOSPATIAL_QA.md](PASSENGER_GEOSPATIAL_QA.md).
+- Cambios sólo locales, sin commit/push/Railway/OTA/build. QA físico Android
+  PENDIENTE. Auth/Driver/matching/lifecycle conservados; logs QA intactos.
+- Validación final: 406/406 suite completa (incluye gateway, matching, lifecycle,
+  auth y mapas), ocho regresiones focales, TypeScript, lint, worklets, splash,
+  aislamiento de fixtures y git diff --check PASS. Sin dependencias/cambios nativos.
+
 ## Corrección de conectividad de la OTA — 2026-10-14
 
 - Demostrado en bytecode publicado: productAuthClient inlineó

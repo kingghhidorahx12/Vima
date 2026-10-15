@@ -10,6 +10,7 @@ import { createPlaceMediaResolver } from '../src/services/geospatial/placeMedia.
 import { manualClock } from './support/manualClock.ts';
 import { requestPassengerRide } from '../src/features/passenger/requests.ts';
 import { executeConfirmedCommand, tripKey } from '../src/features/trip/queries.ts';
+import { approvedLocalPlaces } from '../src/services/geospatial/localPlaces.ts';
 import type { ReactTestRenderer, ReactTestInstance } from 'react-test-renderer';
 
 const require = createRequire(import.meta.url);
@@ -107,6 +108,107 @@ async function reachMatching(harness: ReturnType<typeof createHarness>, tree: Re
   await harness.act(async () => press(tree, 'Solicitar viaje'));
   await settle(harness);
 }
+
+test('cancel then search the same destination obtains a fresh authoritative quote without remounting', async () => {
+  const fixture = createPassengerFixtureGateway(clock); let quotes = 0;
+  const gateway: PassengerGateway = { ...fixture.gateway, quote: async draft => ({ ...fixtureQuote(draft), id: `fresh-${++quotes}` }) };
+  const h = createHarness(); const tree = await h.render(gateway);
+  try {
+    await reachMatching(h, tree);
+    await h.act(async () => press(tree, 'Cancelar')); await settle(h);
+    await h.act(async () => press(tree, 'Volver')); await settle(h);
+    await h.act(async () => press(tree, '¿A dónde vamos?'));
+    await h.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Parque')); await settle(h);
+    await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`)); await settle(h);
+    assert.equal(quotes, 2, 'A cancelled trip must not donate its infinitely cached quote to a new selection');
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.quote.id, 'fresh-2');
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await h.act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+});
+
+test('Plaza search chooses the reviewed identity and sends its exact coordinate to quote/map without provider Details', async () => {
+  const plaza = approvedLocalPlaces[0]!; const fixture = createPassengerFixtureGateway(clock);
+  let details = 0; let chosen: Place | undefined;
+  const h = createHarness(); const tree = await h.render({ ...fixture.gateway,
+    locate: async () => fixturePlaces[2]!, recentPlaces: async () => [],
+    suggestPlaces: async () => plaza.providerRefs!.map((canonicalId, i) => ({ id: `external-${i}`, canonicalId,
+      name: plaza.name, address: 'Circuito Vial Jorge Jiménez Cantú 1288, Atlacomulco', regionId: 'atlacomulco' })),
+    resolvePlace: async () => { details++; throw new Error('Misplaced external Details must not be selected'); },
+    quote: async (draft: Parameters<PassengerGateway['quote']>[0]) => { chosen = draft.destination; return fixtureQuote(draft); },
+  });
+  try {
+    await settle(h);
+    await h.act(async () => press(tree, '¿A dónde vamos?'));
+    await h.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Plaza Atlacomulco')); await settle(h);
+    const rows = tree.root.findAll((n: ReactTestInstance) => String(n.type) === 'Pressable' &&
+      String(n.props.accessibilityLabel).startsWith('Plaza Atlacomulco,'));
+    assert.equal(rows.length, 1);
+    await h.act(async () => press(tree, `${plaza.name}, ${plaza.address}`)); await settle(h);
+    assert.equal(details, 0); assert.equal(chosen?.id, plaza.id);
+    assert.deepEqual(chosen?.coordinate, plaza.coordinate);
+    const map = nativeNode(tree, 'PassengerMapContent').props;
+    assert.deepEqual(map.destination.coordinate, plaza.coordinate);
+    assert.deepEqual(map.quote.route.geometry.coordinates.at(-1), plaza.coordinate);
+  } finally { await h.act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+});
+
+test('a new destination hides the previous route while pending; an absent route fails closed and recovers', async () => {
+  const fixture = createPassengerFixtureGateway(clock); let calls = 0;
+  const next = deferred<RideQuote>(); let currentDraft: Parameters<PassengerGateway['quote']>[0] | undefined;
+  const h = createHarness(); const tree = await h.render({ ...fixture.gateway,
+    quote: async (draft: Parameters<PassengerGateway['quote']>[0]) => {
+      currentDraft = draft;
+      if (++calls === 1) return fixtureQuote(draft);
+      if (calls === 2) return next.promise;
+      if (calls === 3) return quote; // The previous trip's geometry/destination is not a successful retry.
+      return { ...fixtureQuote(draft), id: 'recovered-current-route' };
+    },
+  });
+  try {
+    await reachMatching(h, tree);
+    await h.act(async () => press(tree, 'Cancelar')); await settle(h);
+    await h.act(async () => press(tree, 'Volver')); await settle(h);
+    await h.act(async () => press(tree, `${fixturePlaces[2]!.name}, ${fixturePlaces[2]!.address}`)); await settle(h);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.quote, undefined);
+    assert.ok(tree.root.findAllByProps({ accessibilityLabel: 'Calculando ruta y tarifa' }).length);
+    const confirm = tree.root.findAll((n: ReactTestInstance) => String(n.type) === 'Pressable' && n.props.accessibilityLabel === 'Confirmar ubicaciones')[0]!;
+    assert.equal(confirm.props.disabled, true);
+    await h.act(async () => next.resolve({ ...fixtureQuote(currentDraft!), route: undefined } as unknown as RideQuote)); await settle(h);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.quote, undefined);
+    const retry = tree.root.findAll((n: ReactTestInstance) => String(n.type) === 'Pressable' &&
+      String(n.props.accessibilityLabel).includes('Reintenta'))[0]!;
+    assert.ok(retry); await h.act(async () => retry.props.onPress()); await settle(h);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.quote, undefined);
+    await h.act(async () => press(tree, 'No pudimos calcular la ruta. Reintenta.')); await settle(h);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.quote.id, 'recovered-current-route');
+    assert.deepEqual(nativeNode(tree, 'PassengerMapContent').props.quote.destination, currentDraft!.destination);
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await h.act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+});
+
+test('a late quote for the previous selection cannot replace the currently rendered route', async () => {
+  const fixture = createPassengerFixtureGateway(clock); const late = deferred<RideQuote>();
+  let oldDraft: Parameters<PassengerGateway['quote']>[0] | undefined;
+  const h = createHarness(); const tree = await h.render({ ...fixture.gateway,
+    quote: async (draft: Parameters<PassengerGateway['quote']>[0]) => {
+      if (draft.destination.id === fixturePlaces[1]!.id) { oldDraft = draft; return late.promise; }
+      return { ...fixtureQuote(draft), id: 'current-destination-route' };
+    },
+  });
+  try {
+    await settle(h);
+    await h.act(async () => press(tree, `${fixturePlaces[1]!.name}, ${fixturePlaces[1]!.address}`)); await settle(h);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.quote, undefined);
+    await h.act(async () => press(tree, `Destino ${fixturePlaces[1]!.name}`));
+    await h.act(async () => nativeNode(tree, 'TextInput').props.onChangeText('Centro')); await settle(h);
+    await h.act(async () => press(tree, `${fixturePlaces[2]!.name}, ${fixturePlaces[2]!.address}`)); await settle(h);
+    const before = nativeNode(tree, 'PassengerMapContent').props.quote;
+    assert.equal(before.id, 'current-destination-route');
+    await h.act(async () => late.resolve(fixtureQuote(oldDraft!))); await settle(h);
+    assert.equal(nativeNode(tree, 'PassengerMapContent').props.quote, before);
+    assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+  } finally { await h.act(async () => tree.unmount()); h.client.clear(); fixture.controls.dispose(); }
+});
 
 test('a destination becomes recent only after explicit location confirmation', async () => {
   const fixture = createPassengerFixtureGateway(clock);

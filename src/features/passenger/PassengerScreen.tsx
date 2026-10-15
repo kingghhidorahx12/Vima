@@ -480,6 +480,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         </>}
       </> : reviewing ? <>
         {addressFields}
+        {flow.loadingQuote ? <ActivityIndicator accessibilityLabel="Calculando ruta y tarifa" color={theme.roles.positiveStrong} /> : null}
         {gateway.saveFavorite && flow.destination ? <TextAction
           label={flow.favorites.some(place => (place.canonicalId ?? place.id) === (flow.destination?.canonicalId ?? flow.destination?.id))
             ? 'En Favoritos' : 'Agregar a Favoritos'} onPress={() => {
@@ -488,7 +489,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
               ? flow.removeFavorite(id) : flow.saveFavorite(place));
           }} /> : null}
         <VimaButton label="Confirmar ubicaciones"
-          disabled={!validDraft(flow.origin, flow.destination)} onPress={() => {
+          disabled={!validDraft(flow.origin, flow.destination) || flow.phase !== 'home' && (!flow.quote || flow.loadingQuote)} onPress={() => {
             setReviewedDraft(draftKey);
             setRouteFitRequestId(++routeFitSerial.current);
             void flow.confirmLocations();

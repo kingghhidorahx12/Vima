@@ -35,6 +35,24 @@ test('Local Places aliases dedupe provider identities and do not inject irreleva
   assert.equal(rankingReason(localPlaces[1]!, 'UAEM Atlacomulco', localPlaces[1]!.aliases).reason, 'exact-name:explicit-region');
 });
 
+test('reviewed Plaza identities collapse to the local coordinate, never other businesses or branches', () => {
+  const plaza = localPlaces[0]!;
+  const suggestions = plaza.providerRefs!.map((canonicalId, index) => ({ id: `session-${index}`, canonicalId,
+    name: 'Plaza Atlacomulco', address: 'Circuito Vial Jorge Jiménez Cantú 1288, Atlacomulco',
+    regionId: 'atlacomulco', provenance: 'provider' as const }));
+  const shops = ['Promoda Plaza Atlacomulco', 'Boliche Plaza Atlacomulco'].map((name, i) =>
+    ({ ...suggestions[0]!, id: `shop-${i}`, canonicalId: `tomtom:shop-${i}`, name }));
+  const unrelated = { ...suggestions[0]!, id: 'other-branch', canonicalId: 'tomtom:unreviewed', address: 'Otra calle, Atlacomulco' };
+  for (const query of ['Plaza', 'Plaza Atlacomulco']) {
+    const ranked = rankRegionalPlaces([...suggestions, ...shops, unrelated], localPlaces, query);
+    assert.equal(ranked[0]!.id, plaza.id);
+    assert.deepEqual((ranked[0] as typeof plaza).coordinate, [-99.88795, 19.79021]);
+    assert.ok(suggestions.every(p => !ranked.some(r => r.id === p.id)));
+    assert.ok([...shops, unrelated].every(p => ranked.some(r => r.id === p.id)));
+  }
+  assert.equal(samePlace(suggestions[1]!, plaza), true); // Wire canonicalId survives without providerRef/coordinate.
+});
+
 test('canonical identity preserves neighboring branches and requires explicit evidence for an alias', () => {
   const branch = { id: 'branch-a', name: 'Coppel', address: 'Atlacomulco', coordinate: [-99.87, 19.80] as const,
     provenance: 'provider' as const, regionId: 'atlacomulco' };
@@ -181,4 +199,19 @@ test('mobile source boundary excludes server provider credential, URLs and impor
   assert.doesNotMatch(display, /key=\$|TOMTOM_API_KEY/);
   const route = fs.readFileSync('app/dev/passenger.tsx', 'utf8');
   assert.match(route, /__DEV__ && process\.env\.EXPO_PUBLIC_VIMA_FIXTURES === '1'/);
+});
+
+test('live quote refuses a route snapshot for another destination instead of relabelling it with the current draft', async () => {
+  const origin = { id: 'origin', name: 'Origen', address: '', coordinate: [-99, 19] as const };
+  const destination = { id: 'current', name: 'Destino actual', address: '', coordinate: [-98, 20] as const };
+  const previous = { ...destination, id: 'previous', coordinate: [-97, 21] as const };
+  const client = createGeospatialClient({ async request(input) {
+    return input.decode({ status: 'unpriced', reason: 'pricing_not_configured', routePreview: {
+      id: 'previous-route', createdAt: 1, expiresAt: 300001, origin, destination: previous, stops: [],
+      route: { geometry: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [origin.coordinate, previous.coordinate] } },
+        bounds: { southwest: origin.coordinate, northeast: previous.coordinate }, distanceMeters: 1000, durationSeconds: 100 },
+    } });
+  } }, 500);
+  const gateway = createPassengerLiveGateway(client, async () => origin);
+  await assert.rejects(gateway.quote({ origin, destination, stops: [] }, undefined, 'current-operation'), { code: 'route_unavailable' });
 });

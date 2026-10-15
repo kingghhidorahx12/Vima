@@ -196,6 +196,31 @@ test('Passenger origin replaces coincident blue location once and survives quote
   await h.act(async () => tree.unmount());
 });
 
+test('Passenger removes cancelled geometry, keeps no route while waiting and renders only the new quote after Search', async () => {
+  const h = createMapHarness({ reduced: true });
+  const { PassengerMap } = h.load('src/features/passenger/PassengerMap.tsx');
+  const origin = { id: 'origin', name: 'Origen', address: '', coordinate: [-99, 19] };
+  const oldDestination = { id: 'old', name: 'Anterior', address: '', coordinate: [-98, 20] };
+  const destination = { id: 'new', name: 'Actual', address: '', coordinate: [-97, 21] };
+  const route = (end: typeof destination) => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [origin.coordinate, end.coordinate] } });
+  const oldQuote = { origin, destination: oldDestination, route: route(oldDestination) };
+  const newQuote = { origin, destination, route: route(destination) };
+  const config = { viewport: () => ({ center: origin.coordinate, zoom: 14 }), route: { width: 4, opacity: 1 } };
+  const scene = (quote: unknown, search = false) => React.createElement(PassengerMap, {
+    quote, origin, destination, home: false, ready: true, sheetHeight: 300, searchPresentationActive: search, config,
+  });
+  const source = () => tree.root.findAllByType('MapLibreSource' as never).filter(n => n.props.id === 'passenger-route-source');
+  const tree: ReactTestRenderer = await h.render(scene(oldQuote));
+  try {
+    assert.deepEqual(JSON.parse(source()[0]!.props.data).geometry.coordinates, oldQuote.route.geometry.coordinates);
+    await h.act(async () => tree.update(scene(undefined, true))); assert.equal(source().length, 0);
+    await h.act(async () => tree.update(scene(undefined))); assert.equal(source().length, 0);
+    await h.act(async () => tree.update(scene(newQuote)));
+    assert.deepEqual(JSON.parse(source()[0]!.props.data).geometry.coordinates, newQuote.route.geometry.coordinates);
+    assert.notDeepEqual(JSON.parse(source()[0]!.props.data).geometry.coordinates, oldQuote.route.geometry.coordinates);
+  } finally { await h.act(async () => tree.unmount()); }
+});
+
 test('pin entrance follows coordinate changes, not quote-style place object replacements', async () => {
   const h = createMapHarness({ reduced: false });
   const { PassengerMapPin } = h.load('src/features/passenger/PassengerMapPin.tsx');

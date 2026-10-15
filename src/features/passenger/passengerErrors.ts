@@ -32,6 +32,7 @@ export function passengerErrorMessage(error: unknown): string {
   const candidate = error as { message?: unknown; code?: unknown; name?: unknown };
   const message = typeof candidate.message === 'string' ? candidate.message : '';
   const code = typeof candidate.code === 'string' ? candidate.code : '';
+  if (code === 'route_unavailable') return 'No pudimos calcular la ruta. Reintenta.';
   if (tripCodes.has(code) || tripCodes.has(message) || tripMessages.has(message) || candidate.name === 'TripHttpSnapshotError')
     return passengerTripUpdateError;
   return approvedProductMessages.has(message) ? message : passengerActionError;

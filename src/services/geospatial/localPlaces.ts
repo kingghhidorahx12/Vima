@@ -28,7 +28,10 @@ export interface RegionalRankingPolicy {
 export const approvedLocalPlaces: readonly VimaLocalPlace[] = [
   { id: 'vima-local:plaza-atlacomulco', canonicalName: 'Plaza Atlacomulco', name: 'Plaza Atlacomulco',
     address: 'Circuito Vial Jorge Jiménez Cantú 1288, Las Mercedes, Atlacomulco',
-    coordinate: [-99.88795, 19.79021], provenance: 'vima-local', regionId: 'atlacomulco', category: 'mall', status: 'verified' },
+    coordinate: [-99.88795, 19.79021], provenance: 'vima-local', regionId: 'atlacomulco', category: 'mall', status: 'verified',
+    // Same reviewed name + street + number. The second provider record is misplaced by 6 km.
+    // These opaque references identify this plaza only, never its individual businesses.
+    providerRefs: ['tomtom:ab2591cb4dd5ace20f86facb5b6312e8', 'tomtom:657d7b1c2ac2e9649cc2a79df5bcd488'] },
   { id: 'vima-local:cu-uaem-atlacomulco', canonicalName: 'Centro Universitario UAEM Atlacomulco',
     name: 'Centro Universitario UAEM Atlacomulco', aliases: ['Centro Universitario Atlacomulco', 'UAEM Atlacomulco'],
     address: 'Carretera Toluca–Atlacomulco km 60, Atlacomulco',

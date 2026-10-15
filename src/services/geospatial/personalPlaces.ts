@@ -2,6 +2,7 @@ import type { Coordinate } from '../../map/models.ts';
 import type { ResolvedPlace } from './contracts.ts';
 import { canonicalId } from './placeIdentity.ts';
 import { parsePlaceImageRef, type PlaceImageRef } from './placeMedia.ts';
+import { approvedLocalPlaces } from './localPlaces.ts';
 
 export interface SavedPlace {
   readonly canonicalId: string; readonly name: string; readonly address: string;
@@ -26,8 +27,12 @@ function sanitize(value: unknown): SavedPlace | null {
     Math.abs(v.coordinate[0] as number) > 180 || Math.abs(v.coordinate[1] as number) > 90 ||
     typeof v.savedAt !== 'number' || !Number.isFinite(v.savedAt) || v.savedAt < 0) return null;
   const image = parsePlaceImageRef(v.image);
+  // Read-time repair of explicitly reviewed identities only. Keep the stored ID
+  // (including remove semantics), media and timestamp; never rewrite the user's store.
+  const verified = approvedLocalPlaces.find(place => place.status === 'verified' &&
+    (place.id === v.canonicalId || place.providerRefs?.includes(v.canonicalId as string)));
   return { canonicalId: v.canonicalId, name: v.name, address: v.address,
-    coordinate: [v.coordinate[0] as number, v.coordinate[1] as number], savedAt: v.savedAt,
+    coordinate: verified?.coordinate ?? [v.coordinate[0] as number, v.coordinate[1] as number], savedAt: v.savedAt,
     ...(typeof v.regionId === 'string' ? { regionId: v.regionId } : {}),
     ...(typeof v.category === 'string' ? { category: v.category } : {}),
     ...(image ? { image } : {}) };

@@ -5,6 +5,7 @@ import { geospatialClientConfig } from './config.ts';
 import type { PersonalPlacesRepository, SavedPlace } from './personalPlaces.ts';
 import { createPlaceMediaResolver } from './placeMedia.ts';
 import type { MatchingClient } from '../matching/client.ts';
+import { GeospatialError } from './contracts.ts';
 
 const toPlace = (place: SavedPlace) => ({ ...place, id: place.canonicalId });
 
@@ -49,6 +50,9 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
       if (!operationId) throw new Error('quote_operation_required');
       const pricing = await client.quote({ ...draft, operationId }, signal);
       const snapshot = pricing.status === 'priced' ? pricing.quote : pricing.routePreview;
+      const locations = (value: typeof draft) => JSON.stringify([value.origin, ...value.stops, value.destination]
+        .map(place => [place.id, place.coordinate]));
+      if (locations(snapshot) !== locations(draft)) throw new GeospatialError('route_unavailable');
       const route = snapshot.route;
       return { ...draft, id: snapshot.id, pricing, route: route.geometry, paymentMethod: 'Efectivo',
         durationMinutes: Math.ceil((route.trafficDurationSeconds ?? route.durationSeconds) / 60),

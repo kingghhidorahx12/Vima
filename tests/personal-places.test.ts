@@ -1,6 +1,37 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createPersonalPlaces, RECENT_PLACE_LIMIT } from '../src/services/geospatial/personalPlaces.ts';
+import { approvedLocalPlaces } from '../src/services/geospatial/localPlaces.ts';
+
+test('previously saved Plaza references use the verified coordinate without migration, lost metadata or merging shops', async () => {
+  const plaza = approvedLocalPlaces[0]!;
+  const saved = [...plaza.providerRefs!, plaza.id, 'tomtom:independent-shop'].map(canonicalId => ({
+    canonicalId, name: 'Plaza Atlacomulco', address: 'Dirección guardada', coordinate: [-99.92308, 19.8338],
+    savedAt: 123, image: { source: 'vima', assetId: 'approved-image', version: 1 },
+  }));
+  const state = new Map([
+    ['vima.favorite-places.v1', JSON.stringify({ version: 1, places: saved })],
+    ['vima.recent-destinations.v1', JSON.stringify({ version: 1, places: saved })],
+    ['vima.saved-slots.v1', JSON.stringify({ version: 1, home: saved[1], work: saved[3] })],
+  ]);
+  const before = [...state];
+  const repository = createPersonalPlaces({ getItem: async key => state.get(key) ?? null,
+    setItem: async (key, value) => { state.set(key, value); } });
+  for (const places of [await repository.favorites(), await repository.recents()]) {
+    assert.equal(places.length, 4);
+    places.slice(0, 3).forEach((place, index) => {
+      assert.deepEqual(place.coordinate, plaza.coordinate);
+      assert.equal(place.canonicalId, saved[index]!.canonicalId);
+      assert.equal(place.savedAt, 123); assert.deepEqual(place.image, saved[index]!.image);
+    });
+    assert.deepEqual(places[3]!.coordinate, saved[3]!.coordinate);
+  }
+  assert.deepEqual((await repository.slots()).home?.coordinate, plaza.coordinate);
+  assert.deepEqual((await repository.slots()).work?.coordinate, saved[3]!.coordinate);
+  assert.deepEqual([...state], before);
+  await repository.removeFavorite(saved[1]!.canonicalId);
+  assert.equal((await repository.favorites()).length, 3);
+});
 
 test('favorites and confirmed destinations are versioned, bounded, private and survive repository restart', async () => {
   const state = new Map<string, string>();
