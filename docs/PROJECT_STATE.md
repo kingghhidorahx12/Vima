@@ -1,5 +1,23 @@
 # Estado real del proyecto
 
+## Passenger P1 — cierre de QA físico Android (2026-10-15)
+
+- **VERIFICADO según reporte del usuario en dos teléfonos Android:** OTA
+  `01a140f3-4abf-78d2-b768-30a2513d6e41` (identificador corto `01a140f3`),
+  canal exclusivo `product-access-preview`, environment `production`,
+  runtime `0.0.2`. Resultado de las cinco comprobaciones: **5/5 PASS**.
+- Perfil muestra el identificador de OTA correcto; «Confirma tu viaje» y
+  «Buscando conductor» encuadran la ruta; cancelar y repetir conserva la línea
+  azul; pan manual y «Recentrar ruta» funcionan en el dispositivo.
+- Validaciones automatizadas de la entrega **423/423 PASS**, según el reporte de
+  implementación; no se volvieron a ejecutar durante este registro documental.
+- Este cierre sustituye los pendientes anteriores de **esos cinco casos Android**
+  y de esa OTA, sin dar por verificados otros flujos, un viaje productivo completo,
+  Driver productivo ni iOS. **QA iOS PAUSADO**.
+- Registro exclusivamente documental: sin nuevas publicaciones OTA, APK, despliegues
+  Railway ni cambios a Passenger, Driver, matching, lifecycle o autenticación.
+
+
 ## Passenger P1 — versión y zoom QA 57021, preparación OTA 2026-10-15
 
 - Base real d7c9cbc, OTA de referencia 01a140b9-9aca-783d-90ef-6e927f761971.
