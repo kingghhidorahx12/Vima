@@ -110,8 +110,6 @@ export function ProductAuthScreen() {
         </View>
         <VimaButton label="Continuar" onPress={sendCode} loading={busy} disabled={!validMexicanPhone(phone)} />
         <VimaText variant="bodySmall" style={[styles.center, { color: theme.roles.textSecondary }]}>Te enviaremos un código por SMS.</VimaText>
-        <AccessAction label="Restaurar sesión existente" disabled={busy} onPress={() => { void restore(); }} style={styles.textAction}>
-          <VimaText variant="bodySmall" style={{ color: theme.roles.positiveStrong }}>Ya tengo sesión · Continuar</VimaText></AccessAction>
       </> : step === 'otp' ? <>
         <View testID="product-otp-field" style={styles.codeField}>
           <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.cells}>

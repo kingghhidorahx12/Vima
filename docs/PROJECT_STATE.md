@@ -1,5 +1,16 @@
 # Estado real del proyecto
 
+## Corrección de conectividad de la OTA — 2026-10-14
+
+- Demostrado en bytecode publicado: productAuthClient inlineó
+  `https://product.example.invalid` desde transformaciones Metro antiguas,
+  aunque EAS production y el APK usan el HTTPS productivo correcto.
+- Exportación release ahora limpia caché; aislamiento bloquea esos valores de
+  validación aunque el host correcto también aparezca. Se retira el CTA engañoso
+  «Ya tengo sesión · Continuar»; acceso existente sigue por teléfono/OTP.
+- No tocar SecureStore/datos, Railway ni QA; corrección compatible runtime 0.0.2.
+  Evidencia y procedimiento en [PRODUCT_PREVIEW_CONNECTIVITY_FIX.md](PRODUCT_PREVIEW_CONNECTIVITY_FIX.md).
+
 ## Preparación OTA Android para QA físico — 2026-10-14
 
 - Publicación autorizada exclusivamente al canal/rama EAS `product-access-preview`,

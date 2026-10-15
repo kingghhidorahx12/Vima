@@ -70,6 +70,7 @@ test('OTP has one native input hidden as a whole, preserves paste, autofill and 
     const tree = await h.renderAuth();
     try {
       await h.act(async () => input(tree, 'Teléfono mexicano').props.onChangeText('5512345678'));
+      assert.equal(tree.root.findAll((n: ReactTestInstance) => n.props.accessibilityLabel === 'Restaurar sesión existente').length, 0);
       await h.act(async () => button(tree, 'Continuar').props.onPress());
       const field = () => input(tree, 'Código de verificación de seis dígitos');
       assert.equal(tree.root.findAllByType('TextInput' as never).length, 1);

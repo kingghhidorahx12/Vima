@@ -7,7 +7,9 @@ const { spawnSync } = require('node:child_process');
 const temporary = '.validation/hermes-temp';
 fs.mkdirSync(temporary, { recursive: true });
 const cli = path.join(path.dirname(require.resolve('expo/package.json')), 'bin/cli');
-const result = spawnSync(process.execPath, [cli, 'export', '--platform', 'android', '--platform', 'ios', ...process.argv.slice(2)], {
+// Metro transforms may retain inlined EXPO_PUBLIC values from a different export.
+// A release export must never reuse that environment's module cache.
+const result = spawnSync(process.execPath, [cli, 'export', '--clear', '--platform', 'android', '--platform', 'ios', ...process.argv.slice(2)], {
   stdio: 'inherit', env: { ...process.env, EXPO_PUBLIC_VIMA_VARIANT: process.env.EXPO_PUBLIC_VIMA_VARIANT || 'production', TEMP: temporary, TMP: temporary, TMPDIR: temporary },
 });
 if (result.error) throw result.error;
