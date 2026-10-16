@@ -8,6 +8,7 @@ import { selectPricing } from './selector.ts';
 import { priceTrip } from './engine.ts';
 import { freezeSnapshot, createQuoteStore } from './quoteStore.ts';
 import type { QuoteResponse, QuoteDraft } from './contracts.ts';
+import { pickupAdjustmentMaxMeters, samePickup, withinPickupArea } from '../../src/services/geospatial/pickup.ts';
 
 export function createQuoteService(adapter: TomTomAdapter, gateway: GatewayConfig, pricing: PricingConfiguration, now = Date.now) {
   const store = createQuoteStore(now);
@@ -19,13 +20,22 @@ export function createQuoteService(adapter: TomTomAdapter, gateway: GatewayConfi
       address: p.address === '' ? '' : query(p.address, gateway), coordinate: coordinate(p.coordinate) };
   }
   return { store, pricingBasis: pricing.status === 'ready' ? pricing.config : undefined, async quote(input: unknown, context: UpstreamContext, owner?: string): Promise<QuoteResponse> {
-    const b = allowFields(input, ['operationId', 'origin', 'destination', 'stops']);
+    const b = allowFields(input, ['operationId', 'origin', 'referenceOrigin', 'destination', 'stops']);
     if (typeof b.operationId !== 'string' || !/^[A-Za-z0-9._:-]{16,128}$/.test(b.operationId) ||
       !Array.isArray(b.stops) || b.stops.length > gateway.maxStops) throw new GeospatialError('invalid_result');
     const draft: QuoteDraft = { origin: place(b.origin), destination: place(b.destination), stops: b.stops.map(place) };
+    if (b.referenceOrigin !== undefined) {
+      const reference = place(b.referenceOrigin);
+      if (!withinPickupArea(reference.coordinate, draft.origin.coordinate, gateway.pickupAdjustmentMaxMeters ?? pickupAdjustmentMaxMeters))
+        throw new GeospatialError('pickup_outside_area');
+      if (!samePickup(reference.coordinate, draft.origin.coordinate)) draft.referenceOrigin = reference;
+    }
     const points = [draft.origin.coordinate, ...draft.stops.map(p => p.coordinate), draft.destination.coordinate];
     let selection: ReturnType<typeof selectPricing> | undefined;
-    if (pricing.status === 'ready') { try { selection = selectPricing(pricing.config, points); } catch { /* Route preview still available. */ } }
+    if (pricing.status === 'ready') { try {
+      if (draft.referenceOrigin) selectPricing(pricing.config, [draft.referenceOrigin.coordinate, draft.referenceOrigin.coordinate]);
+      selection = selectPricing(pricing.config, points);
+    } catch { /* Route preview still available; an uncovered draft is never requestable. */ } }
     return store.getOrCreate(b.operationId, JSON.stringify(draft), async () => {
       let route;
       try { route = await adapter.route({ origin: draft.origin.coordinate, destination: draft.destination.coordinate,

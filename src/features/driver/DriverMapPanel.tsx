@@ -12,6 +12,7 @@ import { driverPresentation, driverGpsLabel, driverConnectionLabel } from './dri
 /** Primary operations stay fixed; route context and secondary actions can expand/scroll. */
 export function DriverMapPanel(props: ComponentProps<typeof DriverStatePanel> & {
   lifecycleSecondary?: ReactNode; onAccount?: () => void; onMinimumHeight: (height: number) => void;
+  restricted?: boolean;
 }) {
   const theme = useVimaTheme(); const presentation = driverPresentation(props.state);
   const assignment = props.state?.assignment;
@@ -44,7 +45,7 @@ export function DriverMapPanel(props: ComponentProps<typeof DriverStatePanel> & 
       </> : null}
       <VimaText variant="bodySmall">{assignment.value.vehicle.name} · {assignment.value.vehicle.color}</VimaText>
       {props.lifecycleSecondary}
-      {presentation.actionLabel && ['ASSIGNED', 'ARRIVED_PICKUP'].includes(assignment.state) ? <VimaButton secondary danger
+      {!props.restricted && presentation.actionLabel && ['ASSIGNED', 'ARRIVED_PICKUP'].includes(assignment.state) ? <VimaButton secondary danger
         label={presentation.actionLabel} disabled={props.busy || props.retryAvailable || !props.configured}
         onPress={() => props.onCancelAssignment(assignment.requestId)} /> : null}
     </ScrollView>

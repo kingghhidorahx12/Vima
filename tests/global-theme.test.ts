@@ -21,7 +21,7 @@ const settle = () => act(async () => { await new Promise(resolve => setTimeout(r
 
 test('one root provider owns the global theme and Driver cannot override it', () => {
   const root = readFileSync('src/providers/RootProviders.tsx', 'utf8');
-  const driver = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
+  const driver = readFileSync('src/features/driver/DriverOperationalSurface.tsx', 'utf8');
   const map = readFileSync('src/map/VimaMap.tsx', 'utf8');
   assert.equal((root.match(/<VimaThemeProvider\b/g) ?? []).length, 1);
   assert.match(root, /EXPO_PUBLIC_VIMA_THEME/);

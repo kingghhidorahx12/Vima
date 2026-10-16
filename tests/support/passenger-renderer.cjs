@@ -14,7 +14,7 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
   const repeats = [];
   const cancellations = [];
   const appStateListeners = new Set();
-  const projection = { point: [190, 120], project: undefined };
+  const projection = { point: [190, 120], project: undefined, coordinate: [-99.88795, 19.79021], unproject: undefined };
   const modules = new Map();
   const mounted = { map: 0, unmountedMap: 0, sheet: 0, haptics: [], keyboardDismiss: 0, blur: 0, inputFocused: false };
   const root = path.resolve(__dirname, '../..');
@@ -71,11 +71,13 @@ function createHarness(boundaryOverrides = {}, { reduced = false, insets = { top
     const resolved = path.resolve(filename);
     if (modules.has(resolved)) return modules.get(resolved).exports;
     if (resolved.endsWith('VimaMap.tsx')) return { VimaMap: function Map(props) {
-      React.useImperativeHandle(props.ref, () => ({ project: (...args) => projection.project ? projection.project(...args) : Promise.resolve(projection.point) }), []);
+      React.useImperativeHandle(props.ref, () => ({ project: (...args) => projection.project ? projection.project(...args) : Promise.resolve(projection.point),
+        unproject: (...args) => projection.unproject ? projection.unproject(...args) : Promise.resolve(projection.coordinate) }), []);
       React.useEffect(() => { mounted.map++; return () => { mounted.unmountedMap++; }; }, []);
       return React.createElement('NativeMapBoundary', props, props.children);
     } };
     if (resolved.endsWith('PassengerMap.tsx')) return { PassengerMap: 'PassengerMapContent' };
+    if (resolved.endsWith('MapMarker.tsx')) return { MapMarker: 'MapMarkerBoundary' };
     if (resolved.endsWith('VimaRideSheet.tsx') && !realRideSheet) return {
       createRideSheetInteraction: (height, targetOffset, allowedOffsets) => ({ height, targetOffset, allowedOffsets }),
       VimaRideSheet: function Sheet(props) { React.useEffect(() => { mounted.sheet++; }, []);

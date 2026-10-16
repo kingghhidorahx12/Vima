@@ -12,6 +12,6 @@ export interface DriverState {
   offer?: { id: string; requestId: string; expiresAt: number; etaMinutes: number; pickup: Place };
   assignment?: { requestId: string; pickup: Place; value: Omit<Assignment, 'pin'>; state: RequestState; lifecycle: TripLifecycle; stops: readonly Place[]; additionCodes: readonly string[] };
 }
-export interface MatchingIdentity { accountId: string; role: 'passenger' | 'driver'; matchingAvailable: boolean }
+export interface MatchingIdentity { accountId: string; role: 'passenger' | 'driver'; matchingAvailable: boolean; pickupAdjustmentMaxMeters?: number }
 export interface RevisionSignal { revision: number }
 export interface MatchingPassengerSnapshot extends PassengerTrip { requestState: RequestState; lifecycle: TripLifecycle }

@@ -45,7 +45,7 @@ test('Mexican OTP onboarding, existing login, passenger-only capability, atomic 
     assert.throws(() => auth.authConfig.profile(registered.session.accountId), /forbidden/);
     assert.equal(auth.authConfig.authenticate(`Bearer ${registered.session.accessToken}`).accountId, registered.session.accountId);
     const store = JSON.parse(await readFile(join(directory, 'auth-v1.json'), 'utf8'));
-    assert.equal(store.version, 1); assert.equal(store.users[0].name, 'María López');
+    assert.equal(store.version, 2); assert.equal(store.users[0].name, 'María López');
     assert.ok(store.sessions.every((item: Record<string, unknown>) => !('accessToken' in item) && !('refreshToken' in item)));
 
     // Same verified phone now signs in; registration is never offered again.

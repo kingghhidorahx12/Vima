@@ -16,6 +16,10 @@ import { PassengerMapPin, PassengerUserLocation } from './PassengerMapPin';
 import { visualTokens as t } from '../../design/tokens';
 import type { PassengerRouteFitIntent } from './usePassengerRouteFit';
 import { locationCtaHeight, mapControlSize, passengerPinClearance } from './mapCameraFootprint';
+import { PickupAreaLayer, pickupArea } from '../../map/PickupAreaLayer';
+import { normalizeCoordinate } from '../../map/models';
+import { usePassengerAssignmentTracking } from '../../map/usePassengerVehicleTracking';
+import type { PassengerVehicleTracking } from '../../map/passengerVehicleTracking';
 
 /** Required appearance/viewports are injected. The unfinished map design gets no production defaults. */
 export interface PassengerMapConfig {
@@ -26,15 +30,20 @@ export interface PassengerMapConfig {
   readonly vehicleMotion: VehicleMotionConfig;
 }
 export function PassengerMap({ quote, assignment, requestState, origin, destination, currentLocation, home, ready, sheetHeight, topOcclusion = 0, homeBottomOcclusion, locationCtaVisible = false, searchPresentationActive,
-  cameraMode = 'automatic', recenter, fitRoute, northRequest, layers, displayKeyAvailable = false, active = true, manualSelection, config, onIncidentSelect }: {
+  cameraMode = 'automatic', recenter, fitRoute, northRequest, layers, displayKeyAvailable = false, active = true, manualSelection, pickupSelection, config, onIncidentSelect, vehicleTracking, online = true }: {
   quote?: RideQuote; assignment?: Assignment; requestState?: RequestState; origin: Place | null; destination: Place | null; currentLocation?: Place | null; home: boolean;
   ready: boolean; sheetHeight: number; topOcclusion?: number; homeBottomOcclusion?: number; locationCtaVisible?: boolean; layersMenuOpen?: boolean; searchPresentationActive?: boolean; cameraMode?: CameraMode;
   recenter?: RecenterIntent; fitRoute?: Omit<PassengerRouteFitIntent, 'sheetHeight'> & { sheetHeight?: number }; northRequest?: number;
   layers?: TrafficLayerPreferences; displayKeyAvailable?: boolean; active?: boolean;
+  online?: boolean; vehicleTracking?: PassengerVehicleTracking;
   onIncidentSelect?: (details: IncidentDetails) => void;
   manualSelection?: { coordinate: Place['coordinate']; kind: 'origin' | 'destination' } | null; config: PassengerMapConfig;
+  pickupSelection?: { initial: Place['coordinate']; reference?: Place['coordinate']; meters: number; outside: boolean };
 }) {
   const vehicle = assignment?.sample;
+  const fallbackTracking = usePassengerAssignmentTracking(vehicleTracking || home ? undefined : assignment, requestState, online);
+  const tracking = vehicleTracking ?? fallbackTracking;
+  const visual = !home ? tracking.state.visual : undefined;
   const location = vehicle?.capturedAt !== undefined && !home &&
     ['ASSIGNED', 'ARRIVED_PICKUP', 'IN_PROGRESS'].includes(requestState ?? '')
     ? { coordinate: vehicle.coordinate, receivedAt: vehicle.capturedAt,
@@ -68,6 +77,13 @@ export function PassengerMap({ quote, assignment, requestState, origin, destinat
     : previousRecenterPadding, [home, homeBottomOcclusion, target, sheetHeight, previousRecenterPadding]);
   const homeTarget = useMemo(() => home ? { ...target, padding: centeredPadding } : target,
     [home, target, centeredPadding]);
+  const pickupKey = JSON.stringify(pickupSelection?.initial);
+  const pickupInitial = useMemo(() => pickupKey ? normalizeCoordinate(JSON.parse(pickupKey)) : undefined, [pickupKey]);
+  const pickupMeters = pickupSelection?.meters;
+  const pickupTarget = useMemo(() => pickupInitial && pickupMeters ? {
+    coordinates: pickupArea(pickupInitial, pickupMeters).geometry.coordinates[0]!.map(normalizeCoordinate),
+    padding: { top: topOcclusion + 24, bottom: sheetHeight + 24, left: 24, right: 24 } } : undefined,
+    [pickupInitial, pickupMeters, topOcclusion, sheetHeight]);
   const safetyMargin = fitRoute?.safetyMargin ?? 0;
   const horizontalFitPadding = Math.max(target.padding.left ?? 0, target.padding.right ?? 0, passengerPinClearance.side + safetyMargin);
   const rightFitPadding = safetyMargin > 0 ? Math.max(horizontalFitPadding,
@@ -102,15 +118,19 @@ export function PassengerMap({ quote, assignment, requestState, origin, destinat
   const showCurrentLocation = !!currentLocation && !(visibleOrigin && samePosition(visibleOrigin.coordinate))
     && !(manualOrigin && samePosition(manualOrigin));
   return <>
-    <Camera target={ready ? homeTarget : undefined} recenterPadding={ready ? centeredPadding : undefined} northRequest={ready ? northRequest : undefined}
-      mode={searchPresentationActive ? 'search-locked' : cameraMode}
+    <Camera target={ready ? pickupTarget ?? homeTarget : undefined} recenterPadding={ready ? pickupTarget?.padding ?? centeredPadding : undefined} northRequest={ready ? northRequest : undefined}
+      mode={searchPresentationActive && !pickupSelection ? 'search-locked' : cameraMode}
       recenter={ready ? recenter : undefined} fitRoute={ready && fitRoute && fitHasRoom ? { ...fitRoute, padding: fitPadding } : undefined} />
+    {pickupSelection?.reference ? <PickupAreaLayer reference={pickupSelection.reference} meters={pickupSelection.meters} outside={pickupSelection.outside} /> : null}
     {displayKeyAvailable ? <TrafficFlowLayer enabled={!!layers?.traffic} /> : null}
     {displayKeyAvailable ? <IncidentLayer enabled={!!layers?.incidents} onSelect={onIncidentSelect} /> : null}
     {!searchPresentationActive && (pickupPhase ? assignment?.routeToOrigin ?? quote?.route : quote?.route) ? <RouteLayer id="passenger-route" data={(pickupPhase ? assignment?.routeToOrigin ?? quote?.route : quote?.route)!}
       activeTone="accentBlue" state="active" appearance={config.route} active={active} /> : null}
     {!searchPresentationActive ? <VehicleMarker key={assignment?.id} id="passenger-assigned-vehicle"
-      location={location} sequence={vehicle?.sequence ?? 0} /> : null}
+      location={visual ? { coordinate: visual.fix.coordinate, receivedAt: visual.fix.receivedAt,
+        ...(visual.heading !== null ? { heading: visual.heading } : {}) } : undefined}
+      sequence={visual?.fix.sequence ?? 0} online={online}
+      presentation={{ paused: tracking.paused, opacity: tracking.opacity, reconnected: !!visual?.reconnected }} /> : null}
     {showCurrentLocation ? <PassengerUserLocation place={currentLocation!} active={active} /> : null}
     {visibleOrigin ? <PassengerMapPin place={visibleOrigin} kind="origin" /> : null}
     {!searchPresentationActive && (quote?.destination ?? destination) ? <PassengerMapPin place={(quote?.destination ?? destination)!} kind="destination" /> : null}

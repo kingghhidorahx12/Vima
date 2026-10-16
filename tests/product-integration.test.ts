@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
 import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createProductAuthClient, ProductAuthClientError } from '../src/services/auth/productSession.ts';
 import { ApiError } from '../src/services/api/client.ts';
 import { createMatchingClient } from '../src/services/matching/client.ts';
@@ -238,7 +239,8 @@ test('protected Passenger unmounts on rejected refresh while mounted, clears que
     'src/services/geospatial/mobileInstallation.ts': { mobileInstallationId: () => {} },
     'src/services/location/currentPlace.ts': { locateCurrentPlace: () => {} },
     'src/features/auth/AccessSurface.tsx': { RestorationSurface: () => React.createElement('View') },
-  }, externalOverrides: { 'expo-router': { useRouter: () => router }, '@tanstack/react-query': { useQueryClient: () => ({ clear: () => { clears++; } }) } } });
+  }, externalOverrides: { 'expo-router': { useRouter: () => router }, 'expo-sqlite/kv-store': { getItem: async () => null },
+    '@tanstack/react-query': { QueryClient, QueryClientProvider, useQueryClient: () => ({ clear: () => { clears++; } }) } } });
   const tree = await h.render(React.createElement(h.load('src/features/passenger/ProductPassengerScreen.tsx').default));
   try {
     assert.equal(mounts, 1); revoked = true;

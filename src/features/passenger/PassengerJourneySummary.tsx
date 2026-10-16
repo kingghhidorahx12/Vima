@@ -7,6 +7,7 @@ import { passengerSurfaces } from '../../design/presentation';
 import { visualTokens as t } from '../../design/tokens';
 import { PlaceThumbnail } from './PlaceThumbnail';
 import type { PassengerGateway, PassengerTrip, Place } from './model';
+import type { PassengerVehicleTracking } from '../../map/passengerVehicleTracking';
 
 /** Read-only destination: no second selection or invented media. */
 export function DestinationSummary({ place, resolveMedia }: { place: Place; resolveMedia?: PassengerGateway['resolvePlaceMedia'] }) {
@@ -18,7 +19,7 @@ export function DestinationSummary({ place, resolveMedia }: { place: Place; reso
   </View>;
 }
 
-export function JourneyStatus({ trip }: { trip: PassengerTrip }) {
+export function JourneyStatus({ trip, vehicleTracking }: { trip: PassengerTrip; vehicleTracking?: PassengerVehicleTracking }) {
   const theme = useVimaTheme(); const state = trip.requestState;
   const title = state === 'IN_PROGRESS' ? 'Viaje en curso' : state === 'PAYMENT_PENDING' ? 'Pago pendiente'
     : state === 'ARRIVED_PICKUP' ? 'Tu conductor llegó' : 'Tu conductor va en camino';
@@ -29,6 +30,10 @@ export function JourneyStatus({ trip }: { trip: PassengerTrip }) {
         ? 'El conductor confirmará el pago en efectivo.' : state === 'ARRIVED_PICKUP'
           ? 'Comparte tu código al encontrarte con el conductor.' : trip.assignment ? `Tiempo estimado de recogida: ${trip.assignment.etaMinutes} min` : 'Esperando información del conductor.'}
     </VimaText>
+    {vehicleTracking?.message && ['ASSIGNED', 'ARRIVED_PICKUP', 'IN_PROGRESS'].includes(state ?? '') ?
+      <VimaText testID="passenger-vehicle-freshness" variant="caption" style={{ color: theme.roles.textSecondary }}>
+        {vehicleTracking.message}
+      </VimaText> : null}
   </View>;
 }
 

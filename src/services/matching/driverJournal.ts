@@ -6,6 +6,7 @@ import { normalizeCoordinate } from '../../map/models.ts';
 type Entry = { kind: 'telemetry'; sample: TripTelemetry } | { kind: 'command'; commandId: string; command: PostPinCommand };
 interface Journal { version: 1; requestId: string; assignmentId: string; entries: Entry[] }
 interface Storage { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem(key: string): Promise<void> }
+const productQueues = new WeakMap<Storage, Map<string, Promise<unknown>>>();
 type Client = Pick<MatchingClient, 'driver' | 'telemetry' | 'lifecycleCommand'>;
 const integer = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
 const id = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(v);
@@ -25,9 +26,11 @@ function decode(raw: string): Journal {
 }
 
 /** An ordered durable outbox, never a local trip state. Every replay starts with authoritative GET. */
-export function createDriverJournal(storage: Storage, accountId: string, client: Client, received: (state: DriverState) => void) {
-  const key = `vima.driver-journal.v1.${accountId}`;
+export function createDriverJournal(storage: Storage, accountId: string, client: Client, received: (state: DriverState) => void, namespace?: 'product') {
+  const key = `vima.${namespace ? 'product.' : ''}driver-journal.v1.${accountId}`;
   let tail: Promise<unknown> = Promise.resolve();
+  if (namespace && !productQueues.has(storage)) productQueues.set(storage, new Map());
+  const shared = namespace ? productQueues.get(storage)! : undefined;
   let acknowledged: DriverState | undefined;
   const latest = (snapshot: DriverState) => acknowledged && acknowledged.revision > snapshot.revision ? acknowledged : snapshot;
   const observe = (snapshot: DriverState) => {
@@ -40,7 +43,11 @@ export function createDriverJournal(storage: Storage, accountId: string, client:
       throw new Error('journal_requires_reconcile');
     return current;
   };
-  const serial = <T>(work: () => Promise<T>) => { const next = tail.then(work); tail = next.catch(() => {}); return next; };
+  const serial = <T>(work: () => Promise<T>) => {
+    const next = (shared?.get(key) ?? tail).then(work); tail = next.catch(() => {});
+    if (shared) { const current = tail; shared.set(key, current); void current.then(() => { if (shared.get(key) === current) shared.delete(key); }); }
+    return next;
+  };
   const read = async () => { const raw = await storage.getItem(key); return raw === null ? null : decode(raw); };
   const write = (v: Journal) => storage.setItem(key, JSON.stringify(v));
   async function current(snapshot: DriverState) {

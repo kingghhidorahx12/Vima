@@ -44,6 +44,10 @@ import { IncidentCard } from './IncidentCard';
 import type { IncidentDetails } from '../../map/incidentDetails';
 import { SearchEntranceRegistry } from './searchEntrance';
 import { DestinationSummary, JourneyClosure, JourneyStatus } from './PassengerJourneySummary';
+import { PickupSelectionPanel } from './PickupSelectionPanel';
+import { FixedPickupPin } from '../../map/MapPlacePin';
+import { withinPickupArea } from '../../services/geospatial/pickup';
+import { usePassengerAssignmentTracking } from '../../map/usePassengerVehicleTracking';
 
 export interface PassengerBoundaries {
   readonly account?: () => void;
@@ -83,6 +87,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const [height, setHeight] = useState(0);
   const [mapWidth, setMapWidth] = useState(0);
+  const [nativeMapWidth, setNativeMapWidth] = useState(0);
   const [topChromeHeight, setTopChromeHeight] = useState(0);
   const [visibleSheetMeasure, setVisibleSheetMeasure] = useState<{ key: string; height: number }>();
   const nativeMap = useRef<VimaMapRef>(null);
@@ -139,6 +144,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const matching = isMatching(flow.phase);
   const lifecycleTitle = flow.trip?.requestState === 'ARRIVED_PICKUP' ? 'Tu conductor llegó' : flow.trip?.requestState === 'IN_PROGRESS' ? 'Viaje en curso' : flow.trip?.requestState === 'PAYMENT_PENDING' ? 'Pago pendiente' : flow.phase === 'completed' ? 'Viaje completado' : 'Tu conductor va en camino';
   const assignment = (flow.phase === 'assigned' || flow.phase === 'completed') ? flow.trip?.assignment : undefined;
+  const vehicleTracking = usePassengerAssignmentTracking(assignment, flow.trip?.requestState, flow.connection === 'online');
   const homeNormal = flow.phase === 'home' && flow.field === null && flow.destination === null;
   const navVisible = homeNormal;
   const navHeight = navVisible ? bottomNavigationHeight(bottomInset) : 0;
@@ -162,6 +168,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
   const searchBorder = useSearchFocusBorder(searchFocused);
   const homeRecentLimit = 3;
   const pickingMap = searchAction === 'map' || searchAction === 'contribute-map';
+  const pickingPickup = pickingMap && flow.field === 'origin' && !!flow.pickup;
+  const pickupCapture = useRef(0);
+  const pickupMode = useRef(pickingPickup);
+  const pickupCameraMoving = useRef(true);
+  useLayoutEffect(() => { pickupMode.current = pickingPickup; pickupCameraMoving.current = true; pickupCapture.current++; }, [pickingPickup]);
   const snap: SheetSnap = pickingMap ? 0 : flow.field ? 2 : 1;
   // A measurement generation is not React identity: the visible header and viewport stay mounted.
   const measureKey = JSON.stringify(flow.field ? ['search', flow.field, searchAction] :
@@ -208,6 +219,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       const targetOffset = sheetFrameHeight - panelHeight;
       return createRideSheetInteraction(sheetFrameHeight, targetOffset, [targetOffset]);
     }
+    if (pickingPickup && naturalHeight) {
+      const minimum = sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[0]! / 100;
+      const maximum = sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[1]! / 100;
+      const targetOffset = sheetFrameHeight - Math.min(maximum, Math.max(minimum, naturalHeight));
+      return createRideSheetInteraction(sheetFrameHeight, targetOffset, [targetOffset]);
+    }
     const base = rideSheetGeometry(sheetFrameHeight, snap);
     if (flow.field || !naturalHeight) return createRideSheetInteraction(sheetFrameHeight, base.targetOffset, [base.targetOffset]);
     // Content determines the single valid rest position while preserving the current drag range.
@@ -215,7 +232,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     const visibleHeight = Math.min(maximum, Math.max(sheetFrameHeight * t.components.bottomSheetSnapPointsPercent[0]! / 100, naturalHeight));
     const targetOffset = sheetFrameHeight - visibleHeight;
     return createRideSheetInteraction(sheetFrameHeight, targetOffset, [targetOffset]);
-  }, [sheetFrameHeight, snap, flow.field, flow.phase, reviewing, naturalHeight, homeFloatingSearch]);
+  }, [sheetFrameHeight, snap, flow.field, flow.phase, reviewing, naturalHeight, homeFloatingSearch, pickingPickup]);
   const measuredForCurrentGeneration = headerMeasure?.key === measureKey && contentMeasure?.key === measureKey &&
     viewportMeasure?.key === measureKey;
   const actualSheetHeight = measuredForCurrentGeneration ? viewportMeasure.height + headerHeight : undefined;
@@ -243,6 +260,24 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     ? Math.max(0, height - (interaction ? (interaction.height ?? sheetFrameHeight) - interaction.targetOffset : 0))
     : Math.max(0, height - visibleSheetHeight);
   const bottomFootprint = Math.max(0, height - usefulHeight);
+  const pickupPinPoint = [mapWidth / 2, (topOcclusion + usefulHeight) / 2] as const;
+  const pickupOutside = !!flow.pickup?.reference && !!flow.pickup.coordinate &&
+    !withinPickupArea(flow.pickup.reference.coordinate, flow.pickup.coordinate, flow.pickupLimit);
+  const pickupRead = useRef<() => void>(() => {});
+  useLayoutEffect(() => { pickupRead.current = () => {
+    if (!pickupMode.current || nativeMapWidth <= 0 || usefulHeight <= topOcclusion) return;
+    const capture = ++pickupCapture.current;
+    const nativePinPoint = [nativeMapWidth / 2, pickupPinPoint[1]] as [number, number];
+    void nativeMap.current?.unproject(nativePinPoint).then(coordinate => {
+      if (pickupMode.current && !pickupCameraMoving.current && capture === pickupCapture.current)
+        void flow.previewPickup(normalizeCoordinate(coordinate));
+    }).catch(() => { if (capture === pickupCapture.current) flow.failPickupCoordinate(); });
+  }; });
+  useEffect(() => {
+    // A settled viewport/keyboard change moves the visible pin, not the map.
+    // Read its new coordinate; an in-flight camera always waits for DidChange.
+    if (pickingPickup && !pickupCameraMoving.current) pickupRead.current();
+  }, [pickingPickup, nativeMapWidth, usefulHeight, topOcclusion]);
   const controlClearance = 40 * 2 + mapControlSize + t.spacing.scalePx[1]! * 3;
   const controlsFit = homeFloatingSearch ? usefulHeight - topOcclusion >= controlClearance
     : (interaction?.targetOffset ?? sheetFrameHeight) > 130;
@@ -270,6 +305,10 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     setSearchAction('results'); setSelectedCoordinate(null); flow.openField(target);
   };
   const openSearch = (query = '') => { dismissKeyboard(); openField('destination'); flow.setSearch(query); };
+  const openPickupMap = (adjustment = false) => {
+    dismissKeyboard(); setIncident(null); setLayersOpen(false); setSelectedCoordinate(null);
+    setMapUserControlled(false); setRecenter(undefined); setSearchAction('map'); flow.beginPickup(adjustment);
+  };
   const sheetTitle = flow.field ? pickingMap ? 'Elegir en el mapa' : searchAction === 'contribute-form' ? 'Agregar lugar' :
     searchAction === 'contribute-done' ? '' : flow.field === 'origin' ? '¿Desde dónde?' : '¿A dónde vamos?'
     : assignment ? (flow.trip?.requestState && flow.trip.requestState !== 'ASSIGNED' ? lifecycleTitle : `Llegará en ${assignment.etaMinutes} min`) : homePanel === 'saved' ? 'Lugares guardados'
@@ -303,6 +342,9 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           disabled={!reviewing && blocked} />
       </View>
     </View>
+    {flow.referenceOrigin ? <VimaText variant="caption" style={{ color: theme.roles.textSecondary }}>
+      Origen de referencia: {flow.referenceOrigin.name}</VimaText> : null}
+    <TextAction label="Ajustar recogida" onPress={() => openPickupMap(true)} disabled={blocked} />
   </View>;
   const header = <View ref={headerNode} testID="passenger-sheet-header" onTouchStart={dismissKeyboard}
     onLayout={(event) => { if (currentMeasureKey.current === measureKey) setHeaderMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
@@ -348,6 +390,11 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
     void mapLayerStorage.write(next);
   };
   const recenterMap = () => {
+    if (pickingPickup) {
+      const coordinate = flow.pickup?.reference?.coordinate ?? flow.currentLocation?.coordinate ?? flow.pickup?.initial?.coordinate;
+      if (coordinate) setRecenter(previous => ({ coordinate, sequence: (previous?.sequence ?? 0) + 1 }));
+      return;
+    }
     if (routeCanRecenter) {
       pendingCenter.current = null; setRecentering(false); setCentered(false); setRecenter(undefined);
       setMapUserControlled(false); setRouteRecenterRequest(value => (value ?? 0) + 1);
@@ -433,7 +480,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       <View ref={contentNode} testID="passenger-sheet-content" style={[styles.content, homeFloatingSearch && styles.homeContent,
         !navVisible && { paddingBottom: base + bottomInset }]}
         onLayout={(event) => { if (currentMeasureKey.current === measureKey) setContentMeasure({ key: measureKey, height: event.nativeEvent.layout.height }); }}>
-      {flow.field && pickingMap ? <>
+      {pickingPickup && flow.pickup ? <PickupSelectionPanel selection={flow.pickup} limit={flow.pickupLimit} online={flow.connection === 'online'}
+        onConfirm={() => { if (flow.confirmPickup()) { setSearchAction('results'); setMapUserControlled(false); } }}
+        onReference={flow.setPickupReference}
+        onRetry={() => { if (flow.pickup?.coordinate && !flow.pickup.coordinateError) void flow.previewPickup(flow.pickup.coordinate);
+          else pickupRead.current(); }}
+        onCancel={() => { pickupCapture.current++; flow.cancelPickup(); setSearchAction('results'); }} /> : flow.field && pickingMap ? <>
         <VimaText variant="bodySmall" style={styles.center}>Toca el mapa para elegir la ubicación</VimaText>
         <VimaButton label={searchAction === 'map' ? 'Confirmar ubicación' : 'Continuar'}
           disabled={!selectedCoordinate} onPress={() => { if (searchAction === 'map') confirmMapSelection();
@@ -460,6 +512,13 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         }} />
       </> : flow.field ? <>
         {!destinationSearchFloating ? searchField : null}
+        {flow.field === 'origin' && !flow.savedPicker ? <>
+          <VimaButton secondary label="Usar mi ubicación actual" disabled={!flow.canUseCurrentLocation || flow.pending}
+            onPress={() => { setSearchAction('results'); flow.useCurrentLocation(); }} />
+          <VimaButton secondary label="Seleccionar origen en el mapa" onPress={() => openPickupMap()} />
+          {flow.savedSlots.home ? <PlaceRow place={flow.savedSlots.home} presentation="list" onPress={() => choosePlace(flow.savedSlots.home!, 'origin')} /> : null}
+          {flow.savedSlots.work ? <PlaceRow place={flow.savedSlots.work} presentation="list" onPress={() => choosePlace(flow.savedSlots.work!, 'origin')} /> : null}
+        </> : null}
         {flow.savedPicker === 'home' || flow.savedPicker === 'work' ? <>
           <VimaButton secondary label="Usar mi ubicación actual" disabled={flow.locationLoading ||
             !flow.canUseCurrentLocation || flow.pending} onPress={() => { void flow.useCurrentLocationForSavedSlot(); }} />
@@ -480,7 +539,8 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
             <View style={[styles.emptyIcon, { backgroundColor: theme.roles.locationWash }]}><VimaGlyph name="search" color={theme.roles.locationStrong} /></View>
             <VimaText variant="h3" style={styles.center}>No encontramos resultados</VimaText>
             <VimaButton secondary label="Elegir en el mapa" onPress={() => {
-              setSelectedCoordinate(null); setSearchAction('map');
+              if (flow.field === 'origin' && !flow.savedPicker) openPickupMap();
+              else { setSelectedCoordinate(null); setSearchAction('map'); }
             }} />
             <VimaButton label="Agregar lugar" onPress={() => {
               setSelectedCoordinate(null); setContributionName(flow.search.trim()); setContributionReference('');
@@ -536,6 +596,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         {flow.recents.map(place => <PlaceRow key={place.id} place={place} rich presentation="list" resolveMedia={gateway.resolvePlaceMedia}
           onPress={() => choosePlace(place, 'destination')} />)}
       </> : flow.phase === 'home' ? <>
+        <TextAction label="Punto de recogida" onPress={() => openField('origin')} />
         <View style={styles.recentHeader}><VimaText variant="bodyMedium" style={styles.fill}>Lugares guardados</VimaText>
           <TextAction label="Ver todos" onPress={() => { setHomePanNeedsRecenter(false); setHomePanel('saved'); }} /></View>
         <View testID="passenger-saved-place-buttons" style={styles.quickRow}>
@@ -569,12 +630,12 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
         <VimaButton label="Solicitar viaje" onPress={() => { void flow.submit(); }} haptic="requestRide"
           loading={flow.phase === 'requesting'} disabled={!flow.canSubmit} />
       </> : flow.trip && ['completed', 'cancelled', 'expired'].includes(flow.phase) ? <JourneyClosure trip={flow.trip} onHome={goHome} /> : assignment ? <>
-        <JourneyStatus trip={flow.trip!} />
+        <JourneyStatus trip={flow.trip!} vehicleTracking={vehicleTracking} />
         <View style={[styles.driverCard, presentation.card]}>
           <View style={styles.row}>
             <View style={[styles.avatar, { backgroundColor: theme.roles.positiveWash }]}><VimaGlyph name="profile" color={theme.roles.positiveStrong} /></View>
             <View style={styles.fill}><VimaText variant="bodyMedium">{assignment.driver.name}</VimaText>
-              <View style={styles.rating}><VimaGlyph name="star" color={theme.roles.warning} /><VimaText variant="bodySmall">{assignment.driver.rating}</VimaText></View>
+              <View style={styles.rating}>{assignment.driver.rating != null ? <VimaGlyph name="star" color={theme.roles.warning} /> : null}<VimaText variant="bodySmall">{assignment.driver.rating ?? 'Sin valoraciones'}</VimaText></View>
             </View>
           </View>
           {['ASSIGNED', 'ARRIVED_PICKUP'].includes(flow.trip?.requestState ?? 'ASSIGNED') ? <View style={[styles.pin, { backgroundColor: theme.roles.positiveWash }]}><VimaText variant="caption" style={{ color: theme.roles.textSecondary }}>PIN</VimaText>
@@ -624,10 +685,16 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
       onLayout={(event) => { setHeight(event.nativeEvent.layout.height); setMapWidth(event.nativeEvent.layout.width); setMapLayoutNavHeight(navHeight); }}>
       <PassengerRideShell trip={flow.trip} mapViewportStyle={[styles.mapViewport, { backgroundColor: theme.roles.background }]}
         map={{ ref: nativeMap, compass: false,
+          onLayout: event => setNativeMapWidth(event.nativeEvent.layout.width),
           onRegionIsChanging: event => { if (Number.isFinite(event.nativeEvent.bearing)) setMapBearing(event.nativeEvent.bearing); },
-          onRegionWillChange: locationVisibility.start, onRegionDidChange: event => {
+          onRegionWillChange: () => { locationVisibility.start(); if (pickingPickup) { pickupCameraMoving.current = true; pickupCapture.current++; flow.movePickup(); } }, onRegionDidChange: event => {
           if (Number.isFinite(event.nativeEvent.bearing)) setMapBearing(event.nativeEvent.bearing);
           locationVisibility.settled();
+          if (pickingPickup && mapWidth > 0 && usefulHeight > topOcclusion) {
+            // Native unproject uses the exact fixed pin tip in the unobscured map.
+            // No tap or intermediate camera position can choose a pickup.
+            pickupCameraMoving.current = false; pickupRead.current();
+          }
           const target = pendingCenter.current;
           if (target && !event.nativeEvent.userInteraction && event.nativeEvent.center.every((value, i) => Math.abs(value - target[i]!) < 0.00001)) {
             pendingCenter.current = null; setRecentering(false); setCentered(true); setHomePanNeedsRecenter(false);
@@ -635,14 +702,17 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           }
         }, onTouchStart: () => { pendingCenter.current = null; setRecentering(false); dismissKeyboard();
           setMapUserControlled(true); if (homeFloatingSearch) setHomePanNeedsRecenter(true); },
-          onPress: event => { setIncident(null); if (pickingMap) setSelectedCoordinate(normalizeCoordinate(event.nativeEvent.lngLat)); },
+          onPress: event => { setIncident(null); if (pickingMap && !pickingPickup) setSelectedCoordinate(normalizeCoordinate(event.nativeEvent.lngLat)); },
           onDidFinishLoadingMap: () => { setMapReady(true); setMapFailed(false); }, onDidFailLoadingMap: () => setMapFailed(true) }}
         mapContent={<PassengerMap quote={flow.quote} assignment={assignment} requestState={flow.trip?.requestState} origin={flow.origin} destination={flow.destination}
+          vehicleTracking={vehicleTracking} online={flow.connection === 'online'}
           currentLocation={flow.currentLocation} onIncidentSelect={pickingMap ? undefined : setIncident}
           home={flow.phase === 'home' && !flow.destination}
           ready={mapReady} searchPresentationActive={flow.field !== null}
           recenter={recenter} fitRoute={routeFit} northRequest={northRequest} layers={mapLayers} displayKeyAvailable={hasDisplayKey} active={focused}
-          manualSelection={pickingMap && selectedCoordinate ? { coordinate: selectedCoordinate,
+          pickupSelection={pickingPickup ? { initial: flow.pickup?.initial?.coordinate ?? mapConfig.viewport(undefined, undefined, null).center ?? [-99.88795, 19.79021],
+            reference: flow.pickup?.reference?.coordinate, meters: flow.pickupLimit, outside: pickupOutside } : undefined}
+          manualSelection={pickingMap && !pickingPickup && selectedCoordinate ? { coordinate: selectedCoordinate,
             kind: flow.field === 'origin' && searchAction === 'map' ? 'origin' : 'destination' } : null}
           cameraMode={routeViewportActive || mapUserControlled ? 'user-controlled' : 'automatic'} config={mapConfig}
           topOcclusion={topOcclusion}
@@ -654,6 +724,7 @@ export function PassengerScreen({ gateway, mapConfig, boundaries, inset = true }
           style: [styles.sheet, detachedPanel && styles.detachedSheet,
           !detachedPanel && roundedPassengerSheet && styles.roundedPassengerSheet], onVisibleHeightChange: reportVisibleSheetHeight }}
         renderPhase={() => content} />
+      {pickingPickup && usefulHeight > topOcclusion ? <FixedPickupPin x={pickupPinPoint[0]} y={pickupPinPoint[1]} outside={pickupOutside} /> : null}
       <View testID="passenger-top-chrome" pointerEvents="box-none" onTouchStart={dismissKeyboard}
         onLayout={event => setTopChromeHeight(event.nativeEvent.layout.height)}
         style={[styles.topChrome, homeNormal && styles.homeTopChrome, { top: homeNormal ? topInset + 8 : topFrameShift + 8 }]}>

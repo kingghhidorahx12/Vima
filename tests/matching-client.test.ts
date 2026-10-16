@@ -10,6 +10,21 @@ import { decodeDriver } from '../src/services/matching/decode.ts';
 import { driverOperationId, type DriverOperationKind } from '../src/services/matching/operationId.ts';
 
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+
+test('D1 matching context is explicit on Driver operations and remains absent for legacy QA clients', async () => {
+  const contexts: unknown[] = [];
+  const api: ApiClient = { async request(input) {
+    contexts.push(input.operationalContext);
+    return input.decode(input.path === '/v1/matching/session' ? { accountId: 'd1', role: 'driver', matchingAvailable: true } : {
+      accountId: 'd1', revision: 1, availability: 'OFFLINE', expiryCount: 0,
+      profile: { driver: { name: 'Driver', rating: null, ratingCount: 0 }, vehicle: { name: 'Test', plate: 'Test', color: 'White' } },
+    });
+  } };
+  const client = createMatchingClient(api, { context: 'driver', trace: () => {} });
+  await client.identity(); await client.driver(); await client.availability('OFFLINE', 'test-operation');
+  await createMatchingClient(api, { trace: () => {} }).identity();
+  assert.deepEqual(contexts, ['driver', 'driver', 'driver', undefined]);
+});
 test('reconnect plus advanced revision emits one invalidation, keeps one poll, and aborts on unmount', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let polls = 0; let active = 0; let maxActive = 0; let signal: AbortSignal | undefined; let deliver: ((v: unknown) => void) | undefined;
@@ -110,7 +125,7 @@ test('typed Driver operation IDs are unique, backend-safe and carry the intent',
     const id = driverOperationId(kind); assert.match(id, /^[A-Za-z0-9._:-]{16,128}$/); assert.ok(id.startsWith(`driver:${kind}:`)); return id;
   }));
   assert.equal(new Set(ids).size, ids.length);
-  const screen = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
+  const screen = readFileSync('src/features/driver/DriverOperationalSurface.tsx', 'utf8');
   assert.match(screen, /actions.startDriverAction\(\{ kind: 'availability_offline' \}\)/);
   assert.doesNotMatch(screen, /act\(kind\?|pending.current.run/);
   assert.match(screen, /actions.retryPendingDriverAction\(\)/);

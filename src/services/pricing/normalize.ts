@@ -11,7 +11,8 @@ export function decodeQuoteResponse(value: unknown): QuoteResponse {
   const q = object(response.status === 'priced' ? response.quote : response.routePreview);
   if (!Array.isArray(q.stops) || q.stops.length > 10) fail();
   const preview = { id: text(q.id), createdAt: integer(q.createdAt), expiresAt: integer(q.expiresAt),
-    origin: decodePlace(q.origin), destination: decodePlace(q.destination), stops: (q.stops as unknown[]).map(decodePlace), route: decodeRoute(q.route) };
+    origin: decodePlace(q.origin), ...(q.referenceOrigin === undefined ? {} : { referenceOrigin: decodePlace(q.referenceOrigin) }),
+    destination: decodePlace(q.destination), stops: (q.stops as unknown[]).map(decodePlace), route: decodeRoute(q.route) };
   if (preview.expiresAt <= preview.createdAt) fail();
   if (response.status === 'unpriced') {
     if (response.reason !== 'pricing_not_configured' && response.reason !== 'pricing_unavailable') fail();

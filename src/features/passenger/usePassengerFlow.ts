@@ -15,14 +15,28 @@ import { useMatchingProjection } from './useMatchingProjection';
 import { ApiError } from '../../services/api/client';
 import { GeospatialError } from '../../services/geospatial/contracts';
 import { routeFitCandidate } from './usePassengerRouteFit';
+import { normalizeCoordinate } from '../../map/models';
+import { pickupAdjustmentMaxMeters, samePickup, withinPickupArea } from '../../services/geospatial/pickup';
+
+export interface PickupSelection {
+  readonly initial: Place | null; readonly reference?: Place; readonly moving: boolean;
+  readonly coordinate?: Place['coordinate']; readonly place?: Place; readonly loading: boolean;
+  readonly manualReference: string; readonly reverseFailed: boolean;
+  readonly coordinateError?: boolean;
+}
 
 let operationSequence = 0;
 function operationId() { return `passenger-${Date.now()}-${++operationSequence}`; }
 
 export function usePassengerFlow(gateway: PassengerGateway) {
+  const pickupLimit = gateway.pickupAdjustmentMaxMeters ?? pickupAdjustmentMaxMeters;
   const client = useQueryClient();
   const connection = useSyncExternalStore(gateway.subscribeConnection, gateway.getConnection, gateway.getConnection);
   const [originChoice, setOrigin] = useState<{ place: Place; kind: 'automatic' | 'manual' }>();
+  const [referenceOrigin, setReferenceOrigin] = useState<Place>();
+  const [pickup, setPickup] = useState<PickupSelection>();
+  const pickupGeneration = useRef(0);
+  const pickupReverse = useRef<AbortController | undefined>(undefined);
   const [destination, setDestination] = useState<Place | null>(null);
   const [stops, setStops] = useState<readonly Place[]>([]);
   const [confirming, setConfirming] = useState(false);
@@ -91,16 +105,16 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const geography = useQuery({ queryKey: ['passenger', gateway.scope, 'geography', field, search, origin?.coordinate],
     queryFn: async ({ signal }) => gateway.findPlaces(search, signal),
     enabled: field !== null && isGeographicQuery(search), retry: false, staleTime: 0 });
-  useEffect(() => () => { selection.current?.abort(); gateway.closePlaces?.(); }, [gateway]);
+  useEffect(() => () => { selection.current?.abort(); pickupReverse.current?.abort(); pickupGeneration.current++; gateway.closePlaces?.(); }, [gateway]);
   const cancelSelection = () => { selection.current?.abort(); selection.current = undefined; setResolving(false); setSelectionError(undefined); };
   const originStatus: OriginStatus = originChoice?.kind ?? (location.isPending ? 'loading' : location.data ? 'automatic' : 'unavailable');
   const trip = useQuery({ ...tripQueryOptions(gateway, tripId ?? '', identity.context()), enabled: !!tripId && connection === 'online',
     select: passengerTrip, retry: false });
   const draftStops = trip.data?.phase === 'expired' ? trip.data.quote.stops : stops;
   const drafting = confirming || editing || trip.data?.phase === 'cancelled' || trip.data?.phase === 'expired';
-  const quote = useQuery({ queryKey: ['passenger', gateway.scope, 'quote', origin, destination, draftStops, draftRevision],
+  const quote = useQuery({ queryKey: ['passenger', gateway.scope, 'quote', origin, referenceOrigin, destination, draftStops, draftRevision],
     queryFn: async ({ signal }) => {
-      const draft = { origin: origin!, destination: destination!, stops: draftStops };
+      const draft = { origin: origin!, ...(referenceOrigin ? { referenceOrigin } : {}), destination: destination!, stops: draftStops };
       const fingerprint = JSON.stringify([draftRevision, draft]);
       if (quoteOperation.current?.draft !== fingerprint) quoteOperation.current = { draft: fingerprint, id: operationId() };
       const incoming = await gateway.quote(draft, signal, quoteOperation.current.id);
@@ -165,7 +179,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     // A new selection owns a new quote/route, even when the destination matches
     // an infinitely cached quote from a cancelled request. Retries keep this revision.
     setDraftRevision(operationId());
-    if (target === 'origin') setOrigin({ place: value, kind: 'manual' }); else {
+    if (target === 'origin') { setOrigin({ place: value, kind: 'manual' }); setReferenceOrigin(undefined); } else {
       setDestination(value);
       setQuoteExpired(false);
       void gateway.sendPlaceSignal?.('place_selected', value)?.catch(() => {});
@@ -175,6 +189,52 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     setConfirming(validDraft(nextOrigin, nextDestination));
     setField(null); setSearch(''); searchCoordinator.clear();
     gateway.closePlaces?.();
+  };
+  const cancelPickup = () => {
+    pickupReverse.current?.abort(); pickupReverse.current = undefined; pickupGeneration.current++;
+    setPickup(undefined);
+  };
+  const beginPickup = (adjustment = false) => {
+    if (pending || ambiguousRequest || locked.current || isMatching(phase) || phase === 'assigned') return;
+    cancelSelection(); cancelPickup(); setField('origin'); setSearch(''); gateway.closePlaces?.();
+    setPickup({ initial: origin, ...(adjustment && origin ? { reference: referenceOrigin ?? origin } : {}),
+      moving: true, loading: false, manualReference: '', reverseFailed: false });
+  };
+  const movePickup = () => {
+    pickupGeneration.current++; pickupReverse.current?.abort(); pickupReverse.current = undefined;
+    setPickup(previous => previous ? { ...previous, moving: true, loading: false, coordinateError: false } : previous);
+  };
+  const previewPickup = async (coordinate: Place['coordinate']) => {
+    let point: Place['coordinate'];
+    try { point = normalizeCoordinate(coordinate); } catch { movePickup(); return; }
+    if (!pickup) return;
+    pickupReverse.current?.abort(); const controller = new AbortController(); pickupReverse.current = controller;
+    const generation = ++pickupGeneration.current;
+    const fallback: Place = { id: `manual:${point.join(',')}`, name: 'Punto de recogida', address: '', coordinate: point };
+    setPickup(previous => previous ? { ...previous, coordinate: point, place: fallback, moving: false,
+      loading: true, reverseFailed: false, coordinateError: false } : previous);
+    try {
+      const resolved = await gateway.reversePlace?.(point, controller.signal);
+      if (!controller.signal.aborted && generation === pickupGeneration.current)
+        setPickup(previous => previous ? { ...previous, place: { ...fallback, name: resolved?.name || fallback.name,
+          address: resolved?.address || '' }, reverseFailed: !resolved?.address, loading: false } : previous);
+    } catch {
+      if (!controller.signal.aborted && generation === pickupGeneration.current)
+        setPickup(previous => previous ? { ...previous, reverseFailed: true, loading: false } : previous);
+    }
+  };
+  const confirmPickup = () => {
+    if (!pickup?.coordinate || !pickup.place || pickup.moving || pickup.loading || pending ||
+      ambiguousRequest || connection !== 'online' || pickup.reference && !withinPickupArea(pickup.reference.coordinate, pickup.coordinate, pickupLimit)) return false;
+    if (!pickup.place.address && !pickup.manualReference.trim()) return false;
+    const previousReference = pickup.reference;
+    const note = pickup.manualReference.trim();
+    const value = note ? { ...pickup.place,
+      name: pickup.place.address ? `Referencia: ${note}` : 'Referencia manual',
+      address: pickup.place.address || note } : pickup.place;
+    applyPlace(value, 'origin');
+    setReferenceOrigin(previousReference && !samePickup(previousReference.coordinate, value.coordinate) ? previousReference : undefined);
+    cancelPickup(); return true;
   };
   const completeSavedSelection = async (value: Place) => {
     if (!savedPicker) return false;
@@ -262,7 +322,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     finally { if (selection.current === controller) { selection.current = undefined; setResolving(false); } }
   };
   const submit = async () => {
-    if (!activeReady || locked.current || phase !== 'confirm' || (ambiguousRequest ? connection !== 'online' || pending : !canRequest(quote.data, connection, pending, gateway))) return;
+    if (!activeReady || locked.current || pickup || field !== null || phase !== 'confirm' || (ambiguousRequest ? connection !== 'online' || pending : !canRequest(quote.data, connection, pending, gateway))) return;
     locked.current = true;
     requestId.current ??= operationId(); // Keep on ambiguous failure/retry.
     const fence = identity.capture();
@@ -283,6 +343,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
   const preserveDraft = (previous: RideQuote | undefined) => {
     if (!previous) return;
     setOrigin({ place: previous.origin, kind: originStatus === 'manual' ? 'manual' : 'automatic' });
+    setReferenceOrigin(previous.referenceOrigin);
     setDestination(previous.destination); setStops(previous.stops);
   };
   const act = async (name: 'cancel', reason: 'user' | 'edit' | 'schedule' = 'user') => {
@@ -353,7 +414,12 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     [...(geography.data ?? []), ...(recents.data ?? [])],
     followUpResults?.query === search ? followUpResults.results : places.data,
     followUpResults?.query === search || !places.isPlaceholderData ? search : undefined) : [];
-  return { activeReady, activeError, phase, connection, quoteExpired, origin, currentLocation: location.data ?? null, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
+  return { activeReady, activeError, phase, connection, quoteExpired, origin, referenceOrigin: activeQuote?.referenceOrigin ?? referenceOrigin,
+    pickup, pickupLimit, beginPickup, movePickup, previewPickup, confirmPickup, cancelPickup,
+    failPickupCoordinate: () => { movePickup(); setPickup(previous => previous ? { ...previous, coordinateError: true } : previous); },
+    setPickupReference: (manualReference: string) => setPickup(previous => previous ? { ...previous, manualReference: manualReference.slice(0, 240) } : previous),
+    useCurrentLocation: () => { if (validPlace(location.data)) { cancelPickup(); applyPlace(location.data, 'origin'); } },
+    currentLocation: location.data ?? null, originStatus, destination, quote: activeQuote, trip: trip.data, pending,
     locationAvailable: !!location.data, locationLoading: location.isPending, canUseCurrentLocation: validPlace(location.data),
     savedPicker, useCurrentLocationForSavedSlot, field, search, setSearch: (value: string) => {
       cancelSelection(); setFollowUpResults(undefined);
@@ -366,12 +432,12 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     popular: discovery.data?.popular ?? [], featured: discovery.data?.featured ?? [],
     saveFavorite, removeFavorite, removeSavedSlot, confirmLocations,
     loadingPlaces: !!search.trim() && (places.isFetching || resolving), loadingQuote: quote.isFetching, error,
-    canSubmit: activeReady && phase === 'confirm' && (ambiguousRequest ? connection === 'online' && !pending : canRequest(quote.data, connection, pending, gateway)), choosePlace, chooseMapCoordinate,
+    canSubmit: activeReady && !pickup && field === null && phase === 'confirm' && (ambiguousRequest ? connection === 'online' && !pending : canRequest(quote.data, connection, pending, gateway)), choosePlace, chooseMapCoordinate,
     contributePlace, submitSearch, submit, act, edit, schedule,
     returnHome: () => {
       // Back never cancels or abandons an in-flight/active ride.
       if (locked.current || ambiguousRequest || requestPending || commandPending || isMatching(phase) || phase === 'assigned') return false;
-      cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear();
+      cancelSelection(); cancelPickup(); gateway.closePlaces?.(); searchCoordinator.clear();
       setField(null); setSearch(''); setFollowUpResults(undefined);
       setSavedPicker(null);
       setDestination(null); setStops([]); setConfirming(false); setEditing(false); releaseIdentity();
@@ -381,7 +447,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
     },
     openField: (target: 'origin' | 'destination') => {
       if (pending || ambiguousRequest || isMatching(phase) || phase === 'assigned') return;
-      cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined); setField(target); setSearch('');
+      cancelSelection(); cancelPickup(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined); setField(target); setSearch('');
       setSavedPicker(null);
     },
     openSavedPicker: (target: SavedSlot | 'favorite') => {
@@ -389,7 +455,7 @@ export function usePassengerFlow(gateway: PassengerGateway) {
       cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setFollowUpResults(undefined);
       setSavedPicker(target); setField('destination'); setSearch('');
     },
-    closeField: () => { cancelSelection(); gateway.closePlaces?.(); searchCoordinator.clear(); setField(null); setSavedPicker(null); },
+    closeField: () => { cancelSelection(); cancelPickup(); gateway.closePlaces?.(); searchCoordinator.clear(); setField(null); setSavedPicker(null); },
     retry: () => { if (activeError) { setBootstrapAttempt(value => value + 1); return; }
       if (ambiguousRequest) { void submit(); return; }
       if (quote.data) quoteOperation.current = undefined; cancelSelection(); request.reset(); command.reset(); void client.invalidateQueries({ queryKey: ['passenger', gateway.scope] });

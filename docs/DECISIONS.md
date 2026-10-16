@@ -2,6 +2,96 @@
 
 Este documento registra las decisiones proporcionadas en la solicitud y reflejadas en el código. No define UX ni dirección visual.
 
+## A/B — aclaraciones ratificadas por 05 QA / 03 Arquitectura (2026-10-16)
+
+- `VIMA_GEO_SERVICE_AREA_BOUNDS` restringe aportaciones de lugares, no cobertura
+  comercial. Cotización conserva `selectPricing`, rutas reales y límite geodésico
+  de recogida de 200 m; llegada Driver continúa a 150 m.
+- Pausa Passenger representa exactamente el último target GPS aceptado, nunca
+  la pose intermedia de un tween. Las muestras durante pausa se rigen por la
+  política Passenger; no extrapolar ni alterar el comportamiento Driver por defecto.
+- Correcciones de implementación, sin cambiar tarifas, autoridad, lifecycle o Snap.
+
+## B — seguimiento visual y autoridad GPS (2026-10-15)
+
+- Aplicar la alternativa GPS segura aprobada: Snap no se activa sin permiso,
+  plan/cuota/presupuesto y confianza demostrados. No se consumió cuota del API.
+  No sustituir map matching por proyección a una calle cercana o ruta planeada.
+- Separar observación autoritativa y presentación: ningún ajuste visual alimenta
+  muestras persistidas, telemetría comercial, ETA, lifecycle ni tarifas.
+- Indicar antigüedad de último GPS; pausa ante desconexión/background, sin
+  extrapolación. Rumbo por GPS válido/movimiento observado; sin rumbo fiable,
+  presentación neutra. Asignaciones distintas no comparten estado de seguimiento.
+- [Contrato visual, límites y costo](PASSENGER_ROAD_TRACKING_B.md). Una activación
+  futura de Snap vuelve a 03; no se modifica arquitectura servidor en B.
+  Conservados D0–D3, A, Driver, MapLibre/Motion/RM y producción. QA físico pendiente.
+
+## A — origen y recogida Passenger, transferencia 04→03→01 (2026-10-15)
+
+- Origen inicial libre por búsqueda/GPS/mapa. Ajuste posterior hasta 200 m
+  geodésicos configurables del origen de referencia; no limita la elección inicial.
+- Pin fijo; el usuario mueve el mapa. Elegir sólo al asentarse cámara, desde el
+  centro visible medido. No tap ni arrastre del pin; prevalece esta regla textual
+  sobre las leyendas divergentes de los mockups. Mismo componente/tema/RM vigentes.
+- quote.origin es la recogida efectiva. referenceOrigin opcional sólo si difiere;
+  snapshots anteriores compatibles. El servidor valida distancia/cobertura/ruta,
+  con política anunciada por la sesión existente; el círculo no es autoridad.
+- Ajuste pendiente separado de quote. Confirmar invalida/recalcula; no solicitar
+  con quote vieja. Una referencia manual no acredita calle/acceso vehicular.
+- Oferta, routeToOrigin y llegada usan la misma recogida efectiva. Los 150 m de
+  llegada no se sustituyen por el radio de ajuste. Tarifas/routing fast y D1/D2/D3
+  preservados. Sin B ni publicaciones en esta ronda.
+- [Contrato, pruebas y QA pendiente](PASSENGER_PICKUP_A.md).
+
+## D3 — condiciones operativas de la entrega D1/D2 (2026-10-15)
+
+- OFFLINE confirmado para salir exige estado servidor actual sin assignment; un
+  recibo idempotente histórico no acredita disponibilidad actual. No se modifica
+  idempotencia, autoridad ni lifecycle.
+- Publicar Gateway compatible v2 antes del cliente; no aprobar Driver hasta verificar
+  la OTA compatible en ejecución en todos los Passenger participantes. El decoder
+  anterior no admite rating null y no se sustituye por un rating ficticio.
+- Mantener una réplica/un escritor, administración loopback desde Gateway activo y
+  respaldo coherente. Con historia Driver no volver a schema v1 ni restaurar backup
+  antiguo como rollback de permisos/sesiones. D1 y D2 siguen sin publicación aquí.
+- [Auditoría, evidencia Railway de sólo lectura, límites y orden de publicación](DRIVER_PRODUCT_D3_AUDIT.md).
+  QA físico Driver continúa pendiente; el cierre Android D0 conserva su alcance.
+
+## D2 — contexto Driver con sesión OTP (2026-10-15)
+
+- Reutilizar Driver operativo y la misma identidad OTP autorizada por D1; QA
+  conserva LiveAccountGate. Contexto separado no concede capacidades.
+- Entrada con `/me` vigente y vehículo válido; excepción de viaje activo según D1.
+  Transporte/caches por montaje, cuenta y contexto; journal producto separado de QA.
+- Salir exige OFFLINE confirmado cuando no hay assignment. Con viaje activo se
+  conserva operación hasta finalizar lifecycle/efectivo. Error de red nunca afirma
+  desconexión ni elimina sesión; 401/403 conservan su significado D1.
+- No habilitar cuentas reales/publicar aún. Condiciones D3 y límites operativos:
+  [PRODUCT_DRIVER_D2.md](PRODUCT_DRIVER_D2.md).
+
+## D1 — autoridad productiva Passenger/Driver (2026-10-15)
+
+- Una identidad OTP estable con Passenger por defecto. Driver requiere aprobación
+  privada y vehículo completo; contexto operativo explícito no concede permisos.
+  El servidor valida capacidad actual en cada operación y al commit de matching.
+  QA y producto conservan autoridades separadas, sin fallback entre tokens.
+- Suspender/revocar retira ofertas y elegibilidad inmediatamente. Un viaje existente
+  puede completar lifecycle/PIN/efectivo; tras terminal cesa la excepción. Bloqueo
+  de seguridad separado impide también continuar el viaje. Identidad histórica,
+  perfil, assignments y receipts no se borran ni restauran autorización.
+- Administración autenticada, idempotente y auditable en el Gateway activo por
+  listener loopback y CLI vía SSH; sin concesión pública ni edición manual JSON.
+  Auth schema v2 conserva sesiones y tiene respaldo previo, persistencia atómica
+  serializada y fail closed. Se mantiene una réplica/un escritor; sin multiinstancia.
+- Driver nuevo: rating null y ratingCount 0. Históricos numéricos QA/producto siguen
+  válidos; ningún rating ficticio. Perfil/vehículo D1 inmutables para conservar historia.
+- Rollback seguro a schema v1 sólo antes de historia Driver y usando el estado
+  actual de sesiones; después requiere lector v2. No restaurar backups viejos como
+  mecanismo de permisos. Administración y condiciones D2: [DRIVER_AUTHORITY_D1.md](DRIVER_AUTHORITY_D1.md).
+- Implementación local; habilitar Driver real, publicar y validar físicamente
+  requieren pasos posteriores autorizados. Esta decisión sustituye la propuesta
+  administrativa pendiente de P1.1; no habilita navegación Driver productiva por sí sola.
+
 ## Passenger P1 — corrección de zoom QA 57021 (2026-10-15)
 
 - Máxima escala útil con ruta y pines completos: no acumular holguras equivalentes.

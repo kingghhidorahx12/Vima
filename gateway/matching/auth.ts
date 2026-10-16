@@ -8,12 +8,17 @@ export class MatchingError extends Error {
   constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
 }
 export interface Principal { accountId: string; role: 'passenger' | 'driver' }
+export type DriverOperation = 'state' | 'work' | 'trip' | 'receipt';
 export interface DriverProfile { driver: Assignment['driver']; vehicle: Assignment['vehicle'] }
 export interface AuthConfig {
-  authenticate(header: string | undefined): Principal;
+  authenticate(header: string | undefined, context?: 'passenger' | 'driver'): Principal;
   principal(id: string): Principal | undefined;
   profile(id: string): DriverProfile;
   drivers: readonly string[];
+  hasIdentity?(id: string, role: Principal['role']): boolean;
+  eligibleDriver?(id: string): boolean;
+  authorizeDriver?(id: string, operation: DriverOperation, active: boolean): void;
+  isReady?(): boolean;
 }
 export function createAuthConfig(input: unknown): AuthConfig {
   const fail = () => { throw new Error('invalid_auth_config'); };

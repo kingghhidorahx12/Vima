@@ -13,13 +13,14 @@ const toPlace = (place: SavedPlace) => ({ ...place, id: place.canonicalId });
 /** Quotes and requests share Vima authority; capability is obtained from the authenticated backend. */
 export function createPassengerLiveGateway(client: GeospatialClient, locate: PassengerGateway['locate'],
   personal?: PersonalPlacesRepository, installationId?: () => Promise<string>, mediaBaseUrl?: string,
-  live?: { matching: MatchingClient; accountId: string; available: boolean }): PassengerGateway {
+  live?: { matching: MatchingClient; accountId: string; available: boolean; pickupAdjustmentMaxMeters?: number }): PassengerGateway {
   const search = createPlaceSearch(client, geospatialClientConfig.debounceMs);
   const unavailable = async (): Promise<never> => { throw new Error('Servicio no disponible'); };
   return {
     scope: `vima-geospatial-live${live ? `:${live.accountId}` : ''}`, source: 'server', locate,
     resolvePlaceMedia: mediaBaseUrl ? createPlaceMediaResolver(mediaBaseUrl) : undefined,
     paymentReady: true, tripRequestAvailable: live?.available === true,
+    pickupAdjustmentMaxMeters: live?.pickupAdjustmentMaxMeters,
     recentPlaces: async () => (await personal?.recents() ?? []).map(toPlace),
     favoritePlaces: async () => (await personal?.favorites() ?? []).map(toPlace),
     saveFavorite: personal ? place => personal.saveFavorite(place) : undefined,
@@ -62,7 +63,9 @@ export function createPassengerLiveGateway(client: GeospatialClient, locate: Pas
       const snapshot = pricing.status === 'priced' ? pricing.quote : pricing.routePreview;
       const locations = (value: typeof draft) => JSON.stringify([value.origin, ...value.stops, value.destination]
         .map(place => [place.id, place.coordinate]));
-      if (locations(snapshot) !== locations(draft)) throw new GeospatialError('route_unavailable');
+      const reference = (value: typeof draft) => value.referenceOrigin ? [value.referenceOrigin.id, value.referenceOrigin.coordinate] : null;
+      if (locations(snapshot) !== locations(draft) || JSON.stringify(reference(snapshot)) !== JSON.stringify(reference(draft)))
+        throw new GeospatialError('route_unavailable');
       const route = snapshot.route;
       return { ...draft, id: snapshot.id, pricing, route: route.geometry, paymentMethod: 'Efectivo',
         durationMinutes: Math.ceil((route.trafficDurationSeconds ?? route.durationSeconds) / 60),

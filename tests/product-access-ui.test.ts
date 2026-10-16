@@ -24,6 +24,7 @@ function harness(auth: Record<string, unknown>, dark = false) {
     'src/design/themes/index.tsx': { useVimaTheme: () => theme,
       useVimaThemeControl: () => ({ name: dark ? 'dark' : 'light', toggleTheme: () => calls.push(['theme']) }) },
   }, externalOverrides: { 'react-native': native,
+    'expo-sqlite/kv-store': { getItem: async () => null },
     'expo-modules-core': { requireOptionalNativeModule: () => ({ manifest: '{"version":"2.3.4"}' }) },
     'expo-updates': { isEnabled: true, isEmbeddedLaunch: false, updateId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },

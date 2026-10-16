@@ -19,7 +19,11 @@ export interface Place {
   readonly category?: string;
   readonly image?: PlaceImageRef;
 }
-export interface RideDraft { readonly origin: Place; readonly destination: Place; readonly stops: readonly Place[] }
+export interface RideDraft {
+  /** Effective pickup; all routing, matching and arrival checks use this coordinate. */
+  readonly origin: Place; readonly referenceOrigin?: Place;
+  readonly destination: Place; readonly stops: readonly Place[];
+}
 export interface RideQuote extends RideDraft {
   readonly id: string;
   readonly route: RouteFeature;
@@ -32,7 +36,7 @@ export interface RideQuote extends RideDraft {
 }
 export interface Assignment {
   readonly id: string;
-  readonly driver: { readonly name: string; readonly rating: number };
+  readonly driver: { readonly name: string; readonly rating?: number | null; readonly ratingCount?: number };
   readonly vehicle: { readonly name: string; readonly plate: string; readonly color: string };
   readonly etaMinutes: number;
   readonly pin: string;
@@ -61,6 +65,7 @@ export interface PassengerGateway extends TripGateway, RealtimeTransport {
   readonly source: 'server' | 'fixture';
   readonly paymentReady?: boolean;
   readonly tripRequestAvailable?: boolean;
+  readonly pickupAdjustmentMaxMeters?: number;
   readonly resolvePlaceMedia?: PlaceMediaResolver;
   locate(signal?: AbortSignal): Promise<Place | null>;
   recentPlaces(signal?: AbortSignal): Promise<readonly Place[]>;

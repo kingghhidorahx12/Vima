@@ -5,6 +5,29 @@ import { createProductAuthClient, PRODUCT_SESSION_STORAGE_KEY } from '../src/ser
 const sessionFixture = () => ({ accountId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479', displayName: 'María López',
   capabilities: ['passenger'], accessToken: 'a'.repeat(43), refreshToken: 'b'.repeat(43), accessExpiresAt: Date.now() + 900000 });
 
+test('D1 product session preserves server capabilities and forwards context without changing identity or credentials', async () => {
+  const original = { ...sessionFixture(), capabilities: ['passenger', 'driver'] };
+  let stored: string | null = JSON.stringify(original); let capabilities = original.capabilities;
+  const contexts: (string | null)[] = [];
+  const client = createProductAuthClient('https://gateway.example', { read: async () => stored,
+    write: async value => { stored = value; }, clear: async () => { stored = null; } }, async (input, init) => {
+    assert.equal(new Headers(init?.headers).get('Authorization'), `Bearer ${original.accessToken}`);
+    if (new URL(String(input)).pathname === '/v1/auth/me') return Response.json({ ...original, capabilities });
+    contexts.push(new Headers(init?.headers).get('X-Vima-Operational-Context'));
+    return Response.json({ accountId: original.accountId });
+  });
+  assert.deepEqual((await client.current())?.capabilities, ['passenger', 'driver']);
+  await client.api.request({ path: '/v1/driver/state', method: 'GET', operationalContext: 'driver', decode: x => x });
+  await client.api.request({ path: '/v1/passenger/requests/active', method: 'GET', operationalContext: 'passenger', decode: x => x });
+  assert.deepEqual(contexts, ['driver', 'passenger']);
+  capabilities = ['passenger'];
+  // A new bootstrap reads current authority even if the persisted token still lists Driver.
+  const restored = createProductAuthClient('https://gateway.example', { read: async () => stored, write: async () => {}, clear: async () => {} },
+    async () => Response.json({ ...original, capabilities }));
+  assert.deepEqual((await restored.current())?.capabilities, ['passenger']);
+  assert.equal((await restored.current())?.accountId, original.accountId);
+});
+
 test('cold restoration gives storage, refresh and me separate budgets instead of spending the me deadline on credentials', async t => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_800_000_000_000 });
   const original = { ...sessionFixture(), accessExpiresAt: Date.now() - 1 };

@@ -267,7 +267,7 @@ test('stop aborts an in-flight location POST signal', async () => {
 });
 
 test('Driver screen owns one logical session across LOCATING to AVAILABLE and suppresses prompt-only poll teardown', () => {
-  const source = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
+  const source = readFileSync('src/features/driver/DriverOperationalSurface.tsx', 'utf8');
   assert.match(source, /availability === 'LOCATING' \|\| availability === 'AVAILABLE'/); assert.match(source, /createDriverLocationSession/);
   assert.match(source, /queryClient, tracksLocation, focused, reportPermissionPrompt\]/);
   assert.doesNotMatch(source, /queryClient, tracksLocation, focused, foreground/);

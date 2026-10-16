@@ -6,6 +6,7 @@ export interface ApiRequest<T> {
   readonly signal?: AbortSignal;
   /** Operation budget, including response decoding; long-poll callers supply their own. */
   readonly timeoutMs?: number;
+  readonly operationalContext?: 'passenger' | 'driver';
   readonly idempotencyKey?: string;
 }
 
@@ -33,7 +34,7 @@ export function createApiClient(baseUrl: string, readCredential: () => Promise<s
   if (base.protocol !== 'https:' && !localHttp) throw new Error('API requires HTTPS');
   if (base.username || base.password || base.search || base.hash) throw new Error('Invalid API base URL');
   return {
-    async request<T>({ path, method, body, signal, decode, idempotencyKey }: ApiRequest<T>): Promise<T> {
+    async request<T>({ path, method, body, signal, decode, idempotencyKey, operationalContext }: ApiRequest<T>): Promise<T> {
       const url = new URL(path, base);
       if (url.origin !== base.origin) throw new Error('API requests must stay on the configured origin');
       const credential = await readCredential();
@@ -43,6 +44,7 @@ export function createApiClient(baseUrl: string, readCredential: () => Promise<s
         method, signal,
         headers: {
           Accept: 'application/json',
+          ...(operationalContext ? { 'X-Vima-Operational-Context': operationalContext } : {}),
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
           ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
           ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),

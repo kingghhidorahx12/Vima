@@ -6,6 +6,7 @@ import { loadPricingConfig } from './pricing/config.ts';
 import { loadPlaceMediaCatalog } from './placeMedia.ts';
 import { loadAuthConfig } from './matching/auth.ts';
 import { createProductAuth, createTwilioVerifyProvider } from './productAuth.ts';
+import { createDriverAdminServer } from './driverAdmin.ts';
 
 const config = gatewayConfig();
 const key = process.env.TOMTOM_API_KEY;
@@ -30,4 +31,12 @@ server.listen(config.port, config.host, () => process.stdout.write(JSON.stringif
   host: config.host, port: config.port, configured: Boolean(key?.trim()), pricingStatus: pricing.status,
   ...(pricing.status === 'ready' ? { pricingVersion: pricing.config.version } : {}) }) + '\n'));
 server.on('error', () => { process.stderr.write('gateway_start_failed\n'); process.exitCode = 1; });
+if (productAuthEnabled && process.env.VIMA_DRIVER_ADMIN_SECRET) {
+  const port = Number(process.env.VIMA_DRIVER_ADMIN_PORT ?? 8790);
+  if (!Number.isInteger(port) || port < 1 || port > 65535 || port === config.port) throw new Error('invalid_driver_admin_port');
+  const admin = createDriverAdminServer(process.env.VIMA_DRIVER_ADMIN_SECRET, server);
+  admin.listen(port, '127.0.0.1');
+  admin.on('error', () => { server.close(); process.exitCode = 1; });
+  server.on('close', () => admin.close());
+}
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => server.close());

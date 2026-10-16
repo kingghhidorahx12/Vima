@@ -47,7 +47,7 @@ test('compact account entry stays separate from critical actions and sends no av
 });
 
 test('account is an optional surface beside the persistent shell and closes before an incoming operational phase', () => {
-  const source = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
+  const source = readFileSync('src/features/driver/DriverOperationalSurface.tsx', 'utf8');
   assert.equal((source.match(/<DriverRideShell/g) ?? []).length, 1);
   assert.match(source, /accountFrame.phase === phase && accountFrame.open/);
   assert.match(source, /if \(accountFrame.phase !== phase\) setAccountFrame\(\{ phase, open: false \}\)/);

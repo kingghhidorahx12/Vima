@@ -13,6 +13,7 @@ export interface GatewayConfig {
   maxRateClients: number; maxResults: number; maxUpstreamBytes: number; logging: boolean;
   serviceAreaBounds?: readonly [west: number, south: number, east: number, north: number];
   runtimeDir?: string;
+  pickupAdjustmentMaxMeters?: number;
 }
 export function gatewayConfig(env: Readonly<Record<string, string | undefined>> = process.env): GatewayConfig {
   if (env.VIMA_BACKEND_MODE && !['qa', 'local'].includes(env.VIMA_BACKEND_MODE)) throw new Error('invalid_backend_mode');
@@ -37,5 +38,10 @@ export function gatewayConfig(env: Readonly<Record<string, string | undefined>> 
   }
   if (result.qa && !env.VIMA_GEO_RUNTIME_DIR?.startsWith('/')) throw new Error('qa_requires_durable_runtime_dir');
   result.runtimeDir = env.VIMA_GEO_RUNTIME_DIR?.trim() || '.runtime';
+  if (env.VIMA_PICKUP_ADJUSTMENT_MAX_METERS !== undefined) {
+    const limit = Number(env.VIMA_PICKUP_ADJUSTMENT_MAX_METERS);
+    if (!Number.isFinite(limit) || limit <= 0) throw new Error('invalid_gateway_config');
+    result.pickupAdjustmentMaxMeters = limit;
+  }
   return result;
 }

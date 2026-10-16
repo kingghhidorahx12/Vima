@@ -6,9 +6,9 @@ import { canInterpolateVehicle, interpolateDriverVehiclePose, validateVehicleSam
 /** Incoming telemetry writes sample.value; React is not part of the visual loop. */
 export function useVehicleMotion(sample: SharedValue<VehicleSample | null>, config?: VehicleMotionConfig): SharedValue<VehiclePose | null>;
 export function useVehicleMotion(sample: SharedValue<DriverVehicleSample | null>, config: VehicleMotionConfig,
-  options: { driver: true; essential: boolean }): SharedValue<DriverVehiclePose | null>;
+  options: { driver: true; essential: boolean; paused?: boolean; replaceHeading?: boolean }): SharedValue<DriverVehiclePose | null>;
 export function useVehicleMotion(sample: SharedValue<VehicleSample | null> | SharedValue<DriverVehicleSample | null>, config?: VehicleMotionConfig,
-  options?: { driver: true; essential: boolean }): SharedValue<VehiclePose | null> | SharedValue<DriverVehiclePose | null> {
+  options?: { driver: true; essential: boolean; paused?: boolean; replaceHeading?: boolean }): SharedValue<VehiclePose | null> | SharedValue<DriverVehiclePose | null> {
   const { reducedMotion } = useMotionPolicy();
   const reducePosition = reducedMotion && !options?.essential;
   const pose = useSharedValue<DriverVehiclePose | null>(null);
@@ -20,7 +20,12 @@ export function useVehicleMotion(sample: SharedValue<VehicleSample | null> | Sha
   const lastUpdate = useSharedValue<number | null>(null);
   const active = useSharedValue(false);
 
-  useAnimatedReaction(() => ({ sample: sample.get(), reducedMotion: reducePosition }), (next, previous) => {
+  useAnimatedReaction(() => ({ sample: sample.get(), reducedMotion: reducePosition, paused: !!options?.paused }), (next, previous) => {
+    if (next.paused) {
+      active.set(false);
+      // A paused Passenger shows the last accepted GPS target, never an in-between tween pose.
+      if (target.get()) pose.set(target.get());
+    }
     if (next.sample === null) {
       active.set(false);
       pose.set(null);
@@ -39,10 +44,12 @@ export function useVehicleMotion(sample: SharedValue<VehicleSample | null> | Sha
     const lastSequence = sequence.get();
     if (!incoming.reconnected && lastSequence !== null && incoming.sequence <= lastSequence) return;
     sequence.set(incoming.sequence);
+    // Passenger's display policy can explicitly discard an obsolete course. Driver keeps its existing last-heading behavior.
+    if (options?.replaceHeading && !validHeading(incoming.heading)) heading.set(null);
     if (validHeading(incoming.heading)) heading.set(incoming.heading);
     target.set({ coordinate: incoming.coordinate, heading: heading.get() });
     // Interpolation gates only read coordinate/reconnect; authority validation happened above.
-    active.set(canInterpolateVehicle(pose.get()?.coordinate ?? null, incoming as VehicleSample, next.reducedMotion, config));
+    active.set(!next.paused && canInterpolateVehicle(pose.get()?.coordinate ?? null, incoming as VehicleSample, next.reducedMotion, config));
     origin.set(pose.get());
     started.set(null);
     lastUpdate.set(null);

@@ -1,10 +1,11 @@
+import { validProductCapabilities, type ProductCapability } from './productCapabilities.ts';
 import { ApiError, createApiClient, type ApiClient, type ApiRequest } from '../api/client.ts';
 import { RequestTimeoutError, withCancellation, withDeadline } from '../api/deadline.ts';
 
 export const PRODUCT_SESSION_STORAGE_KEY = 'vima.product-session.v1';
-export interface ProductSession { accountId: string; displayName: string; capabilities: readonly ['passenger'];
+export interface ProductSession { accountId: string; displayName: string; capabilities: readonly ProductCapability[];
   accessToken: string; refreshToken: string; accessExpiresAt: number }
-export interface ProductAccount { accountId: string; displayName: string; capabilities: readonly ['passenger'] }
+export interface ProductAccount { accountId: string; displayName: string; capabilities: readonly ProductCapability[] }
 interface ProductSessionStorage { read(): Promise<string | null>; write(value: string): Promise<void>; clear(): Promise<void> }
 const secureStorage: ProductSessionStorage = {
   async read() { const store = await import('expo-secure-store'); return store.getItemAsync(PRODUCT_SESSION_STORAGE_KEY,
@@ -17,12 +18,11 @@ const secureStorage: ProductSessionStorage = {
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 function sessionValue(value: unknown, now: number, allowExpiredAccess = false): ProductSession {
   if (!object(value) || typeof value.accountId !== 'string' || !/^[0-9a-f-]{36}$/.test(value.accountId) ||
-    typeof value.displayName !== 'string' || !value.displayName.trim() || !Array.isArray(value.capabilities) ||
-    value.capabilities.length !== 1 || value.capabilities[0] !== 'passenger' || typeof value.accessToken !== 'string' ||
+    typeof value.displayName !== 'string' || !value.displayName.trim() || !validProductCapabilities(value.capabilities) || typeof value.accessToken !== 'string' ||
     !/^[A-Za-z0-9_-]{43}$/.test(value.accessToken) || typeof value.refreshToken !== 'string' ||
     !/^[A-Za-z0-9_-]{43}$/.test(value.refreshToken) || !Number.isSafeInteger(value.accessExpiresAt) ||
     (!allowExpiredAccess && (value.accessExpiresAt as number) <= now)) throw new Error('invalid_product_session');
-  return { accountId: value.accountId, displayName: value.displayName, capabilities: ['passenger'], accessToken: value.accessToken,
+  return { accountId: value.accountId, displayName: value.displayName, capabilities: [...value.capabilities], accessToken: value.accessToken,
     refreshToken: value.refreshToken, accessExpiresAt: value.accessExpiresAt as number };
 }
 export class ProductAuthClientError extends ApiError {
@@ -140,7 +140,7 @@ export function createProductAuthClient(baseUrl: string, storage: ProductSession
       }
       session = next; loaded = Promise.resolve(next);
       if (replacesIdentity) identityGeneration++;
-      currentAccount = { accountId: next.accountId, displayName: next.displayName, capabilities: ['passenger'] };
+      currentAccount = { accountId: next.accountId, displayName: next.displayName, capabilities: [...next.capabilities] };
       publish('authenticated');
       return next;
     });
@@ -252,18 +252,18 @@ export function createProductAuthClient(baseUrl: string, storage: ProductSession
       if (value.status !== 'authenticated') throw new ProductAuthClientError(502, 'invalid_auth_response');
       return await accept(value.session, signal, generation, true);
     },
-    async current(signal?: AbortSignal): Promise<ProductAccount | null> {
+    async current(signal?: AbortSignal, revalidate = false): Promise<ProductAccount | null> {
       const generation = identityGeneration;
       if (signal?.aborted) throw new Error('auth_cancelled');
       await requireStorage();
-      if (currentAccount !== undefined) return currentAccount;
+      if (currentAccount !== undefined && !revalidate) return currentAccount;
       if (!await load()) return null;
       try {
         const account = await api.request({ path: '/v1/auth/me', method: 'GET', signal, decode: raw => {
           if (!object(raw) || typeof raw.accountId !== 'string' || typeof raw.displayName !== 'string' ||
-            !Array.isArray(raw.capabilities) || raw.capabilities.length !== 1 || raw.capabilities[0] !== 'passenger')
+            !validProductCapabilities(raw.capabilities))
             throw new ProductAuthClientError(502, 'invalid_auth_response');
-          return { accountId: raw.accountId, displayName: raw.displayName, capabilities: ['passenger'] as const };
+          return { accountId: raw.accountId, displayName: raw.displayName, capabilities: [...raw.capabilities] };
         } });
         if (signal?.aborted) throw new Error('auth_cancelled');
         if (!session) return null; // A logout during /me cannot restore a cached identity.

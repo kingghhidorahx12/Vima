@@ -13,8 +13,9 @@ se activan los endpoints OTP de producto y se deja de cargar `VIMA_AUTH_CONFIG_P
 No configures el proveedor OTP en `VIMA_BACKEND_MODE=qa`; QA continúa usando su
 `AuthConfig` externo y la app `LiveAccountGate`. Las sesiones son autoridades distintas.
 
-Preparación Passenger y propuesta administrativa Driver (no implementada) en
-[PRODUCT_ACCESS_ROLLOUT.md](../docs/PRODUCT_ACCESS_ROLLOUT.md). Producto requiere un
+Preparación Passenger en [PRODUCT_ACCESS_ROLLOUT.md](../docs/PRODUCT_ACCESS_ROLLOUT.md).
+D1 implementa localmente autoridad/administración Driver, todavía sin despliegue ni
+cuentas habilitadas: [DRIVER_AUTHORITY_D1.md](../docs/DRIVER_AUTHORITY_D1.md). Producto requiere un
 servicio/volumen separado del QA operativo; no se agrega una autoridad QA de fallback.
 El modo no-QA se llama `local` en la configuración actual, incluso detrás de Railway.
 
@@ -28,6 +29,8 @@ ejemplo `/data`) y estas variables externas:
 | `TWILIO_ACCOUNT_SID` | Identidad de servidor Twilio. |
 | `TWILIO_VERIFY_SERVICE_SID` | Verify Service para SMS. |
 | `TWILIO_AUTH_TOKEN` | Credencial privada Twilio. |
+| `VIMA_DRIVER_ADMIN_SECRET` | D1 opcional: habilita sólo el listener privado loopback; independiente de OTP/QA, 32–256 caracteres sin espacios. |
+| `VIMA_DRIVER_ADMIN_PORT` | Puerto loopback D1; default 8790, distinto del puerto público. Sin proxy/dominio. |
 
 El gateway persiste `auth-v1.json` en el runtime dir mediante escrituras serializadas
 y reemplazo atómico. Restringe acceso al volumen. Se almacenan HMAC de teléfonos y
@@ -41,8 +44,9 @@ Rutas exactas: `POST /v1/auth/otp/start`, `POST /v1/auth/otp/verify`,
 `POST /v1/auth/register`, `POST /v1/auth/refresh`, `POST /v1/auth/logout` y
 `GET /v1/auth/me`. Sólo start/verify/register/refresh son públicas; logout y me
 requieren access token. No existe un bypass público por prefijo `/v1/auth/`.
-Las nuevas cuentas sólo tienen capacidad Passenger. No se ha creado aprobación
-Driver ni perfil vehicular. Para más detalle, ver [decisiones](../docs/DECISIONS.md)
+Las nuevas cuentas sólo tienen capacidad Passenger. D1 añade aprobación privada y
+perfil histórico, auth schema v2 con backup y contexto HTTP explícito, sin conceder
+Driver real ni implementar aún su entrada productiva (D2). Para más detalle, ver [decisiones](../docs/DECISIONS.md)
 y [estado](../docs/PROJECT_STATE.md).
 
 El adapter conserva tests con OTP simulado y ahora cuenta con prueba SMS real en
@@ -152,6 +156,11 @@ para tiles cliente. Orbis visual/política de credencial cliente sigue pendiente
 Ver [contrato](../docs/TOMTOM_GEOSPATIAL.md) y [ground truth](../docs/ATLACOMULCO_GROUND_TRUTH.md).
 
 ## QA persistente
+
+Origen/recogida Passenger A: `VIMA_PICKUP_ADJUSTMENT_MAX_METERS` positivo/finito
+(default 200) valida `referenceOrigin?` frente a la recogida efectiva `origin` al
+cotizar. `/v1/matching/session` anuncia el límite para la UI. No altera los 150 m
+de llegada Driver, tarifas ni routing fast. [Contrato y rollout pendiente](../docs/PASSENGER_PICKUP_A.md).
 
 El gateway actual incorpora AuthConfig, matching y lifecycle. El modo local permanece compatible.
 Para QA Railway ver [guía QA release](../docs/QA_RELEASE.md): `PORT` tiene prioridad sobre

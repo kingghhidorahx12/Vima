@@ -127,6 +127,12 @@ nuevo Development Build para corregir los bugs. Aquí no se construyó ni public
 
 ## Primera cuenta Driver de producto — PROPUESTA, NO IMPLEMENTADA
 
+**Actualización D1 (2026-10-15):** la propuesta histórica debajo ya tiene autoridad,
+migración y administración privada implementadas localmente, según
+[DRIVER_AUTHORITY_D1.md](DRIVER_AUTHORITY_D1.md). No está desplegada ni se aprobó
+una cuenta real. Bootstrap/navegación Driver de producto y QA entre teléfonos son
+dependencias de D2. El diagnóstico siguiente describe el estado anterior a D1.
+
 Hoy no existe un comando administrativo suficiente. Editar `auth-v1.json` para añadir
 Driver falla su validador: `User.capabilities` sólo permite Passenger; authenticate
 emite principal Passenger; `profile()` rechaza Driver; `drivers` está vacío. Tampoco

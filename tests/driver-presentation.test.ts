@@ -189,7 +189,7 @@ test('light and dark share identical Driver structure and no feature-level theme
 test('Driver controller stays functional and presentation contains no debug identity', () => {
   const panel = readFileSync('src/features/driver/DriverStatePanel.tsx', 'utf8');
   const offer = readFileSync('src/features/driver/DriverOffer.tsx', 'utf8');
-  const screen = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
+  const screen = readFileSync('src/features/driver/DriverOperationalSurface.tsx', 'utf8');
   assert.ok(panel.indexOf('testID="driver-secondary-content"') < panel.indexOf('testID="driver-critical-region"'));
   assert.doesNotMatch(panel, /surface:\s*\{[^}]*\bheight:/s);
   assert.equal((screen.match(/<SafeAreaView/g) ?? []).length, 1);
@@ -202,7 +202,7 @@ test('Driver controller stays functional and presentation contains no debug iden
 
 test('Driver uses the shared real vehicle map; fallback never fabricates a location', () => {
   assert.deepEqual(driverMapFallback, [-99.88795, 19.79021]);
-  const screen = readFileSync('src/dev/driver/DriverLiveScreen.tsx', 'utf8');
+  const screen = readFileSync('src/features/driver/DriverOperationalSurface.tsx', 'utf8');
   assert.match(screen, /useDriverMap\(data, connection === 'online', \{ height: frameHeight, sheetHeight \}\)/);
   assert.doesNotMatch(screen, /PassengerUserLocation/);
   assert.doesNotMatch(screen, /zoom:\s*[0123]\b/);

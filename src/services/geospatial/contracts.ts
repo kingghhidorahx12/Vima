@@ -25,7 +25,8 @@ export interface RouteRequest {
   readonly origin: Coordinate; readonly destination: Coordinate; readonly stops: readonly Coordinate[];
 }
 export type GeospatialErrorCode = 'map_unavailable' | 'search_unavailable' | 'route_unavailable' |
-  'geocoding_unavailable' | 'no_result' | 'timeout' | 'invalid_result' | 'network_recoverable' | 'cancelled';
+  'geocoding_unavailable' | 'no_result' | 'timeout' | 'invalid_result' | 'network_recoverable' | 'cancelled' |
+  'pickup_outside_area' | 'pickup_outside_coverage';
 export class GeospatialError extends Error {
   readonly code: GeospatialErrorCode;
   constructor(code: GeospatialErrorCode) { super(code); this.name = 'GeospatialError'; this.code = code; }

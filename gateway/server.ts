@@ -49,18 +49,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
   const quotes = createQuoteService(adapter, config, options.pricing ?? { status: 'pricing_not_configured' }, now);
   let recovered = false;
   let matching: MatchingCoordinator | undefined;
-  const auth: AuthConfig | undefined = legacyAuth || productAuth ? {
-    drivers: legacyAuth?.drivers ?? [],
-    authenticate(header) {
-      if (productAuth) {
-        try { return productAuth.authConfig.authenticate(header); } catch { /* Legacy local/QA credentials remain a separate authority. */ }
-      }
-      if (legacyAuth) return legacyAuth.authenticate(header);
-      throw new MatchingError(401, 'unauthorized');
-    },
-    principal(id) { return productAuth?.authConfig.principal(id) ?? legacyAuth?.principal(id); },
-    profile(id) { return legacyAuth?.profile(id) ?? productAuth!.authConfig.profile(id); },
-  } : undefined;
+  const auth: AuthConfig | undefined = productAuth?.authConfig ?? legacyAuth;
   const createMatching = (pricing: Extract<PricingConfiguration, { status: 'ready' }>, matchingAuth: AuthConfig) => new MatchingCoordinator({ pricingConfig: pricing.config,
         quotePricingConfig: () => quotes.pricingBasis, auth: matchingAuth, directory: config.runtimeDir ?? '.runtime',
         clock: options.matchingClock, trace: options.matchingTrace,
@@ -120,7 +109,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       if (productAuth && await productAuth.handle(request, path, () => readBody(request, config.maxBodyBytes), reply)) {
         endpoint = 'product-auth'; count = 1; return;
       }
-      if (await matchingHttp(request, path, auth, matching, () => readBody(request, config.maxBodyBytes), controller.signal, reply)) {
+      if (await matchingHttp(request, path, auth, matching, () => readBody(request, config.maxBodyBytes), controller.signal, reply, config.pickupAdjustmentMaxMeters)) {
         endpoint = 'matching'; count = 1; return;
       }
       if (request.method === 'GET' && path.startsWith('/v1/geospatial/discovery?')) {
@@ -147,7 +136,9 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
       if (path.includes('?')) throw new GeospatialError('invalid_result');
       if (request.method === 'POST' && path === '/v1/passenger/quotes') {
         endpoint = 'passenger.quotes';
-        const principal = request.headers.authorization ? auth?.authenticate(request.headers.authorization) : undefined;
+        const operation = request.headers['x-vima-operational-context'];
+        if (operation !== undefined && operation !== 'passenger' && operation !== 'driver') throw new MatchingError(400, 'invalid_operational_context');
+        const principal = request.headers.authorization ? auth?.authenticate(request.headers.authorization, operation) : undefined;
         if (request.headers.authorization && !principal) throw new MatchingError(401, 'unauthorized');
         if (principal && principal.role !== 'passenger') throw new MatchingError(403, 'forbidden');
         const result = await quotes.quote(await readBody(request, config.maxBodyBytes), context, principal?.accountId);
@@ -250,7 +241,7 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
         reply(error.code === 'idempotency_conflict' ? 409 : 503, { error: { code: error.code } }); return;
       }
       category = error instanceof GeospatialError ? error.code : 'network_recoverable';
-      const status = category === 'invalid_result' ? 400 : category === 'no_result' ? 404 : category === 'timeout' ? 504 :
+      const status = ['invalid_result', 'pickup_outside_area', 'pickup_outside_coverage'].includes(category) ? 400 : category === 'no_result' ? 404 : category === 'timeout' ? 504 :
         category === 'cancelled' ? 499 : 503;
       reply(status, { error: { code: category } });
     } finally {
@@ -258,5 +249,16 @@ export function createGateway(config: GatewayConfig, adapter: TomTomAdapter, opt
     }
   });
   server.on('close', () => { clearInterval(cleanup); matching?.close(); });
-  return server;
+  return Object.assign(server, {
+    async administerDriver(input: unknown) {
+      await matchingReady;
+      if (!productAuth || !matching) throw new MatchingError(503, 'product_administration_unavailable');
+      return matching.administer(() => productAuth.administer(input));
+    },
+    async rollbackPassengerAuth() {
+      await matchingReady;
+      if (!productAuth || !matching) throw new MatchingError(503, 'product_administration_unavailable');
+      return matching.administer(() => productAuth.rollbackPassengerSchema());
+    },
+  });
 }

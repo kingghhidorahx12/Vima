@@ -1,5 +1,190 @@
 # Estado real del proyecto
 
+## Corrección de bloqueantes A/B — 05 QA / 03 Arquitectura (2026-10-16)
+
+- Checkout `codex/product-phone-auth-p1-1` @ `55e004ed`, D0–D3 y A/B locales
+  preservados; sin commit/push, publicación, Railway, OTA ni APK.
+- A: retirado únicamente el filtro `gateway.serviceAreaBounds` en cotización.
+  Esos bounds son de aportaciones; `selectPricing` sigue determinando cobertura
+  comercial. Coordenadas, referencia/200 m, rutas reales, contratos, idempotencia
+  y llegada Driver/150 m intactos. Referencia comercial no cubierta: sin precio.
+- B: entrar en `paused` cancela interpolación y copia el último target GPS aceptado
+  a pose; no congela un punto interpolado. Muestras aceptadas en pausa no generan
+  tween; política Passenger sigue filtrando muestras y readquisición. Driver por
+  defecto, heading, secuencias y Reduced Motion preservados. Sin Snap.
+- Validación final: focales **22/22 PASS**, suite completa **479/479 PASS**,
+  Gateway **90/90 PASS**. TypeScript, lint, worklets, diff-check y aislamiento
+  release/QA/fixtures/paths/clave privada PASS. Exportes Hermes Android/iOS locales
+  con caché limpia y HTTPS productivo comprobado; sin publicaciones.
+  Evidencia `.runtime/ab-blockers/`; exportes `.runtime/ab-blockers-release/`.
+  Preservación comprobada sobre 82 archivos locales: sólo ocho archivos del alcance
+  cambiaron; D0/18 renglones y ambos logs QA byte a byte intactos; staging vacío.
+  QA físico Android PENDIENTE: rutas fuera de bounds de aportaciones, recogida
+  límite y pausa en movimiento/GPS aceptado, offline/background/reconexión/RM.
+- `Vima-QA-AB.zip` no localizado en checkout, Descargas ni ubicaciones de documentos/
+  adjuntos revisadas; causas reproducidas desde código y regresiones locales.
+
+## B — seguimiento vial Passenger: alternativa GPS segura (2026-10-15)
+
+- Local en `codex/product-phone-auth-p1-1` @ `55e004e`, preservando D0–D3 y A.
+  [Viabilidad/costo, implementación y checklist](PASSENGER_ROAD_TRACKING_B.md).
+- Snap v1 revisado en fuentes oficiales; key servidor disponible, pero plan,
+  permiso, cuota y confianza en trazas locales NO verificados. No llamadas Snap,
+  adapter/flag habilitable, consumo ni ajustes viales simulados. GPS directo:
+  alternativa autorizada de B, sin nuevas dependencias ni cambios nativos/servidor.
+- Muestra observada separada del estado visual por assignment. GPS/timestamps/
+  secuencia/heading recibidos intactos; nunca se proyecta sobre ruta/calle próxima.
+  Curso visual por movimiento significativo, reposo sin oscilación y descarte
+  de rumbo obsoleto. Salto incoherente exige otro GPS coherente para readquirir.
+- Reciente <10 s, retrasada 10–60 s, caducada ≥60 s; última posición real retenida
+  con antigüedad y atenuación. Offline/background pausa interpolación y halo;
+  reconectar exige muestra nueva, sin extrapolar ni inventar trayectoria perdida.
+  Sin timestamp histórico/location no aparece un vehículo ficticio.
+- Camera/route-fit/pan, sedán aprobado, Driver por defecto/essential, Motion/RM,
+  A, matching, lifecycle/PIN/efectivo, tarifas, autorización y persistencia intactos.
+- Suite completa **477/477 PASS**; Gateway **90/90**, focales seguimiento **20/20**
+  (11 nuevos). TypeScript, lint, worklets, splash, MapLibre style-spec, Hermes
+  Android/iOS, aislamiento release/QA/fixtures/paths/clave privada y diff-check PASS.
+  D0 (18 renglones), archivos previos protegidos y logs QA byte a byte preservados.
+  Evidencia `.runtime/follow-b/`; exportes locales `.runtime/follow-b-release/`.
+  QA físico Android Light/Dark/Reduced Motion PENDIENTE; iOS físico PAUSADO. Sin commit/push,
+  Railway, OTA, APK ni aprobación de Driver real. A sigue requiriendo publicación
+  Gateway antes de una futura OTA conjunta; B no añade dependencia servidor.
+
+## A — selección de origen y recogida Passenger (2026-10-15)
+
+- Implementación local sobre `codex/product-phone-auth-p1-1` @ `55e004e`.
+  D0/D1/D2/D3 y logs QA preservados. No inicia B; sin commit, push, Railway,
+  OTA, APK ni aprobación Driver real. [Contrato, evidencia y checklist](PASSENGER_PICKUP_A.md).
+- Origen inicial libre por búsqueda/GPS/mapa, con elección explícita inmune al GPS
+  tardío. Ajuste posterior dentro de 200 m geodésicos del origen de referencia.
+  Mapa móvil y pin fijo en el centro visible; captura con unproject sólo tras
+  cámara asentada. Ancho nativo medido, panel/chrome, cancelación y respuestas
+  tardías se consideran; sin coordenadas de taps ni animación por frame React.
+- Selección pendiente separada de quote. Confirmar actualiza recogida/referencia,
+  invalida la quote anterior y recalcula; submit bloqueado durante elección.
+  quote.origin sigue efectivo; referenceOrigin opcional sólo cuando difiere,
+  persistido en quotes/snapshots y restauración, compatible con históricos.
+- Gateway valida coordenadas, límite configurable, cobertura y ruta cotizable;
+  no confía en círculo/cliente. La sesión existente anuncia el límite de ajuste.
+  Sin dirección se permite referencia manual honesta; si hay dirección se conserva.
+  Sin ruta/precio real no se solicita. Sin rutas/accesos vehiculares inventados.
+- Matching/oferta/assignment/routeToOrigin/llegada comparten quote.origin. Se
+  verifica por HTTP que 199 m desde la referencia no cumple llegada de 150 m.
+  Autorización D1, contexto D2, lifecycle/PIN/efectivo, tarifas y routing fast intactos.
+- UI Light/Dark y RM en el mismo shell/sheet: búsqueda, GPS, mapa, fuera de zona,
+  carga, reintento de proyección/dirección, referencia manual y cancelar. Home,
+  scroll, nav, Camera y usePassengerRouteFit conservados; sin dependencia/nativo.
+- Suite completa **466/466 PASS**; Gateway **90/90**; focales A + D3 **20/20**
+  (12 nuevos A). TypeScript, lint, worklets, splash y diff-check PASS.
+  Exportes Hermes locales Android/iOS, aislamiento release/QA/paths y presencia
+  del alcance A/HTTPS productivo en bytecode PASS. QA físico A PENDIENTE;
+  iOS sigue PAUSADO. Evidencia y hashes en la guía; exportes sin publicar.
+- Futuro rollout requiere Gateway compatible antes del selector OTA; no publicar
+  una OTA aislada contra el servidor anterior. No requiere Development Build por A.
+
+## D3 — auditoría y QA integrado Driver productivo (2026-10-15)
+
+- Rama y HEAD preservados: `codex/product-phone-auth-p1-1` @ `55e004e`.
+  D0/D1/D2 siguen locales sin commit; dos logs QA íntegros/untracked. Sin alta real,
+  commit, push, despliegue, OTA ni APK. [Informe y matriz D3](DRIVER_PRODUCT_D3_AUDIT.md).
+- Recorridos HTTP productivos locales con OTP/ruta simulados: aprobación privada
+  mediante CLI, oferta/aceptación, recogida/PIN, telemetría fresca en Passenger,
+  reinicio/restauración, finalización con respuesta perdida y efectivo. Normal y
+  suspendido durante assignment: terminal persistente, sin nuevas asignaciones.
+- Corregida carrera D2 de salida: un recibo OFFLINE idempotente puede ser histórico.
+  Ahora se exige DriverState actual OFFLINE sin assignment antes de salir; una
+  aceptación concurrente o error mantiene Driver. Reproducción unitaria y HTTP.
+- Autoridad/contexto por endpoint, migración/rollback, sesiones previas, corrupción,
+  idempotencia, suspensión/aceptación, journal/cachés/logout y aislamiento pasan.
+  Decoder Passenger anterior rechaza rating null: actualizar ambos teléfonos antes
+  de cualquier aprobación; no inventar rating. Sin control de versión mínima remoto.
+- Railway inspeccionado sólo en lectura: SSH operativo, Node 22, `/data`, auth v1,
+  una réplica/un proceso Gateway, `/ready` 200 y sin staged. Sigue desplegado
+  `3afef0d52b66cc40864369206a8137ab6c2fda3f`, sin D1/D2 ni secreto administrativo.
+  Listener privado viable; migración y prueba administrativa en Railway pendientes
+  de publicación autorizada. Plan: Gateway compatible → OTA ejecutada en ambos →
+  aprobación explícita → QA físico. Rollback v1 deja de ser seguro con historia Driver.
+- Suite **454/454 PASS**, Gateway **90/90**, focales D1/D2/D3/sesión/integración
+  **53/53** (8 nuevos D3). TypeScript, lint, worklets, splash, Hermes Android/iOS,
+  aislamiento release/QA/paths, HTTPS/contexto en bytecode y diff-check PASS.
+  Veredicto **CON OBSERVACIONES**; habilitación real condicionada al plan del informe.
+  QA físico D1/D2/D3 PENDIENTE; iOS PAUSADO. D0 no se extiende a estos casos.
+
+## D2 — Driver productivo OTP, implementación local (2026-10-15)
+
+- Sobre D0/D1 locales y HEAD `55e004e`; sin cuentas reales aprobadas, commit,
+  push, Railway, OTA ni APK. Autoridad D1 y logs QA preservados.
+- Perfil revalida `/me` y permite entrar a Driver sólo aprobado; `/driver` valida
+  identidad, capacidad/perfil o excepción de assignment activo autoritativo D1.
+  La reapertura usa pista de contexto por cuenta y recupera DriverState real.
+- DriverLiveScreen QA y entrada OTP comparten DriverOperationalSurface, hooks,
+  ubicación, mapa, actions y lifecycle; sin reconstruir Driver ni mezclar tokens QA.
+- Contextos tienen transporte cancelable y QueryClient propios; fences de sesión
+  rechazan respuestas tardías. Journal producto separado del QA, estable por cuenta
+  y assignment para recuperar/reconciliar comandos sin duplicarlos.
+- Salida exige OFFLINE confirmado sin assignment; fallo conserva Driver e ID de
+  reintento. Viaje activo conserva acceso operativo. Revocación/suspensión/seguridad
+  obedecen D1, 401 definitivo desmonta, red transitoria conserva credenciales.
+- Perfil nuevo muestra «Nuevo conductor · Sin valoraciones»; numéricos QA válidos.
+- [Implementación, validación y checklist D3](PRODUCT_DRIVER_D2.md).
+  Suite completa **446/446 PASS**, Gateway **90/90 PASS**, focales Driver/journal
+  **18/18 PASS**. TypeScript, lint, worklets, diff-check y export Hermes Android/iOS
+  PASS; aislamiento release/fixtures/paths y contexto/HTTPS productivo en bytecode
+  comprobados. QA físico D2/D3 PENDIENTE; iOS sigue PAUSADO.
+
+## D1 — autoridad productiva Passenger/Driver, implementación local (2026-10-15)
+
+- Base real `55e004ed5d2588a7fa3704f1ae345c3c11d743c3`, rama
+  `codex/product-phone-auth-p1-1`. D0 preservado íntegramente debajo; ambos logs
+  QA permanecen locales/untracked. Sin commit, push, Railway, OTA, APK ni alta real.
+- Una identidad OTP y sesiones vigentes: Passenger por defecto, Driver sólo por
+  decisión administrativa privada con vehículo completo. Contexto HTTP explícito
+  y autorización actual comprobada en servidor por operación/commit; sin fallback QA.
+- Auth schema v2 en el mismo `auth-v1.json`, backup exclusivo previo a migración,
+  validación de permisos/auditoría y persistencia serializada/atómica durable.
+  Fallos de storage bloquean readiness. Rollback a v1 conserva sesiones actuales
+  y sólo se permite antes de historia Driver; después exige binario compatible v2.
+- Administración por listener loopback autenticado y CLI ejecutado en el Gateway
+  activo; approve/suspend/revoke y bloqueo de seguridad separado. Idempotencia y
+  auditoría persistidas. No se editan JSON ni se usan tokens QA para habilitar Driver.
+- Suspender/revocar impide nuevos trabajos y retira ofertas bajo la misma cola de
+  matching. Viaje asignado puede completar PIN/lifecycle/efectivo; después no hay
+  elegibilidad ni excepción de viaje. Reinicio reconcilia el commit de auth antes
+  de ofertar; snapshots, receipts y perfil histórico sobreviven a revocación.
+- Alta nueva: rating null/count 0. Decoders compatibles con rating ausente/null y
+  numérico histórico; Passenger muestra «Sin valoraciones», sin inventar estrellas.
+  No se modificaron tarifas, rutas, mapa/cámara, Motion ni reglas de settlement.
+- Pruebas D1 incluyen migración/rollback, tokens previos, HTTP/contexto/QA,
+  idempotencia, carreras aceptar/revocar, ETA tardía, reinicio entre archivos,
+  viaje/PIN/efectivo, emergencia, corrupción y fallo de escritura.
+  Suite completa **439/439 PASS**; focal autoridad D1 **13/13 PASS**;
+  Gateway/matching/lifecycle/pricing **90/90 PASS**. TypeScript, lint, worklets,
+  fixture isolation, splash y diff-check PASS. Pruebas con OTP/ETA simulados y HTTP
+  localhost; no verifican Railway, SMS nuevo ni comportamiento físico D1.
+- [Administración, migración, rollback y D2](DRIVER_AUTHORITY_D1.md).
+  D2 requiere despliegue autorizado con una réplica/un escritor sin superposición,
+  prueba de SSH/volumen Linux y bootstrap/navegación Driver productivos. Ninguna
+  cuenta Driver real habilitada; QA físico D1 PENDIENTE; iOS sigue PAUSADO.
+
+## Passenger P1 — cierre de QA físico Android (2026-10-15)
+
+- **VERIFICADO según reporte del usuario en dos teléfonos Android:** OTA
+  `01a140f3-4abf-78d2-b768-30a2513d6e41` (identificador corto `01a140f3`),
+  canal exclusivo `product-access-preview`, environment `production`,
+  runtime `0.0.2`. Resultado de las cinco comprobaciones: **5/5 PASS**.
+- Perfil muestra el identificador de OTA correcto; «Confirma tu viaje» y
+  «Buscando conductor» encuadran la ruta; cancelar y repetir conserva la línea
+  azul; pan manual y «Recentrar ruta» funcionan en el dispositivo.
+- Validaciones automatizadas de la entrega **423/423 PASS**, según el reporte de
+  implementación; no se volvieron a ejecutar durante este registro documental.
+- Este cierre sustituye los pendientes anteriores de **esos cinco casos Android**
+  y de esa OTA, sin dar por verificados otros flujos, un viaje productivo completo,
+  Driver productivo ni iOS. **QA iOS PAUSADO**.
+- Registro exclusivamente documental: sin nuevas publicaciones OTA, APK, despliegues
+  Railway ni cambios a Passenger, Driver, matching, lifecycle o autenticación.
+
+
 ## Passenger P1 — versión y zoom QA 57021, preparación OTA 2026-10-15
 
 - Base real d7c9cbc, OTA de referencia 01a140b9-9aca-783d-90ef-6e927f761971.

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import Storage from 'expo-sqlite/kv-store';
+import { productRoleApi } from '../../services/auth/productRole';
 import { StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { PassengerScreen } from './PassengerScreen';
@@ -34,6 +36,9 @@ export default function ProductPassengerScreen() {
       const account = await auth.current(signal);
       if (signal?.aborted) return;
       if (!account) { router.replace('/auth' as Href); return; }
+      const role = await Storage.getItem(`vima.product-context.v1.${account.accountId}`);
+      if (signal?.aborted) return;
+      if (role === 'driver') { router.replace('/driver' as Href); return; }
       setStage('identity');
       const matching = createMatchingClient(auth.api);
       const identity = await matching.identity(signal);
@@ -66,6 +71,7 @@ export default function ProductPassengerScreen() {
 
 /** Invalidating auth removes the protected subtree before navigation effects run. */
 function ProductSessionBoundary({ session }: { session: ProductPassengerSession }) {
+  const [cache] = useState(() => new QueryClient({ defaultOptions: { mutations: { retry: false } } }));
   const state = useSyncExternalStore(session.auth.subscribe, session.auth.getSnapshot, session.auth.getSnapshot);
   const router = useRouter(); const client = useQueryClient();
   const valid = state.status === 'authenticated' && state.generation === session.generation;
@@ -78,16 +84,21 @@ function ProductSessionBoundary({ session }: { session: ProductPassengerSession 
     router.replace((state.reason === 'expired' ? '/auth?notice=session_expired'
       : state.reason === 'storage' ? '/auth?notice=session_storage' : '/auth') as Href);
   }, [valid, state.status, state.reason, router, client]);
-  return valid ? <AuthenticatedPassenger session={session} /> : <RestorationSurface closing={state.reason === 'logout'} />;
+  useEffect(() => () => { void cache.cancelQueries(); cache.clear(); }, [cache]);
+  return valid ? <QueryClientProvider client={cache}><AuthenticatedPassenger session={session} /></QueryClientProvider> : <RestorationSurface closing={state.reason === 'logout'} />;
 }
 
 function AuthenticatedPassenger({ session }: { session: ProductPassengerSession }) {
   const router = useRouter();
+  const [scope] = useState(() => productRoleApi(session.api, () => session.auth.getSnapshot().generation === session.generation &&
+    session.auth.getSnapshot().status === 'authenticated', 'passenger'));
+  useEffect(() => () => scope.close(), [scope]);
   const [gateway] = useState(() => {
-    const client = createGeospatialClient(session.api, geospatialClientConfig.timeoutMs);
+    const client = createGeospatialClient(scope.api, geospatialClientConfig.timeoutMs);
     return createPassengerLiveGateway(client, signal => locateCurrentPlace(signal, client.reverseGeocode),
       mobilePersonalPlaces, mobileInstallationId, process.env.EXPO_PUBLIC_VIMA_API_BASE_URL,
-      { matching: session.matching, accountId: session.identity.accountId, available: session.identity.matchingAvailable });
+      { matching: createMatchingClient(scope.api, { context: 'passenger' }), accountId: session.identity.accountId, available: session.identity.matchingAvailable,
+        pickupAdjustmentMaxMeters: session.identity.pickupAdjustmentMaxMeters });
   });
   return <PassengerScreen gateway={gateway} mapConfig={passengerMapConfig} boundaries={{ call() {}, safety() {},
     account: () => router.push('/account' as Href),

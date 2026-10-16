@@ -20,7 +20,7 @@ function AuthenticatedPassenger({ api, matching, identity }: { api: ApiClient; m
     const client = createGeospatialClient(api, geospatialClientConfig.timeoutMs);
     return createPassengerLiveGateway(client, signal => locateCurrentPlace(signal, client.reverseGeocode),
       mobilePersonalPlaces, mobileInstallationId, process.env.EXPO_PUBLIC_VIMA_API_BASE_URL,
-      { matching, accountId: identity.accountId, available: identity.matchingAvailable });
+      { matching, accountId: identity.accountId, available: identity.matchingAvailable, pickupAdjustmentMaxMeters: identity.pickupAdjustmentMaxMeters });
   });
   return <PassengerScreen gateway={gateway} mapConfig={developmentMap} boundaries={{ schedule() {}, call() {}, safety() {} }} />;
 }

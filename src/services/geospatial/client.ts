@@ -28,7 +28,7 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
       if (error instanceof GeospatialError) throw error;
       if (error instanceof ApiError) {
         const codes: readonly string[] = ['map_unavailable', 'search_unavailable', 'geocoding_unavailable', 'route_unavailable',
-          'no_result', 'timeout', 'invalid_result', 'network_recoverable', 'cancelled'];
+          'no_result', 'timeout', 'invalid_result', 'network_recoverable', 'cancelled', 'pickup_outside_area', 'pickup_outside_coverage'];
         if (error.code && codes.includes(error.code)) throw new GeospatialError(error.code as GeospatialErrorCode);
         if (error.status === 404) throw new GeospatialError('no_result');
         if (error.status === 408 || error.status === 504) throw new GeospatialError('timeout');
@@ -42,7 +42,8 @@ export function createGeospatialClient(api: ApiClient, timeoutMs: number) {
     quote(input: QuoteRequest, signal?: AbortSignal) {
       const place = ({ id, name, address, coordinate }: QuoteRequest['origin']) => ({ id, name, address, coordinate });
       return request({ path: '/v1/passenger/quotes', method: 'POST', body: { operationId: input.operationId,
-        origin: place(input.origin), destination: place(input.destination), stops: input.stops.map(place) },
+        origin: place(input.origin), ...(input.referenceOrigin ? { referenceOrigin: place(input.referenceOrigin) } : {}),
+        destination: place(input.destination), stops: input.stops.map(place) },
         decode: decodeQuoteResponse, signal }, 'route_unavailable');
     },
     async startPlacesSession(signal?: AbortSignal): Promise<PlacesSession> {

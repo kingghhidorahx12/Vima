@@ -11,6 +11,7 @@ import { productAuthClient, ProductAuthClientError, type ProductAccount } from '
 import { AccessAction, AccessCard, AccessFrame, AccessNotice, RestorationSurface } from './AccessSurface';
 import { accessErrorMessage } from './accessModel';
 import { AboutVima } from './AboutVima';
+import Storage from 'expo-sqlite/kv-store';
 
 export function ProductAccountScreen() {
   const router = useRouter(); const client = useQueryClient(); const theme = useVimaTheme();
@@ -20,7 +21,10 @@ export function ProductAccountScreen() {
   const [confirmLogout, setConfirmLogout] = useState(false); const lock = useRef(false);
   useEffect(() => {
     let active = true; const controller = new AbortController();
-    void Promise.resolve().then(() => productAuthClient().current(controller.signal)).then(value => {
+    void Promise.resolve().then(() => productAuthClient().current(controller.signal, true)).then(async value => {
+      if (value && await Storage.getItem(`vima.product-context.v1.${value.accountId}`) === 'driver') {
+        if (active) { router.dismissAll(); router.replace('/driver' as Href); } return;
+      }
       if (!active) return;
       if (!value) router.replace('/auth' as Href); else { setAccount(value); setError(''); }
     }).catch(reason => { if (active) setError(accessErrorMessage(reason)); });
@@ -74,6 +78,9 @@ export function ProductAccountScreen() {
       <View style={styles.fill}><VimaText variant="bodyMedium">Para conducir con Vima</VimaText>
         <VimaText variant="bodySmall" style={{ color: theme.roles.textSecondary }}>Necesitas aprobación y un perfil vehicular completo.</VimaText>
       </View></View></AccessCard>
+    {account.capabilities.includes('driver') ? <VimaButton label="Entrar a Driver" disabled={busy} onPress={() => {
+      router.dismissAll(); router.replace('/driver' as Href);
+    }} /> : null}
     {confirmLogout ? <AccessCard>
       <VimaText variant="bodyMedium">¿Cerrar sesión en este dispositivo?</VimaText>
       <VimaText variant="bodySmall">Podrás volver a entrar con un código SMS.</VimaText>

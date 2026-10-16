@@ -24,34 +24,46 @@ export function DriverVehicleMarker({ location, sequence, online = true }: {
 }
 
 /** Approved north-facing PNG: 30×50 canvas, ~21×46 silhouette without distortion; Metro @2x/@3x. */
-export function VehicleMarker({ location: incoming, sequence, online = true, essential = false, id = 'driver-vehicle' }: {
+export function VehicleMarker({ location: incoming, sequence, online = true, essential = false, id = 'driver-vehicle', presentation }: {
   location?: DriverState['location']; sequence: number; online?: boolean; essential?: boolean; id?: string;
+  /** Validated Passenger last-known GPS; never a second source of commercial telemetry. */
+  presentation?: { paused: boolean; opacity: number; reconnected: boolean };
 }) {
-  const location = useFreshVehicleLocation(incoming);
+  const fresh = useFreshVehicleLocation(presentation ? undefined : incoming);
+  const location = presentation ? incoming : fresh;
   const theme = useVimaTheme(); const { reducedMotion } = useMotionPolicy();
   const sample = useSharedValue<DriverVehicleSample | null>(null);
   const pulse = useSharedValue(1);
   const acquired = useRef(false); const reconnect = useRef(false);
   const lastSample = useRef('');
   const accepted = useRef<{ sequence: number; captured: number } | null>(null);
+  const passengerPresentation = !!presentation;
+  const reacquired = !!presentation?.reconnected;
+  const paused = !!presentation?.paused;
   const lng = location?.coordinate[0]; const lat = location?.coordinate[1]; const heading = location?.heading; const captured = location?.receivedAt;
   useEffect(() => { if (!online) reconnect.current = true; }, [online]);
   useEffect(() => {
-    if (lng === undefined || lat === undefined) { sample.set(null); acquired.current = false; lastSample.current = ''; return; }
+    if (lng === undefined || lat === undefined) {
+      sample.set(null); acquired.current = false; lastSample.current = '';
+      if (passengerPresentation) accepted.current = null;
+      return;
+    }
     if (accepted.current && (sequence < accepted.current.sequence || captured! < accepted.current.captured)) return;
     const key = JSON.stringify([lng, lat, heading, captured]);
     if (lastSample.current === key) return;
     lastSample.current = key;
     accepted.current = { sequence, captured: captured! };
-    sample.set({ coordinate: [lng, lat], heading: validHeading(heading) ? heading : null, sequence, reconnected: reconnect.current });
+    sample.set({ coordinate: [lng, lat], heading: validHeading(heading) ? heading : null, sequence,
+      reconnected: reconnect.current || reacquired });
     reconnect.current = false;
     if (!acquired.current) {
-      acquired.current = true; pulse.set(reducedMotion ? 1 : 0);
-      if (!reducedMotion) pulse.set(fadeTo(1, motionTimings.map));
+      acquired.current = true; pulse.set(reducedMotion || paused ? 1 : 0);
+      if (!reducedMotion && !paused) pulse.set(fadeTo(1, motionTimings.map));
     }
-  }, [lng, lat, heading, captured, sequence, sample, pulse, reducedMotion]);
+  }, [lng, lat, heading, captured, sequence, sample, pulse, reducedMotion, passengerPresentation, reacquired, paused]);
+  useEffect(() => { if (paused) { cancelAnimation(pulse); pulse.set(1); } }, [paused, pulse]);
   useEffect(() => () => cancelAnimation(pulse), [pulse]);
-  const pose = useVehicleMotion(sample, motion, { driver: true, essential });
+  const pose = useVehicleMotion(sample, motion, { driver: true, essential, paused: presentation?.paused, replaceHeading: !!presentation });
   const animatedProps = useAnimatedProps(() => ({ data: pose.get() ? JSON.stringify({ type: 'Feature',
     properties: { heading: pose.get()!.heading, acquisition: reducedMotion ? 1 : pulse.get() },
     geometry: { type: 'Point', coordinates: pose.get()!.coordinate } }) : empty }));
@@ -61,10 +73,10 @@ export function VehicleMarker({ location: incoming, sequence, online = true, ess
       'circle-color': theme.roles.positive,
       'circle-opacity': ['interpolate', ['linear'], ['get', 'acquisition'], 0, 0.05, 1, 0],
     }} />
-    <Layer id={id} type="symbol" filter={['!=', ['get', 'heading'], null]} layout={{ 'icon-image': `vima-driver-${theme.name}`, 'icon-size': 1,
+    <Layer id={id} type="symbol" filter={['!=', ['get', 'heading'], null]} paint={{ 'icon-opacity': presentation?.opacity ?? 1 }} layout={{ 'icon-image': `vima-driver-${theme.name}`, 'icon-size': 1,
       'icon-anchor': 'center', 'icon-allow-overlap': true, 'icon-ignore-placement': true,
       'icon-rotation-alignment': 'map', 'icon-rotate': ['get', 'heading'] }} />
-    <Layer id={`${id}-unoriented`} type="symbol" filter={['==', ['get', 'heading'], null]}
+    <Layer id={`${id}-unoriented`} type="symbol" filter={['==', ['get', 'heading'], null]} paint={{ 'icon-opacity': presentation?.opacity ?? 1 }}
       layout={{ 'icon-image': `vima-driver-${theme.name}`, 'icon-size': 1, 'icon-anchor': 'center', 'icon-allow-overlap': true,
         'icon-ignore-placement': true, 'icon-rotation-alignment': 'viewport' }} />
   </AnimatedSource></>;

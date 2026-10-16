@@ -17,6 +17,25 @@ const base: PassengerTrip = { id: 'visual-trip', revision: 1, phase: 'assigned',
 const text = (tree: ReactTestRenderer) => tree.root.findAllByType('Text' as never).map(n => n.props.children).flat().join('');
 const press = (tree: ReactTestRenderer, label: string) => tree.root.findAllByType('Pressable' as never).find(n => n.props.accessibilityLabel === label)!;
 
+test('D1 Passenger shows unknown Driver rating honestly in light/dark and preserves numeric historical ratings', async () => {
+  for (const themeName of ['light', 'dark']) {
+    const f = createPassengerFixtureGateway({ after: () => () => {}, delay: async () => {} });
+    let current: PassengerTrip = { ...base, assignment: { ...assignment, driver: { name: assignment.driver.name, rating: null, ratingCount: 0 } } };
+    const h = createHarness({}, { themeName, reduced: true });
+    const tree: ReactTestRenderer = await h.render({ ...f.gateway, source: 'server', activeRequest: async () => current, fetch: async () => current });
+    try {
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+      assert.ok(text(tree).includes('Sin valoraciones'));
+      current = { ...current, revision: 2, assignment: { ...assignment, driver: { name: assignment.driver.name, rating: 4.9 } } };
+      await act(async () => { await h.client.invalidateQueries({ queryKey: ['trip'] }); });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+      assert.equal(text(tree).includes('Sin valoraciones'), false);
+      assert.ok(text(tree).includes('4.9'));
+      assert.equal(h.mounted.map, 1); assert.equal(h.mounted.sheet, 1);
+    } finally { await act(async () => tree.unmount()); h.client.clear(); f.controls.dispose(); }
+  }
+});
+
 test('destination summary uses real name/address and semantic media fallback without a second selection', async () => {
   const h = createHarness(); const { DestinationSummary } = h.load('src/features/passenger/PassengerJourneySummary.tsx');
   let tree!: ReactTestRenderer;

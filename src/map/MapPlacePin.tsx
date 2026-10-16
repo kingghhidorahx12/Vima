@@ -11,6 +11,16 @@ import { locationRingFrame } from '../motion/mapPersonality';
 import { pinEntrance } from './pinMotion';
 import type { Coordinate } from './models';
 
+/** Same approved artwork, fixed to the viewport while the pickup map moves. */
+export function FixedPickupPin({ x, y, outside = false }: { x: number; y: number; outside?: boolean }) {
+  const theme = useVimaTheme();
+  return <View testID="passenger-fixed-pickup-pin" pointerEvents="none" accessible={false}
+    style={[styles.footprint, { position: 'absolute', left: x - size / 2, top: y - size - t.spacing.scalePx[0]! }]}>
+    <View style={[styles.pin, { backgroundColor: outside ? theme.roles.danger : theme.roles.positive }]} />
+    <View style={[styles.inner, { backgroundColor: theme.roles.onAction }]} />
+  </View>;
+}
+
 /** Shared approved pickup/origin artwork; no Passenger flow dependency. */
 export function MapPlacePin({ place, kind, id = `passenger-${kind}-pin` }: {
   place: { coordinate: Coordinate; id?: string; name?: string; address?: string }; kind: 'origin' | 'destination'; id?: string;

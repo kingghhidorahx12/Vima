@@ -33,6 +33,8 @@ export function passengerErrorMessage(error: unknown): string {
   const message = typeof candidate.message === 'string' ? candidate.message : '';
   const code = typeof candidate.code === 'string' ? candidate.code : '';
   if (code === 'route_unavailable') return 'No pudimos calcular la ruta. Reintenta.';
+  if (code === 'pickup_outside_area') return 'La recogida está fuera del área permitida. Ajusta el punto.';
+  if (code === 'pickup_outside_coverage') return 'La recogida está fuera de cobertura. Elige otro punto.';
   if (tripCodes.has(code) || tripCodes.has(message) || tripMessages.has(message) || candidate.name === 'TripHttpSnapshotError')
     return passengerTripUpdateError;
   return approvedProductMessages.has(message) ? message : passengerActionError;

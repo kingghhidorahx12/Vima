@@ -3,16 +3,21 @@ import { allowFields } from '../validation.ts';
 import { MatchingError, type AuthConfig } from './auth.ts';
 import type { MatchingCoordinator } from './coordinator.ts';
 import { parseLifecycleCommand, parseTelemetry } from './lifecycle.ts';
+import { pickupAdjustmentMaxMeters } from '../../src/services/geospatial/pickup.ts';
 import type { Coordinate } from '../../src/map/models.ts';
 
 export async function matchingHttp(request: IncomingMessage, path: string, auth: AuthConfig | undefined,
   matching: MatchingCoordinator | undefined, read: () => Promise<unknown>, signal: AbortSignal,
-  reply: (status: number, value: unknown) => void): Promise<boolean> {
+  reply: (status: number, value: unknown) => void, pickupLimit = pickupAdjustmentMaxMeters): Promise<boolean> {
   if (!/^\/v1\/(matching\/|driver\/|passenger\/requests)/.test(path)) return false;
   if (!auth) throw new MatchingError(503, 'matching_unavailable');
-  const principal = auth.authenticate(request.headers.authorization);
+  const context = request.headers['x-vima-operational-context'];
+  if (context !== undefined && context !== 'passenger' && context !== 'driver') throw new MatchingError(400, 'invalid_operational_context');
+  const principal = auth.authenticate(request.headers.authorization, context);
+  if (path.startsWith('/v1/driver/') && principal.role !== 'driver' || path.startsWith('/v1/passenger/') && principal.role !== 'passenger') throw new MatchingError(403, 'forbidden');
   if (path === '/v1/matching/session' && request.method === 'GET') {
-    reply(200, { ...principal, matchingAvailable: !!matching }); return true;
+    if (principal.role === 'driver' && auth.authorizeDriver) { if (!matching) throw new MatchingError(503, 'matching_unavailable'); await matching.driver(principal); }
+    reply(200, { ...principal, matchingAvailable: !!matching, pickupAdjustmentMaxMeters: pickupLimit }); return true;
   }
   if (!matching) throw new MatchingError(503, 'matching_unavailable');
   const url = new URL(path, 'http://localhost'); const method = request.method;

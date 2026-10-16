@@ -1,5 +1,5 @@
 import type { ResolvedPlace, RouteResult } from '../geospatial/contracts.ts';
-export interface QuoteDraft { origin: ResolvedPlace; destination: ResolvedPlace; stops: readonly ResolvedPlace[] }
+export interface QuoteDraft { origin: ResolvedPlace; referenceOrigin?: ResolvedPlace; destination: ResolvedPlace; stops: readonly ResolvedPlace[] }
 export interface PriceBreakdown {
   currency: 'MXN'; baseMinor: number; distanceChargeMinor: number; durationChargeMinor: number;
   meteredSubtotalMinor: number; minimumMinor: number; minimumApplied: boolean; fareBeforeExtrasMinor: number;

@@ -18,6 +18,8 @@ const assignment = (sequence = 1, capturedAt = Date.now()): Assignment => ({ id:
 
 test('Passenger uses the same registered car and map-aligned heading in active phases; updates never recenter camera', async () => {
   for (const theme of ['light', 'dark']) for (const reduced of [false, true]) {
+    // Model a real one-second sample cadence, independent of the renderer/CPU speed.
+    const realNow = Date.now; let now = realNow(); Date.now = () => now;
     const h = createMapHarness({ realMotion: true, reduced, fileOverrides: {
       'src/design/themes/index.tsx': { useVimaTheme: () => ({ name: theme, roles: { positive: '#00D68F' } }) },
     } });
@@ -35,6 +37,7 @@ test('Passenger uses the same registered car and map-aligned heading in active p
       const markerSource = tree.root.findAllByType('MapLibreSource' as never).find(n => n.props.id === 'passenger-assigned-vehicle-source');
       const cameraCalls = h.calls.filter((c: unknown[]) => c[0] === 'setStop').length;
       for (const state of ['ASSIGNED', 'ARRIVED_PICKUP', 'IN_PROGRESS'] as const) {
+        now += 1000;
         phase = state; a = assignment(a.sample.sequence + 1);
         await h.act(async () => tree.update(element())); await settle();
         assert.deepEqual(read().geometry.coordinates, a.sample.coordinate);
@@ -70,11 +73,14 @@ test('Passenger uses the same registered car and map-aligned heading in active p
       home = false; a = { ...assignment(11), sample: { coordinate: [0, 0], heading: 90, sequence: 11 } };
       await h.act(async () => tree.update(element())); await settle(); assert.deepEqual(read().features, []); // old server isn't live
       a = assignment(12, Date.now() - 61000);
-      await h.act(async () => tree.update(element())); await settle(); assert.deepEqual(read().features, []);
+      await h.act(async () => tree.update(element())); await settle();
+      assert.deepEqual(read().geometry.coordinates, a.sample.coordinate); // explicitly last known, never labelled live
+      assert.equal(read().properties.heading, null);
+      assert.equal(tree.root.findAllByType('MapLibreLayer' as never).find(n => n.props.id === 'passenger-assigned-vehicle')!.props.paint['icon-opacity'], 0.5);
       a = assignment(13); await h.act(async () => tree.update(element())); await settle();
       assert.deepEqual(read().geometry.coordinates, a.sample.coordinate);
       assert.equal(tree.root.findAllByType('MapLibreSource' as never).find(n => n.props.id === 'passenger-assigned-vehicle-source'), markerSource);
-    } finally { await h.act(async () => tree.unmount()); }
+    } finally { Date.now = realNow; await h.act(async () => tree.unmount()); }
   }
 });
 

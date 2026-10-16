@@ -9,8 +9,8 @@ import { ApiError } from '../../services/api/client';
 import type { Coordinate } from '../../map/models';
 import { lifecycleCommandMessage } from './lifecycleFeedback';
 
-export function useDriverLifecycle(client: MatchingClient, accountId: string, received: (snapshot: DriverState) => void) {
-  const [journal] = useState(() => createDriverJournal(Storage, accountId, client, received));
+export function useDriverLifecycle(client: MatchingClient, accountId: string, received: (snapshot: DriverState) => void, namespace?: 'product') {
+  const [journal] = useState(() => createDriverJournal(Storage, accountId, client, received, namespace));
   const [busy, setBusy] = useState(false); const busyRef = useRef(false);
   const [queued, setQueued] = useState(0); const [error, setError] = useState('');
   const [pendingCommands, setPendingCommands] = useState<PostPinCommand[]>([]);

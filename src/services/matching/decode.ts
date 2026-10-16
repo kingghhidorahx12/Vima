@@ -1,3 +1,4 @@
+import { validDriverRating } from './driverRating.ts';
 import { activeRequestStates, assignedRequestStates } from './lifecycle.ts';
 import { validateTrip } from '../../features/trip/contracts.ts';
 import { passengerTrip, validPlace, type Assignment } from '../../features/passenger/model.ts';
@@ -31,7 +32,7 @@ function lifecycle(life: TripLifecycle, state: string) {
     (life.paymentOutcome === 'cash_problem' ? !text(life.disputeId) : life.disputeId !== undefined))) return fail();
 }
 function assignment(a: Omit<Assignment, 'pin'> & { pin?: string }, driver = false) {
-  if (!a || !text(a.id) || !text(a.driver?.name) || !Number.isFinite(a.driver.rating) || a.driver.rating < 0 || a.driver.rating > 5 ||
+  if (!a || !text(a.id) || !text(a.driver?.name) || !validDriverRating(a.driver) ||
     !text(a.vehicle?.name) || !text(a.vehicle.plate) || !text(a.vehicle.color) || !Number.isFinite(a.etaMinutes) || a.etaMinutes < 0 ||
     (driver ? 'pin' in a : !/^\d{4}$/.test(a.pin ?? '')) || !a.sample || !revision(a.sample.sequence) || !Number.isFinite(a.sample.heading) ||
     a.sample.heading < 0 || a.sample.heading >= 360 || a.routeToOrigin?.type !== 'Feature') return fail();
@@ -52,7 +53,10 @@ export function decodeMatchingTrip(raw: unknown): MatchingPassengerSnapshot {
   if ((v.requestState === 'SEARCHING' && !['searching', 'reassigning'].includes(v.phase)) ||
     ((assignedRequestStates as readonly string[]).includes(v.requestState) && v.phase !== 'assigned') || (v.requestState === 'COMPLETED' && v.phase !== 'completed') || (v.requestState === 'CANCELLED' && v.phase !== 'cancelled') ||
     (v.requestState === 'NO_DRIVER_FOUND' && v.phase !== 'expired')) return fail();
-  if (decodeQuoteResponse(v.quote.pricing).status !== 'priced') return fail();
+  const pricing = decodeQuoteResponse(v.quote.pricing);
+  if (pricing.status !== 'priced') return fail();
+  if (v.quote.referenceOrigin !== undefined && !validPlace(v.quote.referenceOrigin) ||
+    JSON.stringify(v.quote.referenceOrigin ?? null) !== JSON.stringify(pricing.quote.referenceOrigin ?? null)) return fail();
   if (v.assignment) assignment(v.assignment);
   lifecycle(v.lifecycle, v.requestState);
   return v;
@@ -60,7 +64,7 @@ export function decodeMatchingTrip(raw: unknown): MatchingPassengerSnapshot {
 export function decodeDriver(raw: unknown): DriverState {
   const d = raw as DriverState;
   if (!d || !text(d.accountId) || !revision(d.revision) || !revision(d.expiryCount) ||
-    !['OFFLINE', 'LOCATING', 'AVAILABLE', 'PAUSED', 'ASSIGNED'].includes(d.availability) || !text(d.profile?.driver?.name)) return fail();
+    !['OFFLINE', 'LOCATING', 'AVAILABLE', 'PAUSED', 'ASSIGNED'].includes(d.availability) || !text(d.profile?.driver?.name) || !validDriverRating(d.profile.driver)) return fail();
   if (d.location) { normalizeCoordinate(d.location.coordinate); if (!revision(d.location.receivedAt) ||
     d.location.heading !== undefined && (!Number.isFinite(d.location.heading) || d.location.heading < 0 || d.location.heading >= 360)) return fail(); }
   if (d.availability === 'AVAILABLE' && !d.location) return fail();
@@ -80,6 +84,7 @@ export function decodeDriver(raw: unknown): DriverState {
 export function decodeIdentity(raw: unknown): MatchingIdentity {
   const v = raw as MatchingIdentity;
   if (!v || !text(v.accountId) || !['passenger', 'driver'].includes(v.role) || typeof v.matchingAvailable !== 'boolean') return fail();
+  if (v.pickupAdjustmentMaxMeters !== undefined && (!Number.isFinite(v.pickupAdjustmentMaxMeters) || v.pickupAdjustmentMaxMeters <= 0)) return fail();
   return v;
 }
 export function decodeRevision(raw: unknown): RevisionSignal {

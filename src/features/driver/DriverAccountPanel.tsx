@@ -12,7 +12,7 @@ import { motionTimings } from '../../motion/timing';
 import type { DriverState } from '../../services/matching/contracts';
 
 /** Presentation of an already-authorized Driver snapshot. Never grants a role or edits its profile. */
-export function DriverAccountPanel({ state, onClose }: { state: DriverState; onClose: () => void }) {
+export function DriverAccountPanel({ state, onClose, onLeave, onSession }: { state: DriverState; onClose: () => void; onLeave?: () => void; onSession?: () => void }) {
   const theme = useVimaTheme(); const control = useVimaThemeControl(); const policy = useMotionPolicy();
   useFocusEffect(useCallback(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => { onClose(); return true; });
@@ -28,7 +28,7 @@ export function DriverAccountPanel({ state, onClose }: { state: DriverState; onC
         <View style={styles.identity}><View style={[styles.avatar, { backgroundColor: theme.roles.positiveWash }]}>
           <VimaText variant="h3" style={{ color: theme.roles.positiveStrong }}>{initials}</VimaText></View>
           <View style={styles.fill}><VimaText variant="bodyMedium">{profile.driver.name}</VimaText>
-            <VimaText variant="bodySmall" style={{ color: theme.roles.textSecondary }}>Perfil del servicio Driver</VimaText></View></View>
+            <VimaText variant="bodySmall" style={{ color: theme.roles.textSecondary }}>{profile.driver.rating == null ? 'Nuevo conductor · Sin valoraciones' : `Calificación ${profile.driver.rating}`}</VimaText></View></View>
         <VimaText variant="caption" style={{ color: theme.roles.textSecondary }}>Datos de tu perfil autorizado. La edición no está disponible.</VimaText>
       </View>
       <View style={[styles.card, card]}><View style={styles.identity}><VimaGlyph name="car" color={theme.roles.control} />
@@ -41,6 +41,8 @@ export function DriverAccountPanel({ state, onClose }: { state: DriverState; onC
           {policy.reducedMotion ? 'Animaciones reducidas activas' : 'Movimiento según los ajustes del dispositivo'}
         </VimaText></View>
     </ScrollView>
+    {onLeave ? <VimaButton secondary label="Cambiar a Passenger" onPress={onLeave} /> : null}
+    {onSession ? <VimaButton secondary label="Cuenta y sesión" onPress={onSession} /> : null}
     <VimaButton secondary label="Volver a la operación" onPress={onClose} />
   </ElementEntrance>;
 }

@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, openSync, fsyncSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomInt, randomUUID } from 'node:crypto';
-import type { AuthConfig, Principal } from './auth.ts';
+import type { AuthConfig, Principal, DriverOperation } from './auth.ts';
 import { MatchingError } from './auth.ts';
 import type { AuthoritativeRideQuote } from '../../src/services/pricing/contracts.ts';
 import { decodeQuoteResponse } from '../../src/services/pricing/normalize.ts';
@@ -105,6 +105,8 @@ function migrateSnapshot(raw: unknown): unknown {
   value.version = 2; return value;
 }
 
+const knownIdentity = (auth: AuthConfig, id: string, role: Principal['role']) => auth.hasIdentity?.(id, role) ?? auth.principal(id)?.role === role;
+
 function validateSnapshot(raw: unknown, auth: AuthConfig, pricingConfig?: PricingConfig): Snapshot {
   const value = migrateSnapshot(raw) as Snapshot;
   const integer = (n: number) => Number.isSafeInteger(n) && n >= 0;
@@ -114,11 +116,11 @@ function validateSnapshot(raw: unknown, auth: AuthConfig, pricingConfig?: Pricin
   if (!object(value) || (!legacy && value.version !== 3 && value.version !== 4) || !['requests', 'drivers', 'offers', 'requestIds', 'actions'].every(k => object(value[k as keyof Snapshot]))) throw new Error();
   fields(value, ['version', 'requests', 'drivers', 'offers', 'requestIds', 'actions', ...(!legacy ? ['activeRequestByOwner'] : []), ...(value.version === 4 ? ['pricingBases'] : [])]);
   const request = (r: RequestRecord) => {
-    if (!object(r) || !identifier(r.id) || !identifier(r.requestId) || auth.principal(r.owner)?.role !== 'passenger' || !integer(r.revision) ||
+    if (!object(r) || !identifier(r.id) || !identifier(r.requestId) || !knownIdentity(auth, r.owner, 'passenger') || !integer(r.revision) ||
       ![...activeRequestStates, 'COMPLETED', 'CANCELLED', 'NO_DRIVER_FOUND'].includes(r.state) || !integer(r.createdAt) ||
       r.deadline !== r.createdAt + matchingPolicy.limitMs || !integer(r.searchStartedAt) || r.searchStartedAt < r.createdAt ||
       r.searchStartedAt > r.deadline || !integer(r.round) || !Array.isArray(r.offered) || !Array.isArray(r.excluded) ||
-      [...r.offered, ...r.excluded].some(id => auth.principal(id)?.role !== 'driver') || new Set(r.offered).size !== r.offered.length) throw new Error();
+      [...r.offered, ...r.excluded].some(id => !knownIdentity(auth, id, 'driver')) || new Set(r.offered).size !== r.offered.length) throw new Error();
     fields(r, ['id', 'requestId', 'owner', 'revision', 'state', 'quote', 'createdAt', 'deadline', 'searchStartedAt', 'round', 'offered', 'excluded', 'assignment', 'pricingBasisId', 'lifecycle']);
     if (new Set(r.excluded).size !== r.excluded.length || r.excluded.some(id => !r.offered.includes(id))) throw new Error();
     decodeQuoteResponse({ status: 'priced', quote: r.quote });
@@ -128,7 +130,7 @@ function validateSnapshot(raw: unknown, auth: AuthConfig, pricingConfig?: Pricin
     if (r.assignment) {
       const a = r.assignment;
       fields(a, ['id', 'driverId', 'etaMinutes', 'pin', 'sample', 'routeToOrigin']);
-      if (!identifier(a.id) || !/^\d{4}$/.test(a.pin) || auth.principal(a.driverId)?.role !== 'driver' ||
+      if (!identifier(a.id) || !/^\d{4}$/.test(a.pin) || !knownIdentity(auth, a.driverId, 'driver') ||
         !Number.isFinite(a.etaMinutes) || a.etaMinutes < 0 || !Number.isFinite(a.sample.heading) ||
         a.sample.heading < 0 || a.sample.heading >= 360 || !integer(a.sample.sequence)) throw new Error();
       normalizeCoordinate(a.sample.coordinate);
@@ -145,7 +147,7 @@ function validateSnapshot(raw: unknown, auth: AuthConfig, pricingConfig?: Pricin
     fields(sample, ['coordinate', 'heading', 'receivedAt', 'revision']); normalizeCoordinate(sample.coordinate);
   };
   const driver = (d: DriverRecord) => {
-    if (!object(d) || auth.principal(d.id)?.role !== 'driver' || !integer(d.revision) || !integer(d.locationRevision) || !integer(d.expiryCount) ||
+    if (!object(d) || !knownIdentity(auth, d.id, 'driver') || !integer(d.revision) || !integer(d.locationRevision) || !integer(d.expiryCount) ||
       !['OFFLINE', 'LOCATING', 'AVAILABLE', 'PAUSED', 'ASSIGNED'].includes(d.availability) || (d.expiryCount >= 3 && d.availability === 'AVAILABLE') ||
       (d.availability === 'AVAILABLE' && !d.location)) throw new Error();
     fields(d, ['id', 'availability', 'revision', 'expiryCount', 'locationRevision', 'location', ...(value.version === 4 ? ['lastTerminalRequestId'] : [])]);
@@ -156,7 +158,7 @@ function validateSnapshot(raw: unknown, auth: AuthConfig, pricingConfig?: Pricin
     if (d.location) { location(d.location); if (d.location.revision !== d.locationRevision) throw new Error(); }
   };
   const offer = (o: OfferRecord) => {
-    if (!object(o) || !identifier(o.id) || !identifier(o.requestId) || auth.principal(o.driverId)?.role !== 'driver' || !integer(o.expiresAt) ||
+    if (!object(o) || !identifier(o.id) || !identifier(o.requestId) || !knownIdentity(auth, o.driverId, 'driver') || !integer(o.expiresAt) ||
       !['ACTIVE', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'REVOKED'].includes(o.state)) throw new Error();
     fields(o, ['id', 'requestId', 'driverId', 'state', 'expiresAt', 'route', 'sample']);
     decodeRoute(o.route); normalizeCoordinate(o.sample.coordinate);
@@ -326,11 +328,11 @@ export class MatchingCoordinator {
       }
     }
   }
-  get ready() { return !this.failed && !this.closed; }
+  get ready() { return !this.failed && !this.closed && (this.options.auth.isReady?.() ?? true); }
   async start() { await this.lock(() => { this.sweep(); }); this.kick(); }
   close() { this.closed = true; this.cancelTimer?.(); for (const listener of [...this.listeners]) listener(); }
   private lock<T>(work: () => T | Promise<T>): Promise<T> {
-    const result = this.tail.then(() => { if (this.failed || this.closed) throw new MatchingError(503, 'matching_unavailable'); return work(); });
+    const result = this.tail.then(() => { if (!this.ready) throw new MatchingError(503, 'matching_unavailable'); return work(); });
     this.tail = result.catch(() => {}); return result;
   }
   private persist(state: Snapshot) {
@@ -344,6 +346,7 @@ export class MatchingCoordinator {
   private commit(next: Snapshot) {
     if (JSON.stringify(next) === JSON.stringify(this.state)) return;
     for (const d of Object.values(next.drivers)) if (this.state.drivers[d.id]?.availability !== d.availability &&
+      (this.state.drivers[d.id] || d.availability !== 'OFFLINE') &&
       !(this.transitions.get(next) ?? []).some(event => event.event === 'availability_transition' && event.driverId === d.id && event.to === d.availability)) {
       throw new Error('missing_availability_provenance');
     }
@@ -361,7 +364,17 @@ export class MatchingCoordinator {
     }
     for (const listener of [...this.listeners]) listener();
   }
-  private requireRole(p: Principal, role: Principal['role']) { if (p.role !== role || this.options.auth.principal(p.accountId)?.role !== role) throw new MatchingError(403, 'forbidden'); }
+  private requireRole(p: Principal, role: Principal['role']) { if (p.role !== role || !knownIdentity(this.options.auth, p.accountId, role)) throw new MatchingError(403, 'forbidden'); }
+  private eligible(id: string) { return this.options.auth.eligibleDriver?.(id) ?? true; }
+  private authorize(p: Principal, operation: DriverOperation) {
+    this.requireRole(p, 'driver');
+    const active = Object.values(this.state.requests).some(r => r.assignment?.driverId === p.accountId && (assignedRequestStates as readonly string[]).includes(r.state));
+    this.options.auth.authorizeDriver?.(p.accountId, operation, active);
+  }
+  /** Persist auth first; startup reconciles it before any offer planning. */
+  async administer<T>(change: () => Promise<T>): Promise<T> {
+    return this.lock(async () => { const result = await change(); this.sweep(); return result; }).finally(() => this.kick());
+  }
   private owned(s: Snapshot, p: Principal, id: string) {
     this.requireRole(p, 'passenger'); const r = s.requests[identifier(id)];
     if (!r) throw new MatchingError(404, 'request_not_found');
@@ -376,6 +389,12 @@ export class MatchingCoordinator {
   }
   private sweep() {
     const next = structuredClone(this.state); const now = this.clock.now();
+    for (const id of this.options.auth.drivers) next.drivers[id] ??= { id, availability: 'OFFLINE', revision: 0, expiryCount: 0, locationRevision: 0 };
+    for (const d of Object.values(next.drivers)) if (!this.eligible(d.id)) {
+      if (d.availability !== 'ASSIGNED' && d.availability !== 'PAUSED') { d.revision++; this.availabilityTransition(next, d, 'PAUSED', 'authority_change'); }
+      const offer = this.active(next, d.id);
+      if (offer) { offer.state = 'REVOKED'; d.revision++; next.requests[offer.requestId]!.revision++; }
+    }
     for (const r of Object.values(next.requests)) if (r.state === 'SEARCHING' && now >= r.deadline) {
       r.state = 'NO_DRIVER_FOUND'; r.revision++; delete next.activeRequestByOwner[r.owner]; this.revoke(next, r);
     }
@@ -411,7 +430,7 @@ export class MatchingCoordinator {
       phase: (assignedRequestStates as readonly string[]).includes(r.state) ? 'assigned' : r.state === 'COMPLETED' ? 'completed' : r.state === 'CANCELLED' ? 'cancelled' : r.state === 'NO_DRIVER_FOUND' ? 'expired' : r.round ? 'reassigning' : 'searching',
       searchStartedAt: r.searchStartedAt, searchDeadlineAt: r.deadline,
       lifecycle: this.lifecycleView(r),
-      quote: { id: q.id, origin: q.origin, destination: q.destination, stops: q.stops, route: q.route.geometry,
+      quote: { id: q.id, origin: q.origin, ...(q.referenceOrigin ? { referenceOrigin: q.referenceOrigin } : {}), destination: q.destination, stops: q.stops, route: q.route.geometry,
         durationMinutes: Math.ceil((q.route.trafficDurationSeconds ?? q.route.durationSeconds) / 60), distanceKm: Math.round(q.route.distanceMeters / 100) / 10,
         paymentMethod: 'Efectivo', pricing: { status: 'priced', quote: q } },
       ...(r.assignment ? { assignment: this.assignment(r.assignment) } : {}) };
@@ -444,6 +463,8 @@ export class MatchingCoordinator {
   private async mutation(p: Principal, id: string, fingerprint: unknown, change: (next: Snapshot) => Receipt, afterCommit?: (receipt: Receipt) => void) {
     const result = await this.lock(() => {
       this.sweep(); const key = `${p.accountId}:${identifier(id)}`; const encoded = JSON.stringify(fingerprint); const old = this.state.actions[key];
+      if (p.role === 'driver') this.authorize(p, old && Array.isArray(fingerprint) && fingerprint[0] === 'lifecycle' ? 'receipt' :
+        Array.isArray(fingerprint) && ['location', 'lifecycle'].includes(fingerprint[0]) ? 'trip' : 'work');
       if (old) { if (old.fingerprint !== encoded) throw new MatchingError(409, 'idempotency_conflict'); return this.view(old.result); }
       const next = structuredClone(this.state); const receipt = change(next);
       next.actions[key] = { fingerprint: encoded, result: structuredClone(receipt) }; this.commit(next); afterCommit?.(receipt); this.arm(); return this.view(receipt);
@@ -496,7 +517,7 @@ export class MatchingCoordinator {
     }) as Promise<MatchingPassengerSnapshot>;
   }
   async driver(p: Principal): Promise<DriverState> {
-    this.requireRole(p, 'driver'); const value = await this.lock(() => { this.sweep(); return this.view(this.driverReceipt(this.state, p.accountId)) as DriverState; });
+    this.requireRole(p, 'driver'); const value = await this.lock(() => { this.sweep(); this.authorize(p, 'state'); return this.view(this.driverReceipt(this.state, p.accountId)) as DriverState; });
     if (value.offer) this.trace({ event: 'driver_state_offer', offerId: value.offer.id, requestId: value.offer.requestId,
       driverId: p.accountId, revision: value.revision, expiresAt: value.offer.expiresAt });
     this.kick(); return value;
@@ -579,7 +600,7 @@ export class MatchingCoordinator {
   private releaseDriver(s: Snapshot, r: RequestRecord) {
     const d = s.drivers[r.assignment!.driverId]!; d.revision++;
     d.lastTerminalRequestId = r.id;
-    this.availabilityTransition(s, d, d.expiryCount >= 3 ? 'PAUSED' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING', 'assignment_terminal');
+    this.availabilityTransition(s, d, !this.eligible(d.id) || d.expiryCount >= 3 ? 'PAUSED' : this.fresh(d.location) ? 'AVAILABLE' : 'LOCATING', 'assignment_terminal');
   }
   async lifecycleCommand(p: Principal, requestId: string, assignmentId: string, commandId: string, raw: LifecycleCommand): Promise<DriverState> {
     this.requireRole(p, 'driver'); identifier(requestId); identifier(assignmentId);
@@ -639,6 +660,7 @@ export class MatchingCoordinator {
   async telemetry(p: Principal, requestId: string, assignmentId: string, raw: TripTelemetry): Promise<DriverState> {
     this.requireRole(p, 'driver'); identifier(requestId); identifier(assignmentId); const sample = parseTelemetry(raw);
     return this.lock(() => {
+      this.authorize(p, 'trip');
       const next = structuredClone(this.state); const r = next.requests[requestId]; this.currentAssignment(r, p, assignmentId);
       if (r.state !== 'IN_PROGRESS') conflict('invalid_trip_state');
       if (appendTelemetry(r.lifecycle!, sample, this.clock.now())) {
@@ -669,7 +691,7 @@ export class MatchingCoordinator {
     await this.lock(() => {
       this.sweep();
       const revision = () => requestId ? this.owned(this.state, p, requestId).revision :
-        (this.requireRole(p, 'driver'), this.state.drivers[p.accountId]!.revision);
+        (this.authorize(p, 'state'), this.state.drivers[p.accountId]!.revision);
       const current = revision();
       waiting = new Promise((resolve, reject) => {
         if (signal?.aborted) { reject(new MatchingError(499, 'cancelled')); return; }
@@ -677,9 +699,9 @@ export class MatchingCoordinator {
         let cancel: () => void = () => {};
         const cleanup = () => { cancel(); this.listeners.delete(check); signal?.removeEventListener('abort', abort); };
         const abort = () => { cleanup(); reject(new MatchingError(499, 'cancelled')); };
-        const check = () => { if (this.closed || this.failed) { cleanup(); reject(new MatchingError(503, 'matching_unavailable')); }
-          else if (revision() > after) { cleanup(); resolve({ revision: revision() }); } };
-        cancel = this.clock.schedule(25_000, () => { cleanup(); resolve({ revision: revision() }); });
+        const check = () => { try { if (this.closed || this.failed) { cleanup(); reject(new MatchingError(503, 'matching_unavailable')); }
+          else if (revision() > after) { cleanup(); resolve({ revision: revision() }); } } catch (error) { cleanup(); reject(error); } };
+        cancel = this.clock.schedule(25_000, () => { try { const value = revision(); cleanup(); resolve({ revision: value }); } catch (error) { cleanup(); reject(error); } });
         this.listeners.add(check); signal?.addEventListener('abort', abort, { once: true });
       });
     }); this.kick(); return waiting;
@@ -692,7 +714,7 @@ export class MatchingCoordinator {
         if (r.state !== 'SEARCHING' || this.passes.has(r.id) || this.retryAt.has(r.id) || Object.values(this.state.offers).some(o => o.requestId === r.id && o.state === 'ACTIVE')) continue;
         const candidates = Object.values(this.state.drivers).filter(d => {
           const location = d.location;
-          return d.availability === 'AVAILABLE' && this.fresh(location) &&
+          return d.id !== r.owner && this.eligible(d.id) && d.availability === 'AVAILABLE' && this.fresh(location) &&
             !this.active(this.state, d.id) && !r.offered.includes(d.id) && !r.excluded.includes(d.id);
         }).map(d => ({ driver: structuredClone(d), location: structuredClone(d.location!) }));
         if (!candidates.length) continue;
@@ -722,7 +744,7 @@ export class MatchingCoordinator {
         const eligible = results.filter(result => {
           if (!result) return false;
           const current = next.drivers[result.driver.id]!; const location = current.location;
-          return current.revision === result.driver.revision && current.locationRevision === result.location.revision &&
+          return current.id !== target.owner && this.eligible(current.id) && current.revision === result.driver.revision && current.locationRevision === result.location.revision &&
             current.availability === 'AVAILABLE' && this.fresh(location) &&
             !this.active(next, current.id) && !target.offered.includes(current.id) && !target.excluded.includes(current.id);
         }).filter(result => result !== undefined).sort((a, b) =>

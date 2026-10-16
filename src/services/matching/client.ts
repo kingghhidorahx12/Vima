@@ -7,7 +7,7 @@ import { decodeDriver, decodeIdentity, decodeRevision } from './decode.ts';
 import { matchingDevTrace, matchingTraceError, type MatchingTrace } from './devTrace.ts';
 import { decodeTripHttpSnapshot } from './tripHttpSnapshot.ts';
 
-interface MatchingClientOptions { trace?: MatchingTrace; now?: () => number; pollId?: () => string }
+interface MatchingClientOptions { context?: 'passenger' | 'driver'; trace?: MatchingTrace; now?: () => number; pollId?: () => string }
 let pollSequence = 0;
 
 /** Revision-based invalidations only. Snapshots always come through authoritative GET/commands. */
@@ -37,7 +37,7 @@ export function createMatchingClient(api: ApiClient, options: MatchingClientOpti
     const timer = setTimeout(abort, timeout);
     try {
       if (input.signal?.aborted) controller.abort();
-      const result = await api.request({ ...input, timeoutMs: timeout, signal: controller.signal }); status('online'); return result;
+      const result = await api.request({ ...input, operationalContext: options.context, timeoutMs: timeout, signal: controller.signal }); status('online'); return result;
     } catch (error) { if (!input.signal?.aborted) status(error instanceof ApiError && error.status > 0 ? 'online' : 'offline'); throw error; }
     finally { clearTimeout(timer); input.signal?.removeEventListener('abort', abort); }
   }
